@@ -1,0 +1,17 @@
+.vs
+obj
+bin
+
+**.sln
+**.vcxproj
+**.vcxproj.user
+**.filters
+**.vcxproj.filters
+
+
+
+int
+test.exe
+*.o
+*.dll
+.vscode/tasks.json
