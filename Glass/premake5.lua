@@ -32,4 +32,4 @@ project "Glass"
     symbols "On"
     filter "configurations:Release"
         defines { "NDEBUG","GS_RELEASE" }
-        optimize "On"
+        optimize "Speed"

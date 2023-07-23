@@ -1,17 +1,1 @@
-[13:01:09] [info] Glass: Compiling: "..\\Examples\\Main.glass"
-[13:01:09] [info] Glass: Token = [ Symbol: fn , Type : 20] ; "..\\Examples\\Main.glass":1:1
-[13:01:09] [info] Glass: Token = [ Symbol: main , Type : 20] ; "..\\Examples\\Main.glass":1:4
-[13:01:09] [info] Glass: Token = [ Symbol: ( , Type : 7] ; "..\\Examples\\Main.glass":1:8
-[13:01:09] [info] Glass: Token = [ Symbol: ) , Type : 8] ; "..\\Examples\\Main.glass":1:9
-[13:01:09] [info] Glass: Token = [ Symbol: : , Type : 2] ; "..\\Examples\\Main.glass":1:11
-[13:01:09] [info] Glass: Token = [ Symbol: int32 , Type : 20] ; "..\\Examples\\Main.glass":1:13
-[13:01:09] [info] Glass: Token = [ Symbol: 
- , Type : 22] ; "..\\Examples\\Main.glass":2:0
-[13:01:09] [info] Glass: Token = [ Symbol: 
- , Type : 22] ; "..\\Examples\\Main.glass":2:0
-[13:01:09] [info] Glass: Token = [ Symbol: { , Type : 9] ; "..\\Examples\\Main.glass":2:1
-[13:01:09] [info] Glass: Token = [ Symbol: 
- , Type : 22] ; "..\\Examples\\Main.glass":3:0
-[13:01:09] [info] Glass: Token = [ Symbol: 
- , Type : 22] ; "..\\Examples\\Main.glass":3:0
-[13:01:09] [info] Glass: Token = [ Symbol: } , Type : 10] ; "..\\Examples\\Main.glass":3:1
+[17:06:06] [info] Glass: Compiling: "..\\Examples\\Main.glass"

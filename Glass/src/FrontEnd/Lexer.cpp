@@ -46,6 +46,8 @@ namespace Glass
 
 			counter++;
 		}
+
+		return true;
 	}
 
 	Lexer::Lexer(const std::string& source, const fs_path& file_path)
@@ -65,9 +67,9 @@ namespace Glass
 
 		std::string accumulator;
 
-		const std::array<char, 16> splitters =
+		const std::array<char, 17> splitters =
 		{
-			';',',',':',
+			'.',';',',',':',
 
 			'&',
 
@@ -84,14 +86,15 @@ namespace Glass
 
 		const std::unordered_map<char, TokenType> token_to_type =
 		{
+			{'.',TokenType::Period},
 			{';',TokenType::SemiColon},
 			{',',TokenType::Comma},
 			{':',TokenType::Colon},
 
 			{'&',TokenType::Ampersand},
 
-			{'"',TokenType::DoubleQoute},
-			{'\'',TokenType::SingleQoute},
+			//{'"',TokenType::DoubleQoute},
+			//{'\'',TokenType::SingleQoute},
 
 			{'+',TokenType::Add},
 			{'-',TokenType::Subtract},
@@ -109,7 +112,7 @@ namespace Glass
 			{'[',TokenType::OpenBracket},
 			{']',TokenType::CloseBracket},
 
-			{'\n',TokenType::BOL},
+			//{'\n',TokenType::BOL},
 		};
 
 		auto deduce_token_type = [&]() -> TokenType
@@ -165,6 +168,25 @@ namespace Glass
 			}
 		};
 
+		auto createStringLiteral = [&]()
+		{
+			if (!accumulator.empty())
+			{
+				u64 begin = 0;
+
+				begin = location - bol;
+
+				tokens.emplace_back(Token{ TokenType::StringLiteral,
+					accumulator,
+					line,
+					begin,
+					accumulator.size() }
+				);
+
+				accumulator.clear();
+			}
+		};
+
 		auto createEOFToken = [&]()
 		{
 			TokenType type = TokenType::E_OF;
@@ -177,9 +199,26 @@ namespace Glass
 			);
 		};
 
+		bool string_collection_mode = false;
+
 		for (char c : m_Source)
 		{
 			location++;
+
+			if (string_collection_mode) {
+				if (c == '"') {
+					if (!accumulator.empty()) {
+						createStringLiteral();
+						string_collection_mode = false;
+					}
+				}
+				else
+				{
+					accumulator += c;
+				}
+
+				continue;
+			}
 
 			if (std::isspace(c)) {
 				createToken();
@@ -195,22 +234,34 @@ namespace Glass
 					createToken();
 				}
 
-				accumulator = '\n';
+				//accumulator = '\n';
 			}
 
 			if (std::isalnum(c)) {
 				accumulator.push_back(c);
 			}
 
-			if (token_to_type.find(c) != token_to_type.end()) {
-
+			if (c == '"' && !string_collection_mode) {
 				if (!accumulator.empty()) {
 					createToken();
 				}
-
-				accumulator.push_back(c);
-				createToken();
+				string_collection_mode = true;
 			}
+			else {
+				if (token_to_type.find(c) != token_to_type.end()) {
+
+					if (!accumulator.empty()) {
+						createToken();
+					}
+
+					accumulator.push_back(c);
+					createToken();
+				}
+			}
+		}
+
+		if (!accumulator.empty()) {
+			createToken();
 		}
 
 		createEOFToken();

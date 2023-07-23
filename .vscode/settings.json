@@ -1,0 +1,20 @@
+{
+	"files.associations": {
+		"array": "c",
+		"chrono": "c",
+		"filesystem": "c",
+		"format": "c",
+		"forward_list": "c",
+		"initializer_list": "c",
+		"list": "c",
+		"vector": "c",
+		"xhash": "c",
+		"xstring": "c",
+		"xtree": "c",
+		"xutility": "c",
+		"charconv": "c",
+		"xmemory": "c",
+		"stdio.h": "c",
+		"stdint.h": "c"
+	}
+}

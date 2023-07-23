@@ -11,6 +11,7 @@ namespace Glass
 	{
 		Invalid = 0,
 
+		Period,		// '.'
 		SemiColon,		// ';'
 		Colon,			// ':'
 		Comma,			// ','
@@ -52,17 +53,19 @@ namespace Glass
 
 	struct Token
 	{
+		Token() = default;
+
 		Token(TokenType tokenType, const std::string_view& symbol, u64 line, u64 begin, u64 end)
 			:Type(tokenType), Symbol(symbol), Line(line), Begin(begin), End(end)
 		{}
 
-		const TokenType Type;
-		const std::string Symbol;
+		TokenType Type;
+		std::string Symbol;
 
-		const u64 Line;
+		u64 Line;
 
-		const u64 Begin;
-		const u64 End;
+		u64 Begin;
+		u64 End;
 
 		std::string ToString()
 		{

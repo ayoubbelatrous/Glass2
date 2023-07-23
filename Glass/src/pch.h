@@ -17,4 +17,6 @@
 #include <algorithm>
 #include <filesystem>
 
+#include <chrono>
+
 #include <spdlog/fmt/fmt.h>

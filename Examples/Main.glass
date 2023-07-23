@@ -1,3 +1,10 @@
-fn main() : int32
+struct Entity
 {
+   u8* ID;
+};
+
+fn main() : i32 {
+   Entity entity;
+   entity.ID = "Hello";
+   printf("Hello: %s",entity.ID);
 }
