@@ -16,6 +16,11 @@ namespace Glass
 
 		Statement* ParseStatement();
 
+		Statement* ParseDirective();
+
+		Statement* ParseIf();
+		Statement* ParseWhile();
+
 		Statement* ParseTypeExpr();
 
 		Statement* ParseScope();
@@ -37,6 +42,7 @@ namespace Glass
 		Expression* ParseMulExpr();
 		Expression* ParseCallExpr();
 		Expression* ParseMemberExpr();
+		Expression* ParseArrayAccessExpr();
 
 		Operator GetOperator(const Token& token) {
 			TokenType Type = token.Type;

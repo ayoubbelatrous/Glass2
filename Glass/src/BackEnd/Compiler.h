@@ -52,6 +52,17 @@ namespace Glass
 		{
 			Token Name;
 			std::vector<MemberMetadata> Members;
+
+			u64 FindMember(const std::string& name) const {
+				u64 id_counter = 0;
+				for (const MemberMetadata& member : Members) {
+					if (member.Name.Symbol == name) {
+						return id_counter;
+					}
+					id_counter++;
+				}
+				return (u64)-1;
+			}
 		};
 
 		struct ArgumentMetadata
@@ -66,7 +77,10 @@ namespace Glass
 
 			std::vector<ArgumentMetadata> Arguments;
 
-			u64 ReturnType;
+			Type ReturnType;
+
+			bool Variadic = false;
+			bool foreign = false;
 
 			const ArgumentMetadata* GetArgument(u64 i) const
 			{
@@ -171,11 +185,12 @@ namespace Glass
 				m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
 			}
 
-			void RegisterFunction(u64 ID, const std::string& name, u64 returnType = 0, std::vector<ArgumentMetadata> args = {}) {
+			void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false) {
 				FunctionMetadata func;
 				func.Name = name;
 				func.ReturnType = returnType;
 				func.Arguments = args;
+				func.Variadic = variadic;
 
 				m_Functions[ID] = func;
 				m_FunctionNames[name] = ID;
@@ -217,12 +232,17 @@ namespace Glass
 
 		IRInstruction* StatementCodeGen(const Statement* statement);
 
+		IRInstruction* ForeignCodeGen(const ForeignNode* expression);
+
 		IRInstruction* FunctionCodeGen(const FunctionNode* functionNode);
 
 		IRInstruction* VariableCodeGen(const VariableNode* variableNode);
 
 		IRInstruction* ReturnCodeGen(const ReturnNode* returnNode);
 		IRInstruction* StructCodeGen(const StructNode* structNode);
+
+		IRInstruction* IfCodeGen(const IfNode* ifNode);
+		IRInstruction* WhileCodeGen(const WhileNode* ifNode);
 
 		IRInstruction* ExpressionCodeGen(const Expression* expression);
 
@@ -233,6 +253,7 @@ namespace Glass
 		IRInstruction* AssignmentCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
+		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 
 		IRSSAValue* GetExpressionByValue(const Expression* expr);
 
@@ -255,8 +276,14 @@ namespace Glass
 		}
 
 		void PushIRSSA(IRSSA* ssa) {
-			m_SSAStack.push_back(ssa);
-			m_Metadata.RegisterSSA(ssa);
+			if (m_Scope == 0) {
+				m_SSAStack.push_back(ssa);
+				m_Metadata.RegisterSSA(ssa);
+			}
+			else {
+				m_SSAStacks[m_Scope].push_back(ssa);
+				m_Metadata.RegisterSSA(ssa);
+			}
 		}
 
 		void ResetSSAIDCounter() {
@@ -264,9 +291,26 @@ namespace Glass
 		}
 
 		std::vector<IRSSA*> PoPIRSSA() {
-			auto cpy = m_SSAStack;
-			m_SSAStack.clear();
-			return cpy;
+			if (m_Scope == 0) {
+				auto cpy = m_SSAStack;
+				m_SSAStack.clear();
+				return cpy;
+			}
+			else {
+				auto cpy = m_SSAStacks[m_Scope];
+				m_SSAStacks[m_Scope].clear();
+				return cpy;
+			}
+		}
+
+		void PushScope()
+		{
+			m_Scope++;
+		}
+
+		void PopScope()
+		{
+			m_Scope--;
 		}
 
 		void PushIRInstruction(IRInstruction* ssa) {
@@ -341,6 +385,10 @@ namespace Glass
 		u64 m_StructIDCounter = 99;
 
 		std::vector<CompilerMessage> m_Messages;
+
+		u64 m_Scope = 0;
+
+		std::unordered_map<u64, std::vector<IRSSA*> > m_SSAStacks;
 
 		std::vector<IRInstruction*> m_InstructionStack;
 		std::vector<IRSSA*> m_SSAStack;

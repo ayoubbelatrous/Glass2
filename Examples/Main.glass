@@ -1,10 +1,26 @@
-struct Entity
+#foreign fn printf!(u8* format) : i32 {}
+
+#foreign fn fopen(u8* path,u8* mode) : u64* {}
+#foreign fn fclose(u64* file) : void {}
+
+#foreign fn malloc(i32 size) : void* {}
+#foreign fn free(void* ptr) : void {}
+
+struct Position
 {
-   u8* ID;
+   i32 x;
+   i32 y;
+};
+
+struct Player
+{
+   Position* pos;
 };
 
 fn main() : i32 {
-   Entity entity;
-   entity.ID = "Hello";
-   printf("Hello: %s",entity.ID);
+
+   i32* i = malloc(4*68);
+   i[9] = 4;
+
+   printf("i[10]: %zu",i);
 }

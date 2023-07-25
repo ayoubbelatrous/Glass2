@@ -67,8 +67,10 @@ namespace Glass
 
 		std::string accumulator;
 
-		const std::array<char, 17> splitters =
+		const std::array<char, 19> splitters =
 		{
+			'!',
+			'#',
 			'.',';',',',':',
 
 			'&',
@@ -86,6 +88,9 @@ namespace Glass
 
 		const std::unordered_map<char, TokenType> token_to_type =
 		{
+			{'!',TokenType::Bang},
+			{'#',TokenType::Pound},
+
 			{'.',TokenType::Period},
 			{';',TokenType::SemiColon},
 			{',',TokenType::Comma},

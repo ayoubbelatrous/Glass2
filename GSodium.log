@@ -1,3 +1,30 @@
-[17:22:44] [info] Glass: Compiling: ".\\Examples\\Main.glass"
-[17:22:44] [warning] Glass: Running: clang -w generated.c
-[17:22:44] [error] Glass: Error: During Execution of Command
+[17:45:08] [info] Glass: Compiling: ".\\Examples\\Main.glass"
+[17:45:08] [info] Glass: 
+% 1
+[17:45:08] [info] Glass: 
+struct
+[17:45:08] [info] Glass: 
+struct
+[17:45:08] [info] Glass: 
+fn $1 i32 : () {
+$ 3 : 1 = 4
+$ 3 : 2 = 68
+$ 3 : 3 = MUL $1 : $2
+$ 3 : 4 = 
+$ 8 : 5 = &$$4
+STORE $5 CALL $103()
+$ 3 : 6 = LOAD $5
+$ 3 : 7 = 9
+$ 8 : 8 = sizeof(3)
+$ 8 : 9 = ADD $7 : $8
+$ 8 : 10 = ADD $9 : $5
+$ 8 : 11 = $10
+$ 3 : 12 = 4
+STORE $11 $12
+$ 5 : 13 = % 1
+$ 5 : 14 = (int*)$13
+$ 3 : 15 = LOAD $5
+$ 3 : 16 = CALL $100()
+}
+
+[17:45:08] [warning] Glass: Running: clang -w generated.c

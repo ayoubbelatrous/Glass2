@@ -14,6 +14,8 @@ namespace Glass
 		IR_u16,
 		IR_u32,
 		IR_u64,
+
+		IR_bool,
 	};
 
 	enum IRCType : u64
@@ -52,6 +54,9 @@ namespace Glass
 		Struct,
 		StructMember,
 		MemberAccess,
+		If,
+		While,
+		SizeOf,
 		TranslationUnit,
 	};
 
@@ -86,6 +91,12 @@ namespace Glass
 		u64 ID = 0;
 		u64 SSA = 0;
 
+		IRSSAValue() = default;
+		IRSSAValue(u64 ssa)
+			:SSA(ssa)
+		{
+		}
+
 		virtual std::string ToString() const override {
 			return 	"$" + std::to_string(SSA);
 		}
@@ -99,6 +110,12 @@ namespace Glass
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
 		u64 Type;
+
+		IRADD() = default;
+		IRADD(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
 
 		virtual std::string ToString() const override {
 			std::string str;
@@ -143,6 +160,12 @@ namespace Glass
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
 		u64 Type;
+
+		IRMUL() = default;
+		IRMUL(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
 
 		virtual std::string ToString() const override {
 			std::string str;
@@ -189,6 +212,8 @@ namespace Glass
 		bool Pointer = false;
 		IRInstruction* Value = nullptr;
 		IRSSA* PointsTo = nullptr;
+
+		u64 PointsToType = 0;
 
 		virtual std::string ToString() const override {
 			std::string str = "$ ";
@@ -318,15 +343,16 @@ namespace Glass
 
 	struct IRAddressOf : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA = 0;
+		IRInstruction* SSA = 0;
 
-		IRAddressOf(u64 ssa)
-			: SSA(ssa)
+		IRAddressOf() = default;
+		IRAddressOf(IRInstruction* ssa)
+			:SSA(ssa)
 		{
 		}
 
 		virtual std::string ToString() const override {
-			return 	"&$" + std::to_string(SSA);
+			return 	"&$" + SSA->ToString();
 		}
 
 		virtual IRNodeType GetType() const {
@@ -336,9 +362,9 @@ namespace Glass
 
 	struct IRStore : public IRInstruction {
 		u64 ID = 0;
+		u64 Type = 0;
 		u64 AddressSSA = 0;
 		IRInstruction* Data = nullptr;
-
 		virtual std::string ToString() const override {
 			return 	fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
 		}
@@ -435,6 +461,80 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::MemberAccess;
+		}
+	};
+
+	//To be changed to branch
+	struct IRIf : public IRInstruction {
+		u64 ID = 0;
+		u64 SSA = 0;
+		std::vector<IRInstruction*> Instructions;
+
+		virtual std::string ToString() const override
+		{
+			std::string str = "if";
+
+			str += "{\n";
+
+			for (auto inst : Instructions) {
+				str += inst->ToString() + '\n';
+			}
+
+			str += "}\n";
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::If;
+		}
+	};
+
+	//To be changed to branch
+	struct IRWhile : public IRInstruction {
+		u64 ID = 0;
+		u64 SSA = 0;
+		std::vector<IRInstruction*> Instructions;
+
+		virtual std::string ToString() const override
+		{
+			std::string str = "while";
+
+			str += "{\n";
+
+			for (auto inst : Instructions) {
+				str += inst->ToString() + '\n';
+			}
+
+			str += "}\n";
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::While;
+		}
+	};
+
+	struct IRSizeOF : public IRInstruction {
+		u64 ID = 0;
+		u64 Type = 0;
+
+		IRSizeOF() = default;
+		IRSizeOF(u64 type)
+			: Type(type)
+		{
+		}
+
+		virtual std::string ToString() const override
+		{
+			std::string str = "sizeof(";
+			str += std::to_string(Type) + ")";
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::SizeOf;
 		}
 	};
 }

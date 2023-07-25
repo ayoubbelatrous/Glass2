@@ -15,6 +15,7 @@
 		"charconv": "c",
 		"xmemory": "c",
 		"stdio.h": "c",
-		"stdint.h": "c"
+		"stdint.h": "c",
+		"malloc.h": "c"
 	}
 }

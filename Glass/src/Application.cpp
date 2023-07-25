@@ -89,10 +89,10 @@ namespace Glass
 			code = compiler.CodeGen();
 			m_CompilerEnd = std::chrono::high_resolution_clock::now();
 
-			// 			for (const auto inst : code->Instructions) {
-			// 				std::string inst_string = inst->ToString();
-			// 				GS_CORE_INFO("\n" + inst_string);
-			// 			}
+			for (const auto inst : code->Instructions) {
+				std::string inst_string = inst->ToString();
+				GS_CORE_INFO("\n" + inst_string);
+			}
 
 			for (const Compiler::CompilerMessage& msg : compiler.GetMessages()) {
 

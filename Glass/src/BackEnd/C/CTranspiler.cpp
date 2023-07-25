@@ -17,6 +17,8 @@ namespace Glass
 
 		code += "#include <stdint.h>\n";
 		code += "#include <stdio.h>\n";
+		code += "#include <string.h>\n";
+		code += "#include <malloc.h>\n";
 
 		code += "\n\n";
 
@@ -89,7 +91,7 @@ namespace Glass
 		case IRNodeType::AddressOf:
 		{
 			IRAddressOf* add_of = (IRAddressOf*)inst;
-			return fmt::format("(u64)(&__tmp{})", add_of->SSA);
+			return fmt::format("(u64)(&{})", IRCodeGen(add_of->SSA));
 		}
 		break;
 		case IRNodeType::AsAddress:
@@ -101,7 +103,7 @@ namespace Glass
 		case IRNodeType::Store:
 		{
 			IRStore* store = (IRStore*)inst;
-			return fmt::format("*((u64*)__tmp{}) = (u64){};", store->AddressSSA, IRCodeGen(store->Data));
+			return fmt::format("*(({0}*)__tmp{1}) = ({0}){2};", m_Metadata->GetType(store->Type), store->AddressSSA, IRCodeGen(store->Data));
 		}
 		break;
 		case IRNodeType::Load:
@@ -126,7 +128,75 @@ namespace Glass
 			std::string type = struct_metadata->Name.Symbol;
 			std::string member = struct_metadata->Members[member_access->MemberID].Name.Symbol;
 
-			return fmt::format("(u64)(&(({} *)__tmp{})->{})", type, ssa, member);
+			return fmt::format("((u64)&(({} *)__tmp{})->{})", type, ssa, member);
+		}
+		break;
+		case IRNodeType::If:
+		{
+			IRIf* if_ = (IRIf*)inst;
+			std::string code = fmt::format("if (__tmp{})", if_->SSA);
+
+			code += " {\n";
+
+			for (IRInstruction* inst : if_->Instructions) {
+				IRNodeType Type = inst->GetType();
+
+				switch (Type)
+				{
+				case IRNodeType::SSA:
+					code += SSACodeGen((IRSSA*)inst) + "\n";
+					break;
+				case IRNodeType::Return:
+				{
+					IRReturn* ret = (IRReturn*)inst;
+					code += "return " + IRCodeGen(ret->Value) + ";\n";
+				}
+				break;
+				default:
+					code += IRCodeGen(inst) + ";";
+					break;
+				}
+			}
+
+			code += "}\n";
+			return code;
+		}
+		break;
+		case IRNodeType::While:
+		{
+			IRWhile* while_ = (IRWhile*)inst;
+			std::string code = fmt::format("while (__tmp{})", while_->SSA);
+
+			code += " {\n";
+
+			for (IRInstruction* inst : while_->Instructions) {
+				IRNodeType Type = inst->GetType();
+
+				switch (Type)
+				{
+				case IRNodeType::SSA:
+					code += SSACodeGen((IRSSA*)inst) + "\n";
+					break;
+				case IRNodeType::Return:
+				{
+					IRReturn* ret = (IRReturn*)inst;
+					code += "return " + IRCodeGen(ret->Value) + ";\n";
+				}
+				break;
+				default:
+					code += IRCodeGen(inst) + ";";
+					break;
+				}
+			}
+
+			code += "}\n";
+			return code;
+		}
+		break;
+		case IRNodeType::SizeOf:
+		{
+			IRSizeOF* size_of = (IRSizeOF*)inst;
+			return fmt::format("sizeof({})", m_Metadata->GetType(size_of->Type));
 		}
 		break;
 		}
@@ -139,7 +209,12 @@ namespace Glass
 		const auto func_metadata = m_Metadata->GetFunctionMetadata(IRF->ID);
 
 		const std::string& func_name = func_metadata->Name;
-		const std::string& return_type = m_Metadata->GetType(func_metadata->ReturnType);
+		std::string return_type = m_Metadata->GetType(func_metadata->ReturnType.ID);
+
+		if (func_metadata->ReturnType.TT == Compiler::TypeType::Pointer) {
+			return_type += '*';
+		}
+
 		std::string arguments;
 
 		u64 i = 0;
@@ -255,21 +330,21 @@ namespace Glass
 		{
 			IRSUB* o = (IRSUB*)op;
 
-			code = fmt::format("__tmp{} + __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
+			code = fmt::format("__tmp{} - __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
 		}
 		break;
 		case IRNodeType::MUL:
 		{
 			IRMUL* o = (IRMUL*)op;
 
-			code = fmt::format("__tmp{} + __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
+			code = fmt::format("__tmp{} * __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
 		}
 		break;
 		case IRNodeType::DIV:
 		{
 			IRDIV* o = (IRDIV*)op;
 
-			code = fmt::format("__tmp{} + __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
+			code = fmt::format("__tmp{} / __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
 		}
 		break;
 		}

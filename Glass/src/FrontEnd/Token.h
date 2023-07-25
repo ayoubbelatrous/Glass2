@@ -11,7 +11,13 @@ namespace Glass
 	{
 		Invalid = 0,
 
-		Period,		// '.'
+		Bang,			// '!'
+
+		Spread,			// '...'
+
+		Pound,			// '#'
+
+		Period,			// '.'
 		SemiColon,		// ';'
 		Colon,			// ':'
 		Comma,			// ','

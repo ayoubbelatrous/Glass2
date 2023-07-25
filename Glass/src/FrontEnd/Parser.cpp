@@ -11,6 +11,10 @@ namespace Glass
 
 		switch (Type)
 		{
+		case TokenType::Pound:
+			Consume();
+			return ParseDirective();
+			break;
 		case TokenType::StringLiteral:
 		case TokenType::NumericLiteral:
 		case TokenType::OpenParen:
@@ -36,11 +40,19 @@ namespace Glass
 
 				return struct_;
 			}
+			else if (At().Symbol == "if")
+			{
+				return ParseIf();
+			}
+			else if (At().Symbol == "while")
+			{
+				return ParseWhile();
+			}
 			else {
 
 				bool var_decl = At().Type == TokenType::Symbol && At(1).Type == TokenType::Symbol;
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply;
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket;
+				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::Symbol;
+				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
 
 				if (var_decl) {
 					return ParseVarDecl();
@@ -70,6 +82,59 @@ namespace Glass
 		//}
 
 		return ParseExpression();
+	}
+
+	Statement* Parser::ParseDirective()
+	{
+		if (At().Symbol == "foreign") {
+			Consume();
+
+			ForeignNode Node;
+
+			Node.statement = ParseStatement();
+
+			if (Node.statement == nullptr) {
+				Abort("Expected A Statement After #foreign Directive");
+			}
+
+			return Application::AllocateAstNode(Node);
+		}
+
+		Abort(fmt::format("Un-recognized directive: {}", At().Symbol));
+
+		return nullptr;
+	}
+
+	Statement* Parser::ParseIf()
+	{
+		Consume();
+
+		IfNode Node;
+		Node.Condition = ParseExpression();
+
+		if (Node.Condition == nullptr) {
+			Abort("Expected Condition After 'if' Instead Got");
+		}
+
+		Node.Scope = (ScopeNode*)ParseScope();
+
+		return Application::AllocateAstNode(Node);
+	}
+
+	Statement* Parser::ParseWhile()
+	{
+		Consume();
+
+		WhileNode Node;
+		Node.Condition = ParseExpression();
+
+		if (Node.Condition == nullptr) {
+			Abort("Expected Condition After 'while' Instead Got");
+		}
+
+		Node.Scope = (ScopeNode*)ParseScope();
+
+		return Application::AllocateAstNode(Node);
 	}
 
 	Statement* Parser::ParseTypeExpr()
@@ -220,6 +285,11 @@ namespace Glass
 
 		Node.Symbol = Consume();
 
+		if (At().Type == TokenType::Bang) {
+			Consume();
+			Node.Variadic = true;
+		}
+
 		if (ExpectedToken(TokenType::OpenParen)) {
 			Abort("Expected A '(' Instead Got ");
 		}
@@ -316,7 +386,7 @@ namespace Glass
 
 	Expression* Parser::ParseMulExpr()
 	{
-		Expression* left = ParseMemberExpr();
+		Expression* left = ParseArrayAccessExpr();
 
 		auto is_multiplicative_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
@@ -330,7 +400,7 @@ namespace Glass
 		while (is_multiplicative_op(GetOperator(At()))) {
 
 			Token Op = Consume();
-			auto right = ParseMemberExpr();
+			auto right = ParseArrayAccessExpr();
 
 			BinaryExpression binExpr;
 
@@ -347,6 +417,28 @@ namespace Glass
 		return left;
 	}
 
+	Expression* Parser::ParseArrayAccessExpr()
+	{
+		Expression* object = ParseMemberExpr();
+
+		if (At().Type == TokenType::OpenBracket) {
+
+			Token bracket = Consume();
+
+			Expression* index = ParseMemberExpr();
+
+			Token close_bracket = Consume();
+
+			ArrayAccess Node;
+
+			Node.Object = object;
+			Node.Index = index;
+
+			object = Application::AllocateAstNode(Node);
+		}
+
+		return object;
+	}
 
 	Expression* Parser::ParseMemberExpr()
 	{

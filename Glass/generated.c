@@ -1,6 +1,8 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <malloc.h>
 
 
 typedef char i8;		
@@ -13,19 +15,17 @@ typedef uint16_t u16;
 typedef uint32_t u32;	
 typedef uint64_t u64;	
 
-const char* __data1 = "Hello: %i";
-typedef struct Entity{
-	i32 ID;
-}Entity;
+typedef struct Position{
+	i32 x;
+	i32 y;
+}Position;
+
+typedef struct Player{
+	Position* pos;
+}Player;
 
 i32 main (){
-const Entity __tmp1;
+const i32 __tmp1;
 const u64 __tmp2 = (u64)(&__tmp1);
-const u64 __tmp3 = (u64)(&((Entity *)__tmp2)->ID);
-const i32 __tmp4 = 69;
-*((u64*)__tmp3) = (u64)__tmp4;;const u8* __tmp5 = (u8*)__data1;
-const u8* __tmp6 = (void *)__tmp5;
-const u64 __tmp7 = (u64)(&((Entity *)__tmp2)->ID);
-const u64 __tmp8 = *(u64*)__tmp7;
-printf(__tmp6, __tmp8);}
+}
 

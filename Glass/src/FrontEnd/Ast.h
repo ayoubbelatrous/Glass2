@@ -21,7 +21,12 @@ namespace Glass
 		Return,
 		Call,
 		StructNode,
+		Foreign,
 		MemberAccess,
+		If,
+		While,
+		For,
+		ArrayAccess,
 	};
 
 	enum class Operator
@@ -393,6 +398,8 @@ namespace Glass
 
 		TypeExpression* ReturnType = nullptr;
 
+		bool Variadic = false;
+
 		virtual const Token& GetLocation() const override {
 			return Symbol;
 		}
@@ -505,6 +512,89 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Member->GetLocation();
+		}
+	};
+
+	class ArrayAccess : public Expression
+	{
+	public:
+
+		Expression* Object;
+		Expression* Index;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::ArrayAccess;
+		}
+
+		virtual std::string ToString() const {
+			return Object->ToString() + "[" + Index->ToString() + "]";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Index->GetLocation();
+		}
+	};
+
+	class ForeignNode : public Statement
+	{
+	public:
+
+		Statement* statement = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Foreign;
+		}
+
+		virtual std::string ToString() const {
+			return "#foreign" + statement->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return statement->GetLocation();
+		}
+	};
+
+	class IfNode : public Statement
+	{
+	public:
+
+		Expression* Condition = nullptr;
+		ScopeNode* Scope = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::If;
+		}
+
+		virtual std::string ToString() const {
+			return "if" + Condition->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Condition->GetLocation();
+		}
+	};
+
+	class WhileNode : public Statement
+	{
+	public:
+
+		Expression* Condition = nullptr;
+		ScopeNode* Scope = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::While;
+		}
+
+		virtual std::string ToString() const {
+			return "if" + Condition->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Condition->GetLocation();
 		}
 	};
 }
