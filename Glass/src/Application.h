@@ -26,6 +26,9 @@ namespace Glass
 
 		bool GenerateDebugInfo = false;
 		bool Verbose = true;
+
+		std::vector<std::string> CIncludes;
+		std::vector<std::string> CLibs;
 	};
 
 	enum class ExitCode : int

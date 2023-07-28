@@ -1,0 +1,104 @@
+[18:47:24] [warning] Glass: C Includes
+[18:47:24] [info] Glass: 	glfw/include/glfw3.h
+[18:47:24] [warning] Glass: C Libs
+[18:47:24] [info] Glass: 	glfw/GLFW.lib
+[18:47:24] [info] Glass: Compiling: "./Game.glass"
+[18:47:24] [info] Glass: 
+% 1
+[18:47:24] [info] Glass: 
+% 2
+[18:47:24] [info] Glass: 
+struct
+[18:47:24] [info] Glass: 
+fn $1 i32 : () {
+$ 1 : 1 = 256
+$ 5 : 2 = 
+$ 10 : 3 = &$$2
+STORE $3 $1
+$ 1 : 4 = 16384
+$ 5 : 5 = 
+$ 10 : 6 = &$$5
+STORE $6 $4
+CALL $107()
+$ 1 : 7 = 0
+$ 5 : 8 = 
+$ 10 : 9 = &$$8
+STORE $9 $7
+$ 100 : 10 = 
+$ 10 : 11 = &$$10
+$ 1 : 12 = 400
+$ 1 : 13 = 400
+$ 7 : 14 = % 1
+$ 7 : 15 = % 2
+$ 5 : 16 = LOAD $9
+$ 5 : 17 = LOAD $9
+$ 5 : 18 = LOAD $9
+$ 5 : 19 = LOAD $9
+$ 100 : 20 = CALL $106()
+STORE $11 $20
+$ 100 : 21 = LOAD $11
+$ 100 : 22 = LOAD $11
+CALL $108()
+$ 1 : 23 = 1
+while{
+$ 2 : 24 = 1056964608
+$ 2 : 25 = 1056964608
+$ 2 : 26 = 1056964608
+$ 2 : 27 = 1056964608
+$ 5 : 28 = LOAD $6
+$ 100 : 29 = LOAD $11
+$ 100 : 30 = LOAD $11
+$ 100 : 31 = LOAD $11
+$ 100 : 32 = LOAD $11
+$ 5 : 33 = CALL $112()
+$ 100 : 34 = LOAD $11
+$ 100 : 35 = LOAD $11
+$ 5 : 36 = LOAD $3
+$ 5 : 37 = CALL $113()
+CALL $114()
+CALL $115()
+CALL $109()
+CALL $110()
+if{
+break
+}
+
+if{
+break
+}
+
+}
+
+while{
+$ 2 : 24 = 1056964608
+$ 2 : 25 = 1056964608
+$ 2 : 26 = 1056964608
+$ 2 : 27 = 1056964608
+$ 5 : 28 = LOAD $6
+$ 100 : 29 = LOAD $11
+$ 100 : 30 = LOAD $11
+$ 100 : 31 = LOAD $11
+$ 100 : 32 = LOAD $11
+$ 5 : 33 = CALL $112()
+$ 100 : 34 = LOAD $11
+$ 100 : 35 = LOAD $11
+$ 5 : 36 = LOAD $3
+$ 5 : 37 = CALL $113()
+CALL $114()
+CALL $115()
+CALL $109()
+CALL $110()
+if{
+break
+}
+
+if{
+break
+}
+
+}
+
+}
+
+[18:47:24] [warning] Glass: Running: clang -w generated.c
+[18:47:24] [error] Glass: Error: During Execution of Command

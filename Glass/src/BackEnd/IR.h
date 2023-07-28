@@ -5,6 +5,10 @@ namespace Glass
 	enum class IRType : u64
 	{
 		IR_void,
+
+		IR_int,
+		IR_float,
+
 		IR_i8,
 		IR_i16,
 		IR_i32,
@@ -14,6 +18,9 @@ namespace Glass
 		IR_u16,
 		IR_u32,
 		IR_u64,
+
+		IR_f32,
+		IR_f64,
 
 		IR_bool,
 	};
@@ -21,6 +28,10 @@ namespace Glass
 	enum IRCType : u64
 	{
 		IR_void,
+
+		IR_int,
+		IR_float,
+
 		IR_i8,
 		IR_i16,
 		IR_i32,
@@ -30,6 +41,11 @@ namespace Glass
 		IR_u16,
 		IR_u32,
 		IR_u64,
+
+		IR_f32,
+		IR_f64,
+
+		IR_bool,
 	};
 
 	enum class IRNodeType
@@ -41,6 +57,7 @@ namespace Glass
 		MUL,
 		DIV,
 		SSAValue,
+		ARGValue,
 		Function,
 		Return,
 		Call,
@@ -57,6 +74,7 @@ namespace Glass
 		If,
 		While,
 		SizeOf,
+		Break,
 		TranslationUnit,
 	};
 
@@ -103,6 +121,24 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::SSAValue;
+		}
+	};
+	struct IRARGValue : public IRInstruction {
+		u64 ID = 0;
+		u64 SSA = 0;
+
+		IRARGValue() = default;
+		IRARGValue(u64 ssa)
+			:SSA(ssa)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			return 	"%%" + std::to_string(SSA);
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::ARGValue;
 		}
 	};
 
@@ -206,14 +242,31 @@ namespace Glass
 		}
 	};
 
+	enum class RegType
+	{
+		None = 0,
+		ExprResult,
+		CallResult,
+		Argument,
+
+		VarAddress,
+		VarValue,
+
+		MemberAddress,
+	};
+
 	struct IRSSA : public IRInstruction {
 		u64 ID = 0;
+		IRInstruction* Value = nullptr;
+
 		u64 Type;
 		bool Pointer = false;
-		IRInstruction* Value = nullptr;
-		IRSSA* PointsTo = nullptr;
 
-		u64 PointsToType = 0;
+		RegType SSAType = RegType::None;
+
+		bool Reference = false;
+		bool PointerReference = false;
+		u64 ReferenceType = false;
 
 		virtual std::string ToString() const override {
 			std::string str = "$ ";
@@ -363,6 +416,7 @@ namespace Glass
 	struct IRStore : public IRInstruction {
 		u64 ID = 0;
 		u64 Type = 0;
+		bool Pointer = 0;
 		u64 AddressSSA = 0;
 		IRInstruction* Data = nullptr;
 		virtual std::string ToString() const override {
@@ -378,6 +432,7 @@ namespace Glass
 		u64 ID = 0;
 		u64 SSAddress = 0;
 		u64 Type = 0;
+		bool ReferencePointer = false;
 
 		virtual std::string ToString() const override {
 			return 	fmt::format("LOAD ${}", SSAddress);
@@ -454,6 +509,8 @@ namespace Glass
 		u64 StructID = 0;
 		u64 ObjectSSA = 0;
 		u64 MemberID = 0;
+
+		bool ReferenceAccess = false;
 
 		virtual std::string ToString() const override {
 			return 	" -> ";
@@ -535,6 +592,19 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::SizeOf;
+		}
+	};
+
+	struct IRBreak : public IRInstruction {
+		u64 ID = 0;
+
+		virtual std::string ToString() const override
+		{
+			return "break";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Break;
 		}
 	};
 }

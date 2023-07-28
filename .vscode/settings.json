@@ -16,6 +16,8 @@
 		"xmemory": "c",
 		"stdio.h": "c",
 		"stdint.h": "c",
-		"malloc.h": "c"
-	}
+		"malloc.h": "c",
+		"glfw3.h": "c"
+	},
+	"cmake.configureOnOpen": false
 }

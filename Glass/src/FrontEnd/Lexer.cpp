@@ -253,7 +253,10 @@ namespace Glass
 				string_collection_mode = true;
 			}
 			else {
-				if (token_to_type.find(c) != token_to_type.end()) {
+				if (is_valid_numeric_literal(accumulator) && c == '.') {
+					accumulator += c;
+				}
+				else if (token_to_type.find(c) != token_to_type.end()) {
 
 					if (!accumulator.empty()) {
 						createToken();

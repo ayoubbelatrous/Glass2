@@ -40,6 +40,9 @@ namespace Glass
 			Token Name;
 			Type Tipe;
 			bool IsArg = false;
+
+			IRSSA* DataSSA = nullptr;
+			IRSSA* AddressSSA = nullptr;
 		};
 
 		struct MemberMetadata
@@ -110,7 +113,7 @@ namespace Glass
 			std::unordered_map<std::string, u64> m_StructNames;
 			std::unordered_map<u64, u64> m_TypeToStruct;
 
-			IRSSA* GetSSA(u64 ID) {
+			IRSSA* GetSSA(u64 ID) const {
 				return m_SSAs.at(m_CurrentFunction).at(ID);
 			}
 
@@ -260,6 +263,41 @@ namespace Glass
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
 		IRData* CreateIRData();
+
+		bool CheckTypeConversion(u64 a, u64 b)
+		{
+			const static std::unordered_map<u64, u64> numericTypes =
+			{
+				{IR_int,0},
+				{IR_float,0},
+
+				{IR_i8,0},
+				{IR_i16,0},
+				{IR_i32,0},
+				{IR_i64,0},
+
+				{IR_u8,0},
+				{IR_u16,0},
+				{IR_u32,0},
+				{IR_u64,0},
+
+				{IR_f32,0},
+				{IR_f64,0},
+			};
+
+			bool both_numeric = false;
+
+			bool a_numeric = numericTypes.find(a) != numericTypes.end();
+			bool b_numeric = numericTypes.find(b) != numericTypes.end();
+
+			both_numeric = a_numeric && b_numeric;
+
+			if (both_numeric) {
+				return true;
+			}
+
+			return a == b;
+		}
 
 		const MetaData& GetMetadata() {
 			return m_Metadata;

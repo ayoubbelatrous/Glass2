@@ -1,30 +1,50 @@
-[17:45:08] [info] Glass: Compiling: ".\\Examples\\Main.glass"
-[17:45:08] [info] Glass: 
+[18:46:38] [warning] Glass: C Includes
+[18:46:38] [warning] Glass: C Libs
+[18:46:38] [info] Glass: Compiling: ".\\Examples\\Main.glass"
+[18:46:38] [info] Glass: 
 % 1
-[17:45:08] [info] Glass: 
+[18:46:38] [info] Glass: 
+% 2
+[18:46:38] [info] Glass: 
 struct
-[17:45:08] [info] Glass: 
+[18:46:38] [info] Glass: 
 struct
-[17:45:08] [info] Glass: 
+[18:46:38] [info] Glass: 
 fn $1 i32 : () {
-$ 3 : 1 = 4
-$ 3 : 2 = 68
-$ 3 : 3 = MUL $1 : $2
-$ 3 : 4 = 
-$ 8 : 5 = &$$4
-STORE $5 CALL $103()
-$ 3 : 6 = LOAD $5
-$ 3 : 7 = 9
-$ 8 : 8 = sizeof(3)
-$ 8 : 9 = ADD $7 : $8
-$ 8 : 10 = ADD $9 : $5
-$ 8 : 11 = $10
-$ 3 : 12 = 4
-STORE $11 $12
-$ 5 : 13 = % 1
-$ 5 : 14 = (int*)$13
-$ 3 : 15 = LOAD $5
-$ 3 : 16 = CALL $100()
+$ 1 : 1 = 4
+$ 101 : 2 = 
+$ 10 : 3 = &$$2
+STORE $3 CALL $103()
+$ 10 : 4 =  -> 
+$ 1 : 5 = 30
+STORE $4 $5
+$ 101 : 6 = LOAD $3
+ret 5 : $6
 }
 
-[17:45:08] [warning] Glass: Running: clang -w generated.c
+[18:46:38] [info] Glass: 
+fn $2 i32 : ($ 101 : 1, ) {
+$ 10 : 1 = &$%%1
+$ 7 : 2 = % 1
+$ 7 : 3 = % 2
+$ 10 : 4 =  -> 
+$ 10 : 5 = LOAD $4
+$ 5 : 6 = CALL $100()
+}
+
+[18:46:38] [info] Glass: 
+fn $3 i32 : () {
+$ 2 : 1 = 1069547520
+$ 11 : 2 = 
+$ 10 : 3 = &$$2
+STORE $3 $1
+$ 101 : 4 = CALL $1()
+$ 101 : 5 = 
+$ 10 : 6 = &$$5
+STORE $6 $4
+$ 101 : 7 = LOAD $6
+$ 101 : 8 = LOAD $6
+CALL $2()
+}
+
+[18:46:38] [warning] Glass: Running: clang -w generated.c

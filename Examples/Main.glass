@@ -6,21 +6,27 @@
 #foreign fn malloc(i32 size) : void* {}
 #foreign fn free(void* ptr) : void {}
 
-struct Position
+struct GLFWwindow{};
+
+#foreign fn glfwCreateWindow() : GLFWwindow* {};
+
+struct Renderer
 {
-   i32 x;
-   i32 y;
+   i32 ID;
 };
 
-struct Player
-{
-   Position* pos;
-};
+fn Renderer_Allocate() : Renderer* {
+   Renderer* r = malloc(4);
+   r.ID = 30;
+   return r;
+}
+
+fn Renderer_Init(Renderer* r) : void {
+   printf("Renderer.ID: %i",r.ID);
+}
 
 fn main() : i32 {
-
-   i32* i = malloc(4*68);
-   i[9] = 4;
-
-   printf("i[10]: %zu",i);
+   f32 i = 1.5;
+   Renderer* r = Renderer_Allocate();
+   Renderer_Init(r);
 }

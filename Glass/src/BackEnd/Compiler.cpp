@@ -8,6 +8,10 @@ namespace Glass
 	Compiler::Compiler(std::vector<CompilerFile*> files) :m_Files(files)
 	{
 		m_Metadata.RegisterType((u64)IRType::IR_void, "void");
+
+		m_Metadata.RegisterType((u64)IRType::IR_float, "float");
+		m_Metadata.RegisterType((u64)IRType::IR_int, "int");
+
 		m_Metadata.RegisterType((u64)IRType::IR_i8, "i8");
 		m_Metadata.RegisterType((u64)IRType::IR_i16, "i16");
 		m_Metadata.RegisterType((u64)IRType::IR_i32, "i32");
@@ -17,6 +21,9 @@ namespace Glass
 		m_Metadata.RegisterType((u64)IRType::IR_u16, "u16");
 		m_Metadata.RegisterType((u64)IRType::IR_u32, "u32");
 		m_Metadata.RegisterType((u64)IRType::IR_u64, "u64");
+
+		m_Metadata.RegisterType((u64)IRType::IR_f32, "f32");
+		m_Metadata.RegisterType((u64)IRType::IR_f64, "f64");
 
 		m_Metadata.RegisterType((u64)IRType::IR_bool, "bool");
 
@@ -102,6 +109,11 @@ namespace Glass
 		case NodeType::While:
 			return WhileCodeGen((WhileNode*)statement);
 			break;
+		case NodeType::Break:
+		{
+			return Application::AllocateIRNode(IRBreak());
+		}
+		break;
 		default:
 			return nullptr;
 			break;
@@ -165,29 +177,44 @@ namespace Glass
 
 		std::vector<ArgumentMetadata> args_metadata;
 
+		PoPIRSSA();
+
 		for (const auto a : functionNode->GetArgList()->GetArguments()) {
-			IRSSA* arg_ssa = CreateIRSSA();
+			IRSSA* arg_ssa = Application::AllocateIRNode(IRSSA());
+			arg_ssa->ID = m_SSAIDCounter;
+
+			IRSSA* arg_address_ssa = CreateIRSSA();
 
 			VariableNode* var = (VariableNode*)a;
 
-			RegisterVariable(arg_ssa, var->Symbol.Symbol);
+			RegisterVariable(arg_address_ssa, var->Symbol.Symbol);
 
-			arg_ssa->Type = m_Metadata.GetType(var->Type->Symbol.Symbol);
-			arg_ssa->Pointer = var->Type->Pointer;
+			arg_address_ssa->Type = IR_u64;
+			arg_address_ssa->Pointer = false;
+
+			IRAddressOf address_of;
+
+			{
+				address_of.SSA = Application::AllocateIRNode(IRARGValue(arg_address_ssa->ID));
+			}
+
+			arg_address_ssa->Value = Application::AllocateIRNode(address_of);
 
 			VariableMetadata var_metadata = {
 			var->Symbol,
 			Type
 			{
-				arg_ssa->Type,
+				m_Metadata.GetType(var->Type->Symbol.Symbol),
 				var->Type->Array,
 				var->Type->Pointer ? TypeType::Pointer : TypeType::Value,
 			},
 			true
 			};
 
-			m_Metadata.RegisterVariableMetadata(arg_ssa->ID, var_metadata);
+			arg_ssa->Type = var_metadata.Tipe.ID;
+			arg_ssa->Pointer = var->Type->Pointer;
 
+			m_Metadata.RegisterVariableMetadata(arg_address_ssa->ID, var_metadata);
 
 			IRF->Arguments.push_back(arg_ssa);
 
@@ -255,6 +282,10 @@ namespace Glass
 			if (dynamic_cast<IRWhile*>(code) != nullptr) {
 				IRF->Instructions.push_back(code);
 			}
+
+			if (dynamic_cast<IRBreak*>(code) != nullptr) {
+				IRF->Instructions.push_back(code);
+			}
 		}
 
 
@@ -304,7 +335,10 @@ namespace Glass
 		}
 
 		IRssa->Value = Application::AllocateIRNode(address_of);
-		IRssa->PointsTo = StorageSSA;
+
+		IRssa->PointerReference = StorageSSA->Pointer;
+		IRssa->ReferenceType = StorageSSA->Type;
+		IRssa->SSAType = RegType::VarAddress;
 
 		RegisterVariable(IRssa, variableNode->Symbol.Symbol);
 
@@ -315,16 +349,21 @@ namespace Glass
 				 m_Metadata.GetType(variableNode->Type->Symbol.Symbol),
 				variableNode->Type->Array,
 				variableNode->Type->Pointer ? TypeType::Pointer : TypeType::Value,
-			}
+			},
+			false
+			,
+			StorageSSA,
+			IRssa
 		};
 
-		m_Metadata.RegisterVariableMetadata(StorageSSA->ID, var_metadata);
+		m_Metadata.RegisterVariableMetadata(IRssa->ID, var_metadata);
 
 		if (value != nullptr) {
 			IRStore store;
 			store.AddressSSA = IRssa->ID;
 			store.Data = value;
 			store.Type = StorageSSA->Type;
+			store.Pointer = StorageSSA->Pointer;
 
 			return Application::AllocateIRNode(store);
 		}
@@ -339,7 +378,9 @@ namespace Glass
 
 		ret.Type = (u64)IRType::IR_i32;
 
-		ret.Value = GetExpressionByValue(returnNode->Expr);
+		auto expr = (IRSSAValue*)GetExpressionByValue(returnNode->Expr);
+
+		ret.Value = expr;
 
 		return Application::AllocateIRNode(ret);
 	}
@@ -497,45 +538,15 @@ namespace Glass
 			return nullptr;
 		}
 
-		u64 ID = 0;
-		ID = GetVariableSSA(identifier->Symbol.Symbol);
+		u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
 
 		IRSSA* ssa = GetSSA(ID);
 
-		bool isArg = false;
+		IRSSAValue ssa_val;
 
-		if (ssa->PointsTo == nullptr) {
-			const auto& metadata = m_Metadata.GetVariableMetadata(ID);
-			isArg = metadata->IsArg;
-		}
+		ssa_val.SSA = GetVariableSSA(identifier->Symbol.Symbol);
 
-		if (isArg == false) {
-
-			IRLoad load;
-			load.SSAddress = GetVariableSSA(identifier->Symbol.Symbol);
-
-			ssa = CreateIRSSA();
-
-			IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
-
-			load.Type = var_ssa->PointsTo->Type;
-
-			ssa->Type = var_ssa->PointsTo->Type;
-			ssa->Value = Application::AllocateIRNode(load);
-			ssa->PointsTo = var_ssa->PointsTo;
-			ssa->PointsToType = var_ssa->PointsTo->Type;
-
-			IRSSAValue ssa_val;
-
-			ssa_val.SSA = ssa->ID;
-
-			return (IRInstruction*)Application::AllocateIRNode(ssa_val);
-		}
-		else {
-			IRSSAValue ssa_val;
-			ssa_val.SSA = ID;
-			return (IRInstruction*)Application::AllocateIRNode(ssa_val);
-		}
+		return (IRInstruction*)Application::AllocateIRNode(ssa_val);
 	}
 
 	IRInstruction* Compiler::NumericLiteralCodeGen(const NumericLiteral* numericLiteral)
@@ -546,10 +557,17 @@ namespace Glass
 
 		IRCONSTValue* Value = (IRCONSTValue*)IRssa->Value;
 
-		IRssa->Type = (u64)IRType::IR_i32;
+		if (numericLiteral->type == NumericLiteral::Type::Float) {
+			IRssa->Type = (u64)IRType::IR_float;
+			memcpy(&Value->Data, &numericLiteral->Val.Float, sizeof(float));
+		}
+		if (numericLiteral->type == NumericLiteral::Type::Int) {
+			IRssa->Type = (u64)IRType::IR_int;
+			memcpy(&Value->Data, &numericLiteral->Val.Int, sizeof(i32));
+		}
+
 		Value->Type = IRssa->Type;
 
-		memcpy(&Value->Data, &numericLiteral->Value, sizeof(int));
 
 		IRSSAValue* ssa_value = Application::AllocateIRNode(IRSSAValue());
 
@@ -662,11 +680,14 @@ namespace Glass
 			u64 var_ssa_id = GetVariableSSA(((Identifier*)left)->Symbol.Symbol);
 			IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
 
+			const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
+
 			IRStore* store = Application::AllocateIRNode(IRStore());
 			{
 				store->Data = right_val;
 				store->AddressSSA = var_ssa_id;
-				store->Type = var_ssa->PointsTo->Type;
+				store->Type = metadata->DataSSA->Type;
+				store->Pointer = metadata->DataSSA->Pointer;
 			}
 
 			return store;
@@ -679,7 +700,8 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = member_access->SSA;
-				store->Type = m_Metadata.GetSSA(member_access->SSA)->PointsToType;
+				store->Type = m_Metadata.GetSSA(member_access->SSA)->ReferenceType;
+				store->Pointer = m_Metadata.GetSSA(member_access->SSA)->PointerReference;
 			}
 
 			return store;
@@ -737,7 +759,7 @@ namespace Glass
 
 			if (decl_arg != nullptr) {
 
-				auto expr = ExpressionCodeGen(call->Arguments[i]);
+				auto expr = GetExpressionByValue(call->Arguments[i]);
 
 				if (expr == nullptr)
 					return nullptr;
@@ -757,14 +779,16 @@ namespace Glass
 
 				Compiler::Type type;
 
-				if (arg_ssa->PointsTo != nullptr) {
-					type = m_Metadata.GetVariableMetadata(arg_ssa->PointsTo->ID)->Tipe;
+				if (arg_ssa->SSAType == RegType::VarAddress) {
+					type = m_Metadata.GetVariableMetadata(arg_ssa->ID)->Tipe;
 				}
 				else {
 					type.ID = arg_ssa->Type;
 				}
 
-				if (decl_arg->Tipe.ID != type.ID) {
+				bool type_mismatch = !CheckTypeConversion(decl_arg->Tipe.ID, type.ID);
+
+				if (type_mismatch) {
 
 					PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()),MessageType::Error });
 					PushMessage(CompilerMessage{ "type mismatch in function call",MessageType::Warning });
@@ -778,16 +802,18 @@ namespace Glass
 				}
 
 				if (decl_arg->Tipe.TT == TypeType::Pointer) {
-					IRAsAddress ir_as_address;
-					ir_as_address.SSA = arg_SSAID;
+					// 					IRAsAddress ir_as_address;
+					// 					ir_as_address.SSA = arg_SSAID;
+					// 
+					// 					auto address_ssa = CreateIRSSA();
+					// 					address_ssa->Type = decl_arg->Tipe.ID;
+					// 					address_ssa->Pointer = true;
+					// 					address_ssa->Value = Application::AllocateIRNode(ir_as_address);
+					// 
+					// 					arg = Application::AllocateIRNode(IRSSAValue());
+					// 					((IRSSAValue*)arg)->SSA = address_ssa->ID;
 
-					auto address_ssa = CreateIRSSA();
-					address_ssa->Type = decl_arg->Tipe.ID;
-					address_ssa->Pointer = true;
-					address_ssa->Value = Application::AllocateIRNode(ir_as_address);
-
-					arg = Application::AllocateIRNode(IRSSAValue());
-					((IRSSAValue*)arg)->SSA = address_ssa->ID;
+					arg = GetExpressionByValue(call->Arguments[i]);
 				}
 				else {
 					arg = Application::AllocateIRNode(IRSSAValue());
@@ -824,6 +850,7 @@ namespace Glass
 		u64 struct_id = 0;
 		u64 member_id = 0;
 		u64 object_ssa_id = 0;
+		bool reference_access = false;
 
 		const MemberMetadata* member_metadata = nullptr;
 		const StructMetadata* struct_metadata = nullptr;
@@ -834,15 +861,22 @@ namespace Glass
 			{
 				Identifier* object = (Identifier*)memberAccess->Object;
 				u64 var_ssa = m_Metadata.GetVariableSSA(object->Symbol.Symbol);
-				struct_id = m_Metadata.GetStructIDFromType(m_Metadata.GetSSA(var_ssa)->PointsTo->Type);
+
+				const auto var_metadata = m_Metadata.GetVariableMetadata(var_ssa);
+
+				struct_id = m_Metadata.GetStructIDFromType(var_metadata->Tipe.ID);
 				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
 				object_ssa_id = var_ssa;
+
+				if (var_metadata->Tipe.TT == TypeType::Pointer) {
+					reference_access = true;
+				}
 			}
 			break;
 			case NodeType::MemberAccess:
 			{
 				auto object_code = (IRSSAValue*)ExpressionCodeGen(memberAccess->Object);
-				struct_id = m_Metadata.GetStructIDFromType(m_Metadata.GetSSA(object_code->SSA)->PointsToType);
+				struct_id = m_Metadata.GetStructIDFromType(m_Metadata.GetVariableMetadata(object_code->SSA)->Tipe.ID);
 				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
 
 				object_ssa_id = object_code->SSA;
@@ -876,12 +910,15 @@ namespace Glass
 			ir_mem_access.StructID = struct_id;
 			ir_mem_access.ObjectSSA = object_ssa_id;
 			ir_mem_access.MemberID = member_id;
+			ir_mem_access.ReferenceAccess = reference_access;
 
 			auto address_ssa = CreateIRSSA();
 
 			address_ssa->Value = Application::AllocateIRNode(ir_mem_access);
 			address_ssa->Type = IR_u64;
-			address_ssa->PointsToType = member_metadata->Tipe.ID;
+
+			address_ssa->Reference = true;
+			address_ssa->ReferenceType = member_metadata->Tipe.ID;
 
 			IRSSAValue address_ssa_val;
 			address_ssa_val.SSA = address_ssa->ID;
@@ -901,26 +938,21 @@ namespace Glass
 		u64 type = 0;
 		u64 obj_address_ssa = 0;
 
-		if (obj_ssa->PointsTo) {
+		obj_address_ssa = object->SSA;
+
+		if (obj_ssa->ReferenceType) {
 
 			Identifier* identifier = (Identifier*)arrayAccess->Object;
 
-			type = obj_ssa->PointsTo->Type;
+			type = obj_ssa->ReferenceType;
 			obj_address_ssa = m_Metadata.GetVariableSSA(identifier->Symbol.Symbol);
-
-			if (obj_ssa->PointsTo->Pointer == false) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator",MessageType::Warning });
-			}
 		}
-		else {
 
-			type = obj_ssa->Type;
+		type = obj_ssa->Type;
 
-			if (obj_ssa->Pointer == false) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator",MessageType::Warning });
-			}
+		if (obj_ssa->PointerReference == false) {
+			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator",MessageType::Warning });
 		}
 
 		auto sizeof_ssa = CreateIRSSA();
@@ -1025,6 +1057,33 @@ namespace Glass
 			ssa_value->SSA = value_ssa->ID;
 
 			return ssa_value;
+		}
+		break;
+		case NodeType::Identifier:
+		{
+			auto ir_address = (IRSSAValue*)IdentifierCodeGen((Identifier*)expr);
+
+			const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
+
+			IRLoad load;
+			load.SSAddress = ir_address->SSA;
+			load.ReferencePointer = metadata->DataSSA->Pointer;
+
+			IRSSA* ssa = CreateIRSSA();
+
+			IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
+
+			load.Type = metadata->DataSSA->Type;
+
+			ssa->Type = metadata->DataSSA->Type;
+			ssa->Value = Application::AllocateIRNode(load);
+			ssa->Pointer = metadata->DataSSA->Pointer;
+
+			ssa->Reference = true;
+			ssa->ReferenceType = metadata->DataSSA->Type;
+			ssa->PointerReference = metadata->DataSSA->Pointer;
+
+			return Application::AllocateIRNode(IRSSAValue(ssa->ID));
 		}
 		break;
 		default:

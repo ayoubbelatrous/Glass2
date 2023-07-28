@@ -26,6 +26,7 @@ namespace Glass
 		If,
 		While,
 		For,
+		Break,
 		ArrayAccess,
 	};
 
@@ -208,6 +209,13 @@ namespace Glass
 	{
 	public:
 
+		enum class Type
+		{
+			Int = 0,
+			Float,
+			Double,
+		};
+
 		virtual NodeType GetType() const override
 		{
 			return NodeType::NumericLiteral;
@@ -217,9 +225,18 @@ namespace Glass
 		// 			return nullptr;
 		// 		}
 
+		union
+		{
+			double Double;
+			float Float;
+			int Int;
+		} Val;
+
 		int Value = 0;
 
 		Token token;
+
+		Type type;
 
 		virtual std::string ToString() const {
 			return token.Symbol;
@@ -595,6 +612,26 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Condition->GetLocation();
+		}
+	};
+
+	class BreakNode : public Statement
+	{
+	public:
+
+		Token BR;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Break;
+		}
+
+		virtual std::string ToString() const {
+			return "break";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return BR;
 		}
 	};
 }

@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "FrontEnd/Parser.h"
+#include "StrUtils.h"
 #include "Application.h"
 
 namespace Glass
@@ -47,6 +48,15 @@ namespace Glass
 			else if (At().Symbol == "while")
 			{
 				return ParseWhile();
+			}
+			else if (At().Symbol == "break")
+			{
+				BreakNode Node;
+
+				Node.BR = Consume();
+				Consume();
+
+				return Application::AllocateAstNode(Node);
 			}
 			else {
 
@@ -559,6 +569,15 @@ namespace Glass
 			NumericLiteral num_lit;
 			num_lit.token = Consume();
 			num_lit.Value = std::stoi(num_lit.token.Symbol);
+
+			if (FindStringIC(num_lit.token.Symbol, ".")) {
+				num_lit.Val.Float = std::stof(num_lit.token.Symbol);
+				num_lit.type = NumericLiteral::Type::Float;
+			}
+			else {
+				num_lit.Val.Int = std::stoi(num_lit.token.Symbol);
+				num_lit.type = NumericLiteral::Type::Int;
+			}
 
 			return Application::AllocateAstNode(num_lit);
 		}

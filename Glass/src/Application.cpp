@@ -14,6 +14,19 @@ namespace Glass
 	Application::Application(const CommandLineArgs& CmdLineArgs)
 		: m_Arguments(CmdLineArgs), m_Options(ParseOptions(CmdLineArgs))
 	{
+
+		GS_CORE_WARN("C Includes");
+
+		for (const auto& include : m_Options.CIncludes) {
+			GS_CORE_INFO("\t{}", include);
+		}
+
+		GS_CORE_WARN("C Libs");
+
+		for (const auto& lib : m_Options.CLibs) {
+			GS_CORE_INFO("\t{}", lib);
+		}
+
 		Init();
 	}
 
@@ -122,7 +135,7 @@ namespace Glass
 		if (compilation_successful)
 		{
 			m_TranspilerStart = std::chrono::high_resolution_clock::now();
-			CTranspiler transpiler(code, &compiler.GetMetadata());
+			CTranspiler transpiler(code, m_Options.CIncludes, &compiler.GetMetadata());
 			{
 				{
 					std::string c_code = transpiler.Codegen();
@@ -205,6 +218,9 @@ namespace Glass
 	ApplicationOptions Application::ParseOptions(const CommandLineArgs& CmdLineArgs)
 	{
 		bool modeOutput = false;
+		bool modeCIncludes = false;
+		bool modeCLibs = false;
+
 		bool modal = false;
 
 		ApplicationOptions options;
@@ -212,13 +228,30 @@ namespace Glass
 		for (const std::string& arg : CmdLineArgs.Arguments) {
 
 			if (FindStringIC(arg, "-")) {
+
+				modeOutput = false;
+				modeCIncludes = false;
+				modeCLibs = false;
+
 				modal = true;
+
 				if (arg == "-o") {
-					modeOutput;
+					modeOutput = true;
 				}
+
+				if (arg == "-cI") {
+					modeCIncludes = true;
+				}
+
+				if (arg == "-cL") {
+					modeCLibs = true;
+				}
+
+				continue;
 			}
 
 			if (modal) {
+
 				if (modeOutput) {
 					if (FindStringIC(arg, "-")) {
 						FatalAbort(ExitCode::InvalidCommandLineInput, "Expected A Valid Output Path After -o Instead Got Nothing");
@@ -227,6 +260,14 @@ namespace Glass
 						options.Output = arg;
 						modeOutput = false;
 					}
+				}
+
+				if (modeCIncludes) {
+					options.CIncludes.push_back(arg);
+				}
+
+				if (modeCLibs) {
+					options.CLibs.push_back(arg);
 				}
 			}
 			else {

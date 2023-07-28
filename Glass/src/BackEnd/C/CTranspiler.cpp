@@ -4,8 +4,8 @@
 
 namespace Glass
 {
-	CTranspiler::CTranspiler(IRTranslationUnit* program, const Compiler::MetaData* metadata)
-		:m_Program(program), m_Metadata(metadata)
+	CTranspiler::CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const Compiler::MetaData* metadata)
+		:m_Program(program), m_Includes(includes), m_Metadata(metadata)
 	{
 	}
 
@@ -20,6 +20,10 @@ namespace Glass
 		code += "#include <string.h>\n";
 		code += "#include <malloc.h>\n";
 
+		for (auto& include : m_Includes) {
+			code += fmt::format("#include \"{}\"\n", include);
+		}
+
 		code += "\n\n";
 
 		code += "typedef char i8;		\n";
@@ -33,6 +37,9 @@ namespace Glass
 		code += "typedef uint16_t u16;	\n";
 		code += "typedef uint32_t u32;	\n";
 		code += "typedef uint64_t u64;	\n";
+
+		code += "typedef float f32;		\n";
+		code += "typedef double f64;	\n";
 
 		code += "\n";
 
@@ -70,7 +77,17 @@ namespace Glass
 		{
 		case IRNodeType::ConstValue:
 		{
-			return ((IRCONSTValue*)inst)->ToString();
+			IRCONSTValue* constant = (IRCONSTValue*)inst;
+			if (constant->Type == IR_float) {
+				float data = 0;
+				memcpy(&data, &constant->Data, sizeof(float));
+				return std::to_string(data);
+			}
+			else {
+				i32 data = 0;
+				memcpy(&data, &constant->Data, sizeof(i32));
+				return std::to_string(data);
+			}
 		}
 		break;
 		case IRNodeType::SSA:
@@ -103,13 +120,27 @@ namespace Glass
 		case IRNodeType::Store:
 		{
 			IRStore* store = (IRStore*)inst;
-			return fmt::format("*(({0}*)__tmp{1}) = ({0}){2};", m_Metadata->GetType(store->Type), store->AddressSSA, IRCodeGen(store->Data));
+
+			std::string ptr = "";
+
+			if (store->Pointer) {
+				ptr = "*";
+			}
+
+			return fmt::format("*(({0}{1}*)__tmp{2}) = ({0}{1}){3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
 		}
 		break;
 		case IRNodeType::Load:
 		{
 			IRLoad* load = (IRLoad*)inst;
-			return fmt::format("*({}*)__tmp{}", m_Metadata->GetType(load->Type), load->SSAddress);
+
+			std::string ptr;
+
+			if (load->ReferencePointer) {
+				ptr = "*";
+			}
+
+			return fmt::format("*({} {}*)__tmp{}", m_Metadata->GetType(load->Type), ptr, load->SSAddress);
 		}
 		break;
 		case IRNodeType::DataValue:
@@ -128,7 +159,13 @@ namespace Glass
 			std::string type = struct_metadata->Name.Symbol;
 			std::string member = struct_metadata->Members[member_access->MemberID].Name.Symbol;
 
-			return fmt::format("((u64)&(({} *)__tmp{})->{})", type, ssa, member);
+			std::string ptr;
+
+			if (member_access->ReferenceAccess) {
+				ptr = "*";
+			}
+
+			return fmt::format("((u64)&({1}({0} {1}*)__tmp{2})->{3})", type, ptr, ssa, member);
 		}
 		break;
 		case IRNodeType::If:
@@ -199,6 +236,17 @@ namespace Glass
 			return fmt::format("sizeof({})", m_Metadata->GetType(size_of->Type));
 		}
 		break;
+		case IRNodeType::ARGValue:
+		{
+			IRARGValue* arg_val = (IRARGValue*)inst;
+			return fmt::format("__arg{}", arg_val->SSA);
+		}
+		break;
+		case IRNodeType::Break:
+		{
+			return "break";
+		}
+		break;
 		}
 
 		return "";
@@ -226,7 +274,7 @@ namespace Glass
 				type.push_back('*');
 			}
 
-			arguments += fmt::format("{} {}", type, "__tmp" + std::to_string(arg->ID));
+			arguments += fmt::format("{} {}", type, "__arg" + std::to_string(arg->ID));
 
 			if (i == IRF->Arguments.size() - 1) {
 			}
