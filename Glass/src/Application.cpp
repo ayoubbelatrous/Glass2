@@ -57,16 +57,6 @@ namespace Glass
 				Lexer lexer(comp_file.GetSource(), comp_file.GetPath());
 
 				comp_file.SetTokens(lexer.Lex());
-
-				/*
-				{
-					const fs_path& path = comp_file.GetPath();
-
-					for (auto tk : tokens) {
-						GS_CORE_INFO("Token = {0} ; {1}", tk.ToString(), fmt::format("{0}:{1}:{2}", path, tk.Line + 1, tk.Begin));
-					}
-				}
-				*/
 			}
 			m_LexerEnd = std::chrono::high_resolution_clock::now();
 		}
@@ -78,9 +68,6 @@ namespace Glass
 				auto ast = parser.CreateAST();
 
 				comp_file.SetAST(ast);
-
-				//std::string ast_string = ast->ToString();
-				//GS_CORE_INFO("\n" + ast_string);
 			}
 			m_ParserEnd = std::chrono::high_resolution_clock::now();
 		}
@@ -107,23 +94,23 @@ namespace Glass
 				GS_CORE_INFO("\n" + inst_string);
 			}
 
-			for (const Compiler::CompilerMessage& msg : compiler.GetMessages()) {
+			for (const CompilerMessage& msg : compiler.GetMessages()) {
 
-				Compiler::MessageType Type = msg.Type;
+				MessageType Type = msg.Type;
 
-				if (Type == Compiler::MessageType::Error) {
+				if (Type == MessageType::Error) {
 					compilation_successful = false;
 				}
 
 				switch (Type)
 				{
-				case Compiler::MessageType::Info:
+				case MessageType::Info:
 					GS_CORE_INFO(msg.message);
 					break;
-				case Compiler::MessageType::Warning:
+				case MessageType::Warning:
 					GS_CORE_WARN(msg.message);
 					break;
-				case Compiler::MessageType::Error:
+				case MessageType::Error:
 					GS_CORE_ERROR(msg.message);
 					break;
 				default:
@@ -158,6 +145,9 @@ namespace Glass
 
 				if (cc_result != 0) {
 					GS_CORE_ERROR("Error: During Execution of Command");
+				}
+				else {
+					GS_CORE_WARN("CodeGen Done: {}", compiler_cmd);
 				}
 
 				auto lexer_time = std::chrono::duration_cast<std::chrono::microseconds>(m_LexerEnd - m_LexerStart).count() / 1000.0f;

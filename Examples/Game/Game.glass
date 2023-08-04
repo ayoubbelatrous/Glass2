@@ -6,21 +6,41 @@
 #foreign fn malloc(i32 size) : void* {}
 #foreign fn free(void* ptr) : void {}
 
-struct GLFWwindow{
+#foreign struct GLFWwindow{
    i32 null0;
 };
 
 #foreign fn glfwCreateWindow(i32 width,i32 height,u8* title,i32* monitor,i32* display) : GLFWwindow* {};
 #foreign fn glfwInit() : void {};
 #foreign fn glfwMakeContextCurrent(GLFWwindow* window) : void {};
+
 #foreign fn glfwSwapBuffers(GLFWwindow* window) : void {};
 #foreign fn glfwPollEvents() : void {};
-#foreign fn glfwGetError(u8* desc) : i32 {};
+
 #foreign fn glfwWindowShouldClose(GLFWwindow* window) : i32 {};
 #foreign fn glfwGetKey(GLFWwindow* window,i32 keyCode) : i32 {};
 
+#foreign fn gladInit() : i32 {};
 #foreign fn glClearColor(f32 r,f32 g, f32 b, f32 a) : void {};
 #foreign fn glClear(i32 mask) : void {};
+
+struct vec2 {
+   f32 x;
+   f32 y;
+};
+
+struct vec3 {
+   f32 x;
+   f32 y;
+   f32 z;
+};
+
+struct vec4 {
+   f32 x;
+   f32 y;
+   f32 z;
+   f32 w;
+};
 
 fn main() : i32 {
 
@@ -28,22 +48,22 @@ fn main() : i32 {
    i32 GL_COLOR_BUFFER_BIT = 16384;
 
    glfwInit();
-   i32 *nullptr = 0;
+   i32* nullptr = 0;
 
    GLFWwindow* window;
 
-   window = glfwCreateWindow(400,400,"Hello",nullptr, nullptr);
+   window = glfwCreateWindow(1280,720,"Glass Game Example",nullptr, nullptr);
 
    glfwMakeContextCurrent(window);
 
+   gladInit();
+
    while 1 {
-
-      glClearColor(0.5,0.5,0.5,0.5);
-      glClear(GL_COLOR_BUFFER_BIT);
-
       glfwSwapBuffers(window);
       glfwPollEvents();
 
+      glClearColor(0.8,1,1,1);
+      glClear(GL_COLOR_BUFFER_BIT);
 
       if(glfwWindowShouldClose(window)){
          break;
@@ -53,4 +73,7 @@ fn main() : i32 {
          break;
       }
    }
+
+   type_info* ti = typeof(vec4);
+   printf("%s",ti.name);
 }

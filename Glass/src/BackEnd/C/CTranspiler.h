@@ -29,6 +29,14 @@ namespace Glass
 
 	private:
 
+		std::unordered_map <u64, TypeInfo> m_VariableTypeInfo;
+
+		u64 GetVarTypeInfoID() {
+			return m_VariableTypeInfo.size() + 1;
+		}
+
+		std::unordered_map <u64, u64> m_TypeInfoTable;
+
 		const Compiler::MetaData* m_Metadata = nullptr;
 
 		std::unordered_map<u64, std::string> m_TypeMap;

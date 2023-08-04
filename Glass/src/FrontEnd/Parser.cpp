@@ -63,6 +63,7 @@ namespace Glass
 				bool var_decl = At().Type == TokenType::Symbol && At(1).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
+				var_decl |= At().Type == TokenType::Dollar && At(1).Type == TokenType::Symbol;
 
 				if (var_decl) {
 					return ParseVarDecl();
@@ -149,11 +150,19 @@ namespace Glass
 
 	Statement* Parser::ParseTypeExpr()
 	{
-		if (ExpectedToken(TokenType::Symbol)) {
-			return ParseStatement();
+		if (At().Type != TokenType::Dollar) {
+			if (ExpectedToken(TokenType::Symbol)) {
+				return ParseStatement();
+			}
 		}
 
 		TypeExpression Node;
+
+		if (At().Type == TokenType::Dollar) {
+			Consume();
+			Node.PolyMorphic = true;
+		}
+
 		Node.Symbol = Consume();
 
 		if (At().Type == TokenType::OpenBracket) {
@@ -170,6 +179,18 @@ namespace Glass
 		if (At().Type == TokenType::Multiply) {
 			Consume();
 			Node.Pointer = true;
+		}
+
+		if (
+			At().Type == TokenType::Period &&
+			At(1).Type == TokenType::Period &&
+			At(2).Type == TokenType::Period
+			) {
+
+			Consume();
+			Consume();
+			Consume();
+			Node.Variadic = true;
 		}
 
 		return Application::AllocateAstNode(Node);
@@ -273,8 +294,10 @@ namespace Glass
 
 			if (At().Type == TokenType::Comma) {
 				Consume();
-				if (ExpectedToken(TokenType::Symbol)) {
-					Abort("Expected symbol after ',' Instead Got");
+				if (At().Type != TokenType::Dollar) {
+					if (ExpectedToken(TokenType::Symbol)) {
+						Abort("Expected symbol after ',' Instead Got");
+					}
 				}
 			}
 		}
@@ -308,12 +331,15 @@ namespace Glass
 
 		if (At().Type == TokenType::Colon) {
 			Consume();
-			if (ExpectedToken(TokenType::Symbol)) {
-				Abort("Expected a type after ':' in function definition");
+
+			if (At().Type != TokenType::Dollar) {
+
+				if (ExpectedToken(TokenType::Symbol)) {
+					Abort("Expected a type after ':' in function definition");
+				}
 			}
-			else {
-				Node.ReturnType = (TypeExpression*)ParseTypeExpr();
-			}
+
+			Node.ReturnType = (TypeExpression*)ParseTypeExpr();
 		}
 
 		if (ExpectedToken(TokenType::OpenCurly)) {
@@ -450,6 +476,31 @@ namespace Glass
 		return object;
 	}
 
+	Expression* Parser::ParseTypeOfExpr()
+	{
+		TypeOfNode Node;
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' after 'typeof'");
+		}
+
+		Consume();
+
+		Node.What = ParseExpression();
+
+		if (!Node.What) {
+			Abort("Expected something inside parenthesis '()' of 'typeof'");
+		}
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected ')' after 'typeof' contents");
+		}
+
+		Consume();
+
+		return Application::AllocateAstNode(Node);
+	}
+
 	Expression* Parser::ParseMemberExpr()
 	{
 		Expression* left = ParseCallExpr();
@@ -474,8 +525,8 @@ namespace Glass
 	Expression* Parser::ParseCallExpr()
 	{
 		Expression* name = (Expression*)ParsePrimaryExpr();
-		if (name) {
 
+		if (name) {
 
 			auto is_func_call = [this, name]() -> bool {
 				if (name->GetType() == NodeType::Identifier && At().Type == TokenType::OpenParen) {
@@ -487,6 +538,11 @@ namespace Glass
 			};
 
 			if (is_func_call()) {
+
+				if (((Identifier*)name)->Symbol.Symbol == "typeof") {
+					return ParseTypeOfExpr();
+				}
+
 				Consume();
 
 				std::vector<Expression*> arguments;
@@ -580,6 +636,28 @@ namespace Glass
 			}
 
 			return Application::AllocateAstNode(num_lit);
+		}
+		break;
+		case TokenType::Ampersand:
+		{
+			Consume();
+
+			RefNode Node;
+
+			Node.What = ParseExpression();
+
+			return Application::AllocateAstNode(Node);
+		}
+		break;
+		case TokenType::Multiply:
+		{
+			Consume();
+
+			DeRefNode Node;
+
+			Node.What = ParseExpression();
+
+			return Application::AllocateAstNode(Node);
 		}
 		break;
 		}

@@ -13,6 +13,8 @@ namespace Glass
 
 		Bang,			// '!'
 
+		Dollar,			// '$'
+
 		Spread,			// '...'
 
 		Pound,			// '#'

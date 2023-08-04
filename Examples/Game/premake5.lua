@@ -21,11 +21,18 @@ project "Game"
 
     libdirs
     {
-        "glfw"
+        "glfw",
+        "glad"
+    }
+
+    includedirs
+    {
+        "glad"
     }
 
     links
     {
         "opengl32.lib",
-        "GLFW.lib"
+        "GLFW.lib",
+        "GLAD.lib"
     }

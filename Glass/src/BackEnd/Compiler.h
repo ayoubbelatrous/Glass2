@@ -6,95 +6,180 @@
 
 namespace Glass
 {
+	enum class SymbolType
+	{
+		None = 0,
+		Variable,
+		Function,
+		Type,
+	};
+
+	enum class MessageType
+	{
+		Info,
+		Warning,
+		Error,
+	};
+
+	struct CompilerMessage
+	{
+		std::string message;
+		MessageType Type;
+	};
+
+	enum class TypeType
+	{
+		Value = 0,
+		Pointer,
+	};
+
+	struct Type
+	{
+		u64 ID;
+		bool Array = false;
+		TypeType TT = TypeType::Value;
+	};
+
+	struct VariableMetadata
+	{
+		Token Name;
+		Type Tipe;
+		bool IsArg = false;
+
+		IRSSA* DataSSA = nullptr;
+		IRSSA* AddressSSA = nullptr;
+	};
+
+	struct MemberMetadata
+	{
+		Token Name;
+		Type Tipe;
+	};
+
+	struct StructMetadata
+	{
+		Token Name;
+		std::vector<MemberMetadata> Members;
+
+		u64 FindMember(const std::string& name) const {
+			u64 id_counter = 0;
+			for (const MemberMetadata& member : Members) {
+				if (member.Name.Symbol == name) {
+					return id_counter;
+				}
+				id_counter++;
+			}
+			return (u64)-1;
+		}
+	};
+
+	struct ArgumentMetadata
+	{
+		std::string Name;
+		Type Tipe;
+
+		bool PolyMorphic = false;
+		u64 PolyMorhID = 0;
+	};
+
+	struct PolyMorphicType
+	{
+		u64 ID;
+	};
+
+	struct PolyMorphOverloads
+	{
+		std::vector<std::pair<PolyMorphicType, Type>> TypeArguments;
+
+		bool operator==(const PolyMorphOverloads& other) const
+		{
+			if (other.TypeArguments.size() != other.TypeArguments.size())
+				return false;
+
+			for (size_t i = 0; i < other.TypeArguments.size(); i++)
+			{
+				const auto& [other_a, other_b] = other.TypeArguments[i];
+				const auto& [a, b] = TypeArguments[i];
+
+				if (a.ID != other_a.ID) {
+					return false;
+				}
+
+				if (b.ID != other_b.ID) {
+					return false;
+				}
+
+				if (b.TT != other_b.TT) {
+					return false;
+				}
+
+				if (b.Array != other_b.Array) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+	};
+
+	struct PolyMorphOverloadsHasher
+	{
+		std::size_t operator()(const PolyMorphOverloads& key) const {
+			size_t hash = 0;
+			for (const auto& [T, arg] : key.TypeArguments) {
+				size_t a = arg.ID + arg.Array + (u64)arg.TT;
+				hash += a / 3;
+			}
+			return hash;
+		}
+	};
+
+	struct FunctionMetadata
+	{
+		std::string Name;
+
+		std::vector<ArgumentMetadata> Arguments;
+
+		Type ReturnType;
+
+		bool Variadic = false;
+		bool Foreign = false;
+		bool PolyMorphic = false;
+
+		FunctionNode* FunctionAST = nullptr;
+
+		std::vector <std::pair<IRFunction*, FunctionNode*>> PendingPolymorphInstantiations;
+
+		std::unordered_map<PolyMorphOverloads, IRFunction*, PolyMorphOverloadsHasher> PolyMorhOverLoads;
+
+		std::unordered_map<std::string, u64> PolyMorphicTypeNames;
+		std::unordered_map<u64, std::string> PolyMorphicIDToTypeNames;
+
+		u64 GetPolyMorphID(const std::string& type_name) {
+			if (auto it = PolyMorphicTypeNames.find(type_name) != PolyMorphicTypeNames.end()) {
+				return it;
+			}
+			PolyMorphicTypeNames[type_name] = PolyMorphicTypeNames.size() + 1;
+
+			PolyMorphicIDToTypeNames[PolyMorphicTypeNames[type_name]] = type_name;
+
+			return GetPolyMorphID(type_name);
+		}
+
+		const ArgumentMetadata* GetArgument(u64 i) const
+		{
+			if (i > Arguments.size() - 1) {
+				return nullptr;
+			}
+			else {
+				return &Arguments[i];
+			}
+		}
+	};
+
 	class Compiler
 	{
 	public:
-
-		enum class MessageType
-		{
-			Info,
-			Warning,
-			Error,
-		};
-		struct CompilerMessage
-		{
-			std::string message;
-			MessageType Type;
-		};
-
-		enum class TypeType
-		{
-			Value = 0,
-			Pointer,
-		};
-
-		struct Type
-		{
-			u64 ID;
-			bool Array = false;
-			TypeType TT = TypeType::Value;
-		};
-
-		struct VariableMetadata
-		{
-			Token Name;
-			Type Tipe;
-			bool IsArg = false;
-
-			IRSSA* DataSSA = nullptr;
-			IRSSA* AddressSSA = nullptr;
-		};
-
-		struct MemberMetadata
-		{
-			Token Name;
-			Type Tipe;
-		};
-
-		struct StructMetadata
-		{
-			Token Name;
-			std::vector<MemberMetadata> Members;
-
-			u64 FindMember(const std::string& name) const {
-				u64 id_counter = 0;
-				for (const MemberMetadata& member : Members) {
-					if (member.Name.Symbol == name) {
-						return id_counter;
-					}
-					id_counter++;
-				}
-				return (u64)-1;
-			}
-		};
-
-		struct ArgumentMetadata
-		{
-			std::string Name;
-			Type Tipe;
-		};
-
-		struct FunctionMetadata
-		{
-			std::string Name;
-
-			std::vector<ArgumentMetadata> Arguments;
-
-			Type ReturnType;
-
-			bool Variadic = false;
-			bool foreign = false;
-
-			const ArgumentMetadata* GetArgument(u64 i) const
-			{
-				if (i > Arguments.size() - 1) {
-					return nullptr;
-				}
-				else {
-					return &Arguments[i];
-				}
-			}
-		};
 
 		struct MetaData
 		{
@@ -113,8 +198,18 @@ namespace Glass
 			std::unordered_map<std::string, u64> m_StructNames;
 			std::unordered_map<u64, u64> m_TypeToStruct;
 
+			std::unordered_map<u64, std::unordered_map<u64, Type>> m_ExpressionType;
+
 			IRSSA* GetSSA(u64 ID) const {
 				return m_SSAs.at(m_CurrentFunction).at(ID);
+			}
+
+			FunctionMetadata* GetFunctionMetadata(u64 ID) {
+				if (m_Functions.find(ID) != m_Functions.end()) {
+					return &m_Functions.at(ID);
+				}
+
+				return nullptr;
 			}
 
 			const FunctionMetadata* GetFunctionMetadata(u64 ID) const {
@@ -138,7 +233,9 @@ namespace Glass
 			}
 
 			const u64 GetType(const std::string& type_name) const {
-				return m_TypeNames.at(type_name);
+				if (m_TypeNames.find(type_name) != m_TypeNames.end())
+					return m_TypeNames.at(type_name);
+				return (u64)-1;
 			}
 
 			u64 GetVariableSSA(const std::string& name) const {
@@ -227,6 +324,30 @@ namespace Glass
 			{
 				return m_TypeToStruct.at(ID);
 			}
+
+			const Type& GetExprType(u64 ssa) const {
+				return m_ExpressionType.at(m_CurrentFunction).at(ssa);
+			}
+
+			void RegExprType(u64 ssa, const Type& type) {
+				m_ExpressionType[m_CurrentFunction][ssa] = type;
+			}
+
+			SymbolType GetSymbolType(const std::string& symbol) {
+				if (GetFunctionMetadata(symbol) != (u64)-1) {
+					return SymbolType::Function;
+				}
+
+				if (GetVariableMetadata(GetVariableSSA(symbol)) != nullptr) {
+					return SymbolType::Variable;
+				}
+
+				if (GetType(symbol) != (u64)-1) {
+					return SymbolType::Type;
+				}
+
+				return SymbolType::None;
+			}
 		};
 
 		Compiler(std::vector<CompilerFile*> files);
@@ -237,7 +358,7 @@ namespace Glass
 
 		IRInstruction* ForeignCodeGen(const ForeignNode* expression);
 
-		IRInstruction* FunctionCodeGen(const FunctionNode* functionNode);
+		IRInstruction* FunctionCodeGen(FunctionNode* functionNode);
 
 		IRInstruction* VariableCodeGen(const VariableNode* variableNode);
 
@@ -257,12 +378,36 @@ namespace Glass
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
+		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
+
+		IRInstruction* RefCodeGen(const RefNode* refNode);
+		IRInstruction* DeRefCodeGen(const RefNode* deRefNode);
 
 		IRSSAValue* GetExpressionByValue(const Expression* expr);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
 		IRData* CreateIRData();
+
+		IRFunction* CreatePolyMorhOverload(u64 ID, const PolyMorphOverloads& overloads);
+
+		const IRFunction* GetPolyMorphOverLoad(u64 ID, const PolyMorphOverloads& overloads)
+		{
+			auto metadata = m_Metadata.GetFunctionMetadata(ID);
+			if (metadata->PolyMorhOverLoads.find(overloads) != metadata->PolyMorhOverLoads.end()) {
+				return metadata->PolyMorhOverLoads.at(overloads);
+			}
+			else {
+				IRFunction* ir_func = CreatePolyMorhOverload(ID, overloads);
+				if (ir_func == nullptr) {
+					return nullptr;
+				}
+				else {
+					metadata->PolyMorhOverLoads.emplace(overloads, ir_func);
+				}
+			}
+			return GetPolyMorphOverLoad(ID, overloads);
+		}
 
 		bool CheckTypeConversion(u64 a, u64 b)
 		{
@@ -404,10 +549,14 @@ namespace Glass
 			return m_TypeIDCounter;
 		}
 
-
 		u64 GetStructID() {
 			m_StructIDCounter++;
 			return m_StructIDCounter;
+		}
+
+		u64 GetFunctionID() {
+			m_FunctionIDCounter++;
+			return m_FunctionIDCounter;
 		}
 
 	private:

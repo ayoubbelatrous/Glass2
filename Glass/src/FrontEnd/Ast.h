@@ -27,6 +27,9 @@ namespace Glass
 		While,
 		For,
 		Break,
+		Reference,
+		DeReference,
+		TypeOf,
 		ArrayAccess,
 	};
 
@@ -195,6 +198,8 @@ namespace Glass
 		Token Symbol;
 		bool Pointer = false;
 		bool Array = false;
+		bool PolyMorphic = false;
+		bool Variadic = false;
 
 		virtual std::string ToString() const {
 			return "<" + Symbol.Symbol + ">";
@@ -312,6 +317,10 @@ namespace Glass
 			return m_Statements;
 		}
 
+		std::vector<Statement*>& GetStatements() {
+			return m_Statements;
+		}
+
 		virtual std::string ToString() const {
 			std::string str = "Scope\n";
 			for (auto stmt : m_Statements) {
@@ -363,7 +372,7 @@ namespace Glass
 			return m_Arguments;
 		}
 
-		const std::vector<Statement*>& GetStatements() const {
+		std::vector<Statement*>& GetArguments() {
 			return m_Arguments;
 		}
 
@@ -400,7 +409,7 @@ namespace Glass
 			m_ArgumentList = arg_list;
 		}
 
-		const ArgumentList* GetArgList() const {
+		ArgumentList* GetArgList() {
 			return m_ArgumentList;
 		}
 
@@ -632,6 +641,66 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return BR;
+		}
+	};
+
+	class RefNode : public Statement
+	{
+	public:
+
+		Expression* What;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Reference;
+		}
+
+		virtual std::string ToString() const {
+			return "& (" + What->ToString() + ") ";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return What->GetLocation();
+		}
+	};
+
+	class DeRefNode : public Statement
+	{
+	public:
+
+		Expression* What;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::DeReference;
+		}
+
+		virtual std::string ToString() const {
+			return "& (" + What->ToString() + ") ";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return What->GetLocation();
+		}
+	};
+
+	class TypeOfNode : public Expression
+	{
+	public:
+
+		Expression* What;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::TypeOf;
+		}
+
+		virtual std::string ToString() const {
+			return "typeof(" + What->ToString() + ")";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return What->GetLocation();
 		}
 	};
 }

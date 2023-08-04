@@ -23,6 +23,8 @@ namespace Glass
 		IR_f64,
 
 		IR_bool,
+
+		IR_typeinfo,
 	};
 
 	enum IRCType : u64
@@ -46,6 +48,8 @@ namespace Glass
 		IR_f64,
 
 		IR_bool,
+
+		IR_typeinfo,
 	};
 
 	enum class IRNodeType
@@ -75,6 +79,8 @@ namespace Glass
 		While,
 		SizeOf,
 		Break,
+		Ref,
+		TypeOf,
 		TranslationUnit,
 	};
 
@@ -312,6 +318,7 @@ namespace Glass
 
 		std::vector<IRSSA*> Arguments;
 		std::vector<IRInstruction*> Instructions;
+		std::vector<IRFunction*> Polymorphs;
 
 		virtual std::string ToString() const override
 		{
@@ -384,6 +391,11 @@ namespace Glass
 	struct IRAddressAsValue : public IRInstruction {
 		u64 ID = 0;
 		u64 SSA = 0;
+
+		IRAddressAsValue(u64 ssa)
+			:SSA(ssa)
+		{
+		}
 
 		virtual std::string ToString() const override {
 			return 	"(int)$" + std::to_string(SSA);
@@ -605,6 +617,42 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::Break;
+		}
+	};
+
+	struct IRRef : public IRInstruction {
+		u64 ID = 0;
+		u64 SSA;
+
+		virtual std::string ToString() const override
+		{
+			return "^";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Ref;
+		}
+	};
+
+	struct TypeInfo
+	{
+		u64 id;
+		bool pointer = false;
+		std::string name;
+	};
+
+	struct IRTypeOf : public IRInstruction {
+		u64 ID = 0;
+		u64 VariableID;
+		TypeInfo Type;
+
+		virtual std::string ToString() const override
+		{
+			return "typeof(" + std::to_string(Type.id) + ")";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::TypeOf;
 		}
 	};
 }

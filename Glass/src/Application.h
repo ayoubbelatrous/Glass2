@@ -129,4 +129,6 @@ namespace Glass
 
 		std::map<u64, CompilerFile> m_Sources;
 	};
+
+#define IR(x) Application::AllocateIRNode(x)
 }

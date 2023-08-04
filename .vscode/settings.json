@@ -17,7 +17,9 @@
 		"stdio.h": "c",
 		"stdint.h": "c",
 		"malloc.h": "c",
-		"glfw3.h": "c"
+		"glfw3.h": "c",
+		"glad.h": "c",
+		"windows.h": "c"
 	},
 	"cmake.configureOnOpen": false
 }

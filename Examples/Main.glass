@@ -4,29 +4,36 @@
 #foreign fn fclose(u64* file) : void {}
 
 #foreign fn malloc(i32 size) : void* {}
-#foreign fn free(void* ptr) : void {}
+#foreign fn free(u64* ptr) : void {}
+#foreign fn strlen(u8* ptr) : u64 {}
 
-struct GLFWwindow{};
+fn add($T a, $T b) : int {
+    return a + b;
+}
 
-#foreign fn glfwCreateWindow() : GLFWwindow* {};
-
-struct Renderer
+struct string
 {
-   i32 ID;
+    u8* data;
+    u64 size;
 };
 
-fn Renderer_Allocate() : Renderer* {
-   Renderer* r = malloc(4);
-   r.ID = 30;
-   return r;
+fn new_string(u8* bytes) : string {
+    string str;
+    str.data = bytes;
+    str.size = strlen(bytes);
+
+    return str;
 }
 
-fn Renderer_Init(Renderer* r) : void {
-   printf("Renderer.ID: %i",r.ID);
+fn free_string(string* str) : void {
+    u64* address = str.data;
+    free(address);
+    str.data = 0;
+    str.size = 0;
 }
+
+
 
 fn main() : i32 {
-   f32 i = 1.5;
-   Renderer* r = Renderer_Allocate();
-   Renderer_Init(r);
+    string str = new_string("Hello world");
 }

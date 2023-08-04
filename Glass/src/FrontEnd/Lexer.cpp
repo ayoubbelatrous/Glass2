@@ -90,6 +90,7 @@ namespace Glass
 		{
 			{'!',TokenType::Bang},
 			{'#',TokenType::Pound},
+			{'$',TokenType::Dollar},
 
 			{'.',TokenType::Period},
 			{';',TokenType::SemiColon},
@@ -242,7 +243,7 @@ namespace Glass
 				//accumulator = '\n';
 			}
 
-			if (std::isalnum(c)) {
+			if (std::isalnum(c) || c == '_') {
 				accumulator.push_back(c);
 			}
 

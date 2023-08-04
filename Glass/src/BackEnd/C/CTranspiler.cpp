@@ -11,37 +11,122 @@ namespace Glass
 
 	std::string CTranspiler::Codegen()
 	{
-		std::string code;
+		std::string header;
 
-		code += "\n";
+		header += "\n";
 
-		code += "#include <stdint.h>\n";
-		code += "#include <stdio.h>\n";
-		code += "#include <string.h>\n";
-		code += "#include <malloc.h>\n";
+		header += "#include <stdint.h>\n";
+		header += "#include <stdio.h>\n";
+		header += "#include <string.h>\n";
+		header += "#include <malloc.h>\n";
 
 		for (auto& include : m_Includes) {
-			code += fmt::format("#include \"{}\"\n", include);
+			header += fmt::format("#include \"{}\"\n", include);
 		}
 
-		code += "\n\n";
+		header += "\n\n";
 
-		code += "typedef char i8;		\n";
-		code += "typedef int16_t i16;	\n";
-		code += "typedef int32_t i32;	\n";
-		code += "typedef int64_t i64;	\n";
+		header += "#define true 1;		\n";
+		header += "#define false 0;		\n";
 
-		code += "\n";
+		header += "typedef char i8;		\n";
+		header += "typedef int16_t i16;	\n";
+		header += "typedef int32_t i32;	\n";
+		header += "typedef int64_t i64;	\n";
 
-		code += "typedef uint8_t u8;	\n";
-		code += "typedef uint16_t u16;	\n";
-		code += "typedef uint32_t u32;	\n";
-		code += "typedef uint64_t u64;	\n";
+		header += "\n";
 
-		code += "typedef float f32;		\n";
-		code += "typedef double f64;	\n";
+		header += "typedef uint8_t u8;	\n";
+		header += "typedef uint16_t u16;	\n";
+		header += "typedef uint32_t u32;	\n";
+		header += "typedef uint64_t u64;	\n";
 
-		code += "\n";
+		header += "typedef float f32;		\n";
+		header += "typedef double f64;	\n";
+
+		header += "typedef u8 bool;		\n";
+
+		header += R"(
+typedef struct type_info
+{	u64 id;
+	bool pointer;
+	const char* name;
+} type_info;
+			)";
+		header += "\n";
+
+		{
+			header += fmt::format("static const type_info __type_info_table[{}] = ", m_Metadata->m_Types.size());
+			header += "{\n";
+
+			u64 i = 0;
+
+			for (const auto& [id, type_name] : m_Metadata->m_Types) {
+				m_TypeInfoTable[id] = i;
+
+				header += "{";
+				header += fmt::format(".name=\"{}\",", type_name);
+				header += fmt::format(".id={}", id);
+				header += "},";
+
+				i++;
+			}
+
+			header += "};\n";
+		}
+		header += "\n";
+
+		std::string code;
+
+		std::string forward_declaration;
+
+		for (IRInstruction* inst : m_Program->Instructions) {
+			if (inst->GetType() == IRNodeType::Function) {
+				IRFunction* IRF = (IRFunction*)inst;
+
+				const auto func_metadata = m_Metadata->GetFunctionMetadata(IRF->ID);
+
+				const std::string& func_name = func_metadata->Name;
+				std::string return_type = m_Metadata->GetType(func_metadata->ReturnType.ID);
+
+				if (func_metadata->ReturnType.TT == TypeType::Pointer) {
+					return_type += '*';
+				}
+
+				std::string arguments;
+
+				u64 i = 0;
+				for (IRSSA* arg : IRF->Arguments) {
+
+					std::string type = m_Metadata->GetType(arg->Type);
+
+					if (arg->Pointer) {
+						type.push_back('*');
+					}
+
+					arguments += fmt::format("{} {}", type, "__arg" + std::to_string(arg->ID));
+
+					if (i == IRF->Arguments.size() - 1) {
+					}
+					else {
+						arguments += ", ";
+					}
+					i++;
+				}
+
+				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
+			}
+			else if (inst->GetType() == IRNodeType::Struct) {
+
+				IRStruct* ir_struct = (IRStruct*)inst;
+				u64 struct_id = ir_struct->ID;
+				const StructMetadata* metadata = m_Metadata->GetStructMetadata(struct_id);
+
+				std::string code;
+
+				forward_declaration += fmt::format("typedef struct {0} {0};", metadata->Name.Symbol);
+			}
+		}
 
 		for (IRInstruction* inst : m_Program->Instructions) {
 
@@ -66,7 +151,33 @@ namespace Glass
 			}
 		}
 
-		return code;
+		std::string var_type_table;
+
+		var_type_table += "\n";
+
+		{
+			var_type_table += fmt::format("static const type_info __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
+			var_type_table += "{\n";
+
+			u64 i = 0;
+
+			for (const auto& [id, type] : m_VariableTypeInfo) {
+				m_TypeInfoTable[id] = i;
+
+				var_type_table += "{";
+				var_type_table += fmt::format(".id={},", type.id);
+				var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+				var_type_table += fmt::format(".name=\"{}\",", type.name);
+				var_type_table += "},";
+
+				i++;
+			}
+
+			var_type_table += "};\n";
+		}
+		var_type_table += "\n";
+
+		return fmt::format("{}{}{}{}", header, var_type_table, forward_declaration, code);
 	}
 
 	std::string CTranspiler::IRCodeGen(IRInstruction* inst)
@@ -115,6 +226,12 @@ namespace Glass
 		{
 			IRAsAddress* as_add = (IRAsAddress*)inst;
 			return fmt::format("(void *)__tmp{}", as_add->SSA);
+		}
+		break;
+		case IRNodeType::AddressAsValue:
+		{
+			IRAddressAsValue* as_value = (IRAddressAsValue*)inst;
+			return fmt::format("(u64)__tmp{}", as_value->SSA);
 		}
 		break;
 		case IRNodeType::Store:
@@ -247,6 +364,19 @@ namespace Glass
 			return "break";
 		}
 		break;
+		case IRNodeType::Ref:
+		{
+			IRRef* ref = (IRRef*)inst;
+			return fmt::format("&__tmp{}", ref->SSA);
+		}
+		break;
+		case IRNodeType::TypeOf:
+		{
+			IRTypeOf* type_of = (IRTypeOf*)inst;
+			m_VariableTypeInfo[m_VariableTypeInfo.size()] = type_of->Type;
+			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
+		}
+		break;
 		}
 
 		return "";
@@ -254,12 +384,23 @@ namespace Glass
 
 	std::string CTranspiler::FunctionCodeGen(IRFunction* IRF)
 	{
+		std::string code;
+
+		// 		if (IRF->Polymorphs.size() != 0) {
+		// 			for (IRFunction* irf : IRF->Polymorphs) {
+		// 				code += "\n";
+		// 				code += FunctionCodeGen(irf);
+		// 			}
+		// 
+		// 			return code;
+		// 		}
+
 		const auto func_metadata = m_Metadata->GetFunctionMetadata(IRF->ID);
 
 		const std::string& func_name = func_metadata->Name;
 		std::string return_type = m_Metadata->GetType(func_metadata->ReturnType.ID);
 
-		if (func_metadata->ReturnType.TT == Compiler::TypeType::Pointer) {
+		if (func_metadata->ReturnType.TT == TypeType::Pointer) {
 			return_type += '*';
 		}
 
@@ -284,7 +425,7 @@ namespace Glass
 			i++;
 		}
 
-		std::string code = fmt::format("{} {} ({})", return_type, func_name, arguments);
+		code = fmt::format("{} {} ({})", return_type, func_name, arguments);
 
 		code += "{\n";
 
@@ -310,7 +451,6 @@ namespace Glass
 		}
 
 		code += "}\n";
-
 		return code;
 	}
 
@@ -332,17 +472,17 @@ namespace Glass
 	std::string CTranspiler::StructCodeGen(IRStruct* ir_struct)
 	{
 		u64 struct_id = ir_struct->ID;
-		const Compiler::StructMetadata* metadata = m_Metadata->GetStructMetadata(struct_id);
+		const StructMetadata* metadata = m_Metadata->GetStructMetadata(struct_id);
 
 		std::string code;
 
 		code = fmt::format("typedef struct {}", metadata->Name.Symbol);
 		code += "{\n";
 
-		for (const Compiler::MemberMetadata& member : metadata->Members) {
+		for (const MemberMetadata& member : metadata->Members) {
 			std::string member_type = m_Metadata->GetType(member.Tipe.ID);
 
-			if (member.Tipe.TT == Compiler::TypeType::Pointer) {
+			if (member.Tipe.TT == TypeType::Pointer) {
 				member_type += "*";
 			}
 
