@@ -37,6 +37,15 @@ namespace Glass
 		OpenBracket,	// '['
 		CloseBracket,	// ']'
 
+		OpenAngular,	// '<'
+		CloseAngular,	// '>'
+
+		GreaterEq,		// '>='
+		LesserEq,		// '<='
+
+		NotEqual,		// '!='
+		Equal,			// '=='
+
 		Add,			// '+'
 		Subtract,		// '-'
 		Multiply,		// '*'

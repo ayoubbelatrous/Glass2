@@ -34,22 +34,11 @@ static const type_info __var_type_info_table[0] = {
 };
 
 i32 main ();
-const char* __data1 = "A";
-const char* __data2 = "char is: %c";
-const char* __data3 = "char is: %c";
 i32 main (){
-const u8* __tmp1 = (u8*)__data1;
-const int __tmp2 = 0;
-const u64 __tmp3 = sizeof(u8);
-const u64 __tmp4 = __tmp2 * __tmp3;;
-const u64 __tmp5 = (u64)__tmp1;
-const u64 __tmp6 = __tmp4 + __tmp5;;
-const u64 __tmp7 = __tmp6;
-const u8 __tmp8;
-const u64 __tmp9 = (u64)(&__tmp8);
-*((u8*)__tmp9) = (u8)__tmp7;;const u8* __tmp10 = (u8*)__data2;
-const u8* __tmp11 = (u8*)__data3;
-const u8 __tmp12 = *(u8 *)__tmp9;
-const i32 __tmp13 = printf(__tmp11, __tmp12);
+const int __tmp1 = 0;
+const int __tmp2 = 1;
+const i32 __tmp3 = ;
+if (__tmp3) {
 }
+;}
 

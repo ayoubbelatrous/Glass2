@@ -131,4 +131,5 @@ namespace Glass
 	};
 
 #define IR(x) Application::AllocateIRNode(x)
+#define AST(x) Application::AllocateAstNode(x)
 }

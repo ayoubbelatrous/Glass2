@@ -208,6 +208,7 @@ typedef struct type_info
 		case IRNodeType::SUB:
 		case IRNodeType::MUL:
 		case IRNodeType::DIV:
+		case IRNodeType::Equal:
 			return OpCodeGen(inst) + ";";
 			break;
 		case IRNodeType::SSAValue:
@@ -533,6 +534,13 @@ typedef struct type_info
 			IRDIV* o = (IRDIV*)op;
 
 			code = fmt::format("__tmp{} / __tmp{}", o->SSA_A->SSA, o->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::Equal:
+		{
+			IREQ* eq = (IREQ*)op;
+
+			code = fmt::format("__tmp{} == __tmp{}", eq->SSA_A->SSA, eq->SSA_B->SSA);
 		}
 		break;
 		}

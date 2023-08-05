@@ -7,33 +7,7 @@
 #foreign fn free(u64* ptr) : void {}
 #foreign fn strlen(u8* ptr) : u64 {}
 
-fn add($T a, $T b) : int {
-    return a + b;
-}
-
-struct string
-{
-    u8* data;
-    u64 size;
-};
-
-fn new_string(u8* bytes) : string {
-    string str;
-    str.data = bytes;
-    str.size = strlen(bytes);
-
-    return str;
-}
-
-fn free_string(string* str) : void {
-    u64* address = str.data;
-    free(address);
-    str.data = 0;
-    str.size = 0;
-}
-
-
-
 fn main() : i32 {
-    string str = new_string("Hello world");
+    i32** x;
+    i32 y;
 }

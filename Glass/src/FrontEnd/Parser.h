@@ -39,6 +39,7 @@ namespace Glass
 
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
+		Expression* ParseCompExpr();
 		Expression* ParseMulExpr();
 		Expression* ParseCallExpr();
 		Expression* ParseMemberExpr();
@@ -63,6 +64,27 @@ namespace Glass
 				break;
 			case TokenType::Assign:
 				return Operator::Assign;
+				break;
+			case TokenType::Bang:
+				return Operator::Not;
+				break;
+			case TokenType::OpenAngular:
+				return Operator::LesserThan;
+				break;
+			case TokenType::CloseAngular:
+				return Operator::GreaterThan;
+				break;
+			case TokenType::Equal:
+				return Operator::Equal;
+				break;
+			case TokenType::NotEqual:
+				return Operator::NotEqual;
+				break;
+			case TokenType::GreaterEq:
+				return Operator::GreaterThanEq;
+				break;
+			case TokenType::LesserEq:
+				return Operator::LesserThanEq;
 				break;
 			default:
 				return Operator::Invalid;

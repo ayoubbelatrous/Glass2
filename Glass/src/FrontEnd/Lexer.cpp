@@ -67,7 +67,7 @@ namespace Glass
 
 		std::string accumulator;
 
-		const std::array<char, 19> splitters =
+		const std::array<char, 22> splitters =
 		{
 			'!',
 			'#',
@@ -84,6 +84,9 @@ namespace Glass
 
 			'(',')',
 			'[',']',
+
+			'=',
+			'<', '>',
 		};
 
 		const std::unordered_map<char, TokenType> token_to_type =
@@ -109,6 +112,9 @@ namespace Glass
 
 			{'=',TokenType::Assign},
 
+			{'<',TokenType::OpenAngular},
+			{'>',TokenType::CloseAngular},
+
 			{'(',TokenType::OpenParen},
 			{')',TokenType::CloseParen},
 
@@ -129,6 +135,22 @@ namespace Glass
 			}
 			else {
 
+				if (accumulator[0] == '=' || accumulator[0] == '!' || accumulator[0] == '<' || accumulator[0] == '>') {
+					if (accumulator.size() > 1) {
+						if (accumulator == "==") {
+							return TokenType::Equal;
+						}
+						if (accumulator == "!=") {
+							return TokenType::NotEqual;
+						}
+						if (accumulator == ">=") {
+							return TokenType::GreaterEq;
+						}
+						if (accumulator == "<=") {
+							return TokenType::LesserEq;
+						}
+					}
+				}
 
 				auto it = token_to_type.find(accumulator[0]);
 
@@ -206,6 +228,7 @@ namespace Glass
 		};
 
 		bool string_collection_mode = false;
+		bool double_char_operator_mode = false;
 
 		for (char c : m_Source)
 		{
@@ -259,12 +282,32 @@ namespace Glass
 				}
 				else if (token_to_type.find(c) != token_to_type.end()) {
 
-					if (!accumulator.empty()) {
+					if (double_char_operator_mode) {
+						accumulator.push_back(c);
 						createToken();
+
+						double_char_operator_mode = false;
+					}
+					else {
+						if (!accumulator.empty()) {
+							createToken();
+						}
+
+						accumulator.push_back(c);
 					}
 
-					accumulator.push_back(c);
-					createToken();
+					if (c == '=' || c == '!' || c == '<' || c == '>') {
+						auto next_c = m_Source[location];
+						if (next_c == '=') {
+							double_char_operator_mode = true;
+						}
+						else {
+							createToken();
+						}
+					}
+					else {
+						createToken();
+					}
 				}
 			}
 		}
@@ -278,4 +321,3 @@ namespace Glass
 		return tokens;
 	}
 }
-

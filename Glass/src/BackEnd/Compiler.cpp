@@ -5,6 +5,7 @@
 #include "BackEnd/Compiler.h"
 #include "FrontEnd/AstCopier.h"
 #include "FrontEnd/AstPolymorpher.h"
+#include "Interpeter/Interpeter.h"
 
 namespace Glass
 {
@@ -789,6 +790,35 @@ namespace Glass
 			IRssa->Value = IR(IROp);
 		}
 		break;
+		case Operator::Equal:
+		{
+			IRssa->Value = IR(IREQ(A, B));
+		}
+		break;
+		case Operator::NotEqual:
+		{
+			IRssa->Value = IR(IRNOTEQ(A, B));
+		}
+		break;
+		case Operator::GreaterThan:
+		{
+			IRssa->Value = IR(IRGreater(A, B));
+		}
+		break;
+		case Operator::LesserThan:
+		{
+			IRssa->Value = IR(IRLesser(A, B));
+		}
+		break;
+		case Operator::GreaterThanEq:
+		{
+			IRssa->Value = IR(IRGreater(A, B));
+		}
+		break;
+		case Operator::LesserThanEq:
+		{
+			IRssa->Value = IR(IRLesser(A, B));
+		}
 		break;
 		default:
 			return nullptr;

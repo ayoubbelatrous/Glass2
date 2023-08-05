@@ -42,7 +42,18 @@ namespace Glass
 		Multiply,
 		Divide,
 
-		Assign
+		Assign,
+
+		Not,
+
+		Equal,
+		NotEqual,
+
+		GreaterThan,
+		LesserThan,
+
+		GreaterThanEq,
+		LesserThanEq,
 	};
 
 	class Statement
@@ -196,7 +207,7 @@ namespace Glass
 		}
 
 		Token Symbol;
-		bool Pointer = false;
+		u64 Pointer = false;
 		bool Array = false;
 		bool PolyMorphic = false;
 		bool Variadic = false;

@@ -65,6 +65,17 @@ namespace Glass
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Dollar && At(1).Type == TokenType::Symbol;
 
+				i32 star_counter = 1;
+
+				if (At().Type == TokenType::Symbol) {
+					while (At(star_counter).Type == TokenType::Multiply) {
+						if (At(star_counter + 1).Type == TokenType::Symbol) {
+							var_decl |= true;
+						}
+						star_counter++;
+					}
+				}
+
 				if (var_decl) {
 					return ParseVarDecl();
 				}
@@ -176,9 +187,9 @@ namespace Glass
 			}
 		}
 
-		if (At().Type == TokenType::Multiply) {
+		while (At().Type == TokenType::Multiply) {
 			Consume();
-			Node.Pointer = true;
+			Node.Pointer++;
 		}
 
 		if (
@@ -390,7 +401,7 @@ namespace Glass
 
 	Expression* Parser::ParseAddExpr()
 	{
-		Expression* left = ParseMulExpr();
+		Expression* left = ParseCompExpr();
 
 		auto is_additive_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
@@ -403,7 +414,7 @@ namespace Glass
 
 		while (is_additive_op(GetOperator(At()))) {
 			Token Op = Consume();
-			auto right = ParseMulExpr();
+			auto right = ParseCompExpr();
 
 			BinaryExpression binExpr;
 
@@ -415,6 +426,44 @@ namespace Glass
 			binExpr.OperatorToken = Op;
 
 			left = Application::AllocateAstNode(binExpr);
+		}
+
+		return left;
+	}
+
+	Expression* Parser::ParseCompExpr()
+	{
+		Expression* left = ParseMulExpr();
+
+		auto is_comp_op = [](Operator op) -> bool {
+
+			if (op == Operator::Invalid)
+				return false;
+
+			if (op == Operator::GreaterThan || op == Operator::LesserThan)
+				return true;
+			if (op == Operator::Equal || op == Operator::NotEqual)
+				return true;
+			if (op == Operator::GreaterThanEq || op == Operator::LesserThanEq)
+				return true;
+
+			return false;
+		};
+
+		while (is_comp_op(GetOperator(At()))) {
+			Token Op = Consume();
+			auto right = ParseMulExpr();
+
+			BinaryExpression binExpr;
+
+			binExpr.Left = left;
+			binExpr.Right = right;
+
+			binExpr.OPerator = GetOperator(Op);
+
+			binExpr.OperatorToken = Op;
+
+			left = AST(binExpr);
 		}
 
 		return left;

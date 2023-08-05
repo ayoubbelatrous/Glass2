@@ -81,6 +81,10 @@ namespace Glass
 		Break,
 		Ref,
 		TypeOf,
+		Equal,
+		NotEqual,
+		GreaterThan,
+		LesserThan,
 		TranslationUnit,
 	};
 
@@ -653,6 +657,114 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::TypeOf;
+		}
+	};
+
+	struct IREQ : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IREQ() = default;
+		IREQ(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "EQ ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Equal;
+		}
+	};
+
+	struct IRNOTEQ : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRNOTEQ() = default;
+		IRNOTEQ(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "NOTEQ ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::NotEqual;
+		}
+	};
+
+	struct IRGreater : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRGreater() = default;
+		IRGreater(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Greater ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::GreaterThan;
+		}
+	};
+
+	struct IRLesser : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRLesser() = default;
+		IRLesser(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Lesser ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::LesserThan;
 		}
 	};
 }
