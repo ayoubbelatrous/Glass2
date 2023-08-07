@@ -31,32 +31,103 @@ namespace Glass
 
 		m_Metadata.RegisterType((u64)IRType::IR_bool, "bool");
 
-		//m_Metadata.RegisterType((u64)IRType::IR_typeinfo, "type_info");
+		m_Metadata.GetTypeFlags(IR_int) |= FLAG_BASE_TYPE;
 
-		StructMetadata type_info_Metadata;
-		type_info_Metadata.Name.Symbol = "type_info";
-
-		//id
 		{
-			MemberMetadata id_member_metadata;
-			id_member_metadata.Name.Symbol = "id";
-			id_member_metadata.Tipe.ID = IR_u64;
-			id_member_metadata.Tipe.Pointer = 0;
+			m_Metadata.GetTypeFlags(IR_i8) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_i16) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_i32) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_i64) |= FLAG_BASE_TYPE;
 
-			type_info_Metadata.Members.push_back(id_member_metadata);
+			m_Metadata.GetTypeFlags(IR_u8) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_u16) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_u32) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_u64) |= FLAG_BASE_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_float) |= FLAG_BASE_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_f32) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_f64) |= FLAG_BASE_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_void) |= FLAG_BASE_TYPE;
+			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_BASE_TYPE;
 		}
 
-		//name
 		{
-			MemberMetadata name_member_metadata;
-			name_member_metadata.Name.Symbol = "name";
-			name_member_metadata.Tipe.ID = IR_u8;
-			name_member_metadata.Tipe.Pointer = 1;
+			m_Metadata.GetTypeFlags(IR_int) |= FLAG_NUMERIC_TYPE;
 
-			type_info_Metadata.Members.push_back(name_member_metadata);
+			m_Metadata.GetTypeFlags(IR_i8) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_i16) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_i32) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_i64) |= FLAG_NUMERIC_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_u8) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_u16) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_u32) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_u64) |= FLAG_NUMERIC_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_float) |= FLAG_NUMERIC_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_f32) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_f64) |= FLAG_NUMERIC_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE;
 		}
 
-		m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo, type_info_Metadata);
+		{
+			StructMetadata any_info_Metadata;
+			any_info_Metadata.Name.Symbol = "Any";
+
+			//type
+			{
+				MemberMetadata type_member_metadata;
+				type_member_metadata.Name.Symbol = "type";
+				type_member_metadata.Tipe.ID = IR_u64; //@TODO: Change to Type when we add first class types
+				type_member_metadata.Tipe.Pointer = 0;
+
+				any_info_Metadata.Members.push_back(type_member_metadata);
+			}
+
+			//data
+			{
+				MemberMetadata data_member_metadata;
+				data_member_metadata.Name.Symbol = "data";
+				data_member_metadata.Tipe.ID = IR_u64;
+				data_member_metadata.Tipe.Pointer = 1;
+
+				any_info_Metadata.Members.push_back(data_member_metadata);
+			}
+
+			m_Metadata.RegisterStruct(GetStructID(), IR_any, any_info_Metadata);
+		}
+
+		{
+
+			StructMetadata type_info_Metadata;
+			type_info_Metadata.Name.Symbol = "type_info";
+
+			//id
+			{
+				MemberMetadata id_member_metadata;
+				id_member_metadata.Name.Symbol = "id";
+				id_member_metadata.Tipe.ID = IR_u64;
+				id_member_metadata.Tipe.Pointer = 0;
+
+				type_info_Metadata.Members.push_back(id_member_metadata);
+			}
+
+			//name
+			{
+				MemberMetadata name_member_metadata;
+				name_member_metadata.Name.Symbol = "name";
+				name_member_metadata.Tipe.ID = IR_u8;
+				name_member_metadata.Tipe.Pointer = 1;
+
+				type_info_Metadata.Members.push_back(name_member_metadata);
+			}
+
+			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo, type_info_Metadata);
+		}
 
 		m_TypeIDCounter = IR_typeinfo;
 	}
@@ -122,6 +193,9 @@ namespace Glass
 		{
 		case NodeType::Foreign:
 			return ForeignCodeGen((ForeignNode*)statement);
+			break;
+		case NodeType::Operator:
+			return OperatorCodeGen((OperatorNode*)statement);
 			break;
 		case NodeType::Identifier:
 		case NodeType::NumericLiteral:
@@ -219,6 +293,56 @@ namespace Glass
 		return nullptr;
 	}
 
+	IRInstruction* Compiler::OperatorCodeGen(const OperatorNode* op_node)
+	{
+		auto stmt_type = op_node->statement->GetType();
+
+		if (stmt_type == NodeType::Function) {
+			IRFunction* IRF = (IRFunction*)FunctionCodeGen((FunctionNode*)op_node->statement);
+
+			const FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
+
+			OperatorQuery op_query;
+
+			for (const ArgumentMetadata& arg : metadata->Arguments) {
+				op_query.TypeArguments.push_back(arg.Tipe);
+			}
+
+			m_Metadata.RegisterOperator(op_node->OPerator, op_query, IRF->ID);
+
+			return IRF;
+		}
+
+		if (stmt_type == NodeType::Identifier) {
+
+			Identifier* identifier = (Identifier*)op_node->statement;
+
+			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) != SymbolType::Function) {
+				PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()),MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("operator directive function '{}()' is not defined",identifier->Symbol.Symbol),MessageType::Warning });
+				return nullptr;
+			}
+			u64 function_id = m_Metadata.GetFunctionMetadata(identifier->Symbol.Symbol);
+
+			const FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(function_id);
+
+			OperatorQuery op_query;
+
+			for (const ArgumentMetadata& arg : metadata->Arguments) {
+				op_query.TypeArguments.push_back(arg.Tipe);
+			}
+
+			m_Metadata.RegisterOperator(op_node->OPerator, op_query, function_id);
+
+			return nullptr;
+		}
+
+		PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()),MessageType::Error });
+		PushMessage(CompilerMessage{ "Expected a function name or a function definition after operator directive",MessageType::Warning });
+
+		return nullptr;
+	}
+
 	IRInstruction* Compiler::FunctionCodeGen(FunctionNode* functionNode)
 	{
 		ResetSSAIDCounter();
@@ -230,9 +354,8 @@ namespace Glass
 
 		if (functionNode->ReturnType) {
 			return_type.ID = m_Metadata.GetType(functionNode->ReturnType->Symbol.Symbol);
+			return_type.Pointer = functionNode->ReturnType->Pointer;
 		}
-
-		return_type.Pointer = functionNode->ReturnType->Pointer;
 
 		m_Metadata.RegisterFunction(poly_func_id, functionNode->Symbol.Symbol, return_type);
 
@@ -600,10 +723,15 @@ namespace Glass
 
 	IRInstruction* Compiler::WhileCodeGen(const WhileNode* whileNode)
 	{
+		PushScope();
 		IRSSAValue* condition = GetExpressionByValue(whileNode->Condition);
+		std::vector<IRSSA*> condition_ssas = PoPIRSSA();
+		PopScope();
 
 		IRWhile WHILE;
 		WHILE.SSA = condition->SSA;
+
+		WHILE.ConditionBlock = condition_ssas;
 
 		std::vector<IRInstruction*> instructions;
 
@@ -766,9 +894,94 @@ namespace Glass
 		A = GetExpressionByValue(binaryExpr->Left);
 		B = GetExpressionByValue(binaryExpr->Right);
 
+		const Glass::Type& left_type = m_Metadata.GetExprType(A->SSA);
+		const Glass::Type& right_type = m_Metadata.GetExprType(B->SSA);
+
 		IRSSA* IRssa = CreateIRSSA();
 
-		IRssa->Type = m_Metadata.GetType("i32");
+		IRssa->Type = left_type.ID;
+
+		if ((left_type.Pointer == 0) && (right_type.Pointer == 0)) {
+			TypeFlags left_type_flags = m_Metadata.GetTypeFlags(left_type.ID);
+			TypeFlags right_type_flags = m_Metadata.GetTypeFlags(left_type.ID);
+
+			auto op_to_word = [&](Operator op) -> std::string {
+				switch (op)
+				{
+				case Operator::Add:
+					return "Additions";
+					break;
+				case Operator::Subtract:
+					return "Subtractions";
+					break;
+				case Operator::Multiply:
+					return "Multiplications";
+					break;
+				case Operator::Divide:
+					return "Divisions";
+					break;
+				case Operator::Not:
+					return "Boolean Operators";
+					break;
+				case Operator::Equal:
+				case Operator::NotEqual:
+				case Operator::GreaterThan:
+				case Operator::LesserThan:
+				case Operator::GreaterThanEq:
+				case Operator::LesserThanEq:
+					return "Comparisons";
+					break;
+				default:
+					return fmt::format("@FIXME: {}() {}:{}", __FUNCTION__, __FILE__, __LINE__);
+					break;
+				}
+			};
+
+			auto no_op_error = [&]() {
+				PushMessage(CompilerMessage{ PrintTokenLocation(binaryExpr->OperatorToken),MessageType::Error });
+				PushMessage(CompilerMessage{
+					fmt::format(
+					"No {} were defined between '{}' and '{}'",
+						op_to_word(binaryExpr->OPerator),PrintType(left_type),PrintType(right_type)),MessageType::Warning });
+			};
+
+			if (!((right_type_flags & FLAG_NUMERIC_TYPE) && (left_type_flags & FLAG_NUMERIC_TYPE))) {
+
+				OperatorQuery op_query;
+
+				op_query.TypeArguments.push_back(left_type);
+				op_query.TypeArguments.push_back(right_type);
+
+				u64 op_func_id = m_Metadata.GetOperator(binaryExpr->OPerator, op_query);
+
+				if (op_func_id == (u64)-1) {
+					no_op_error();
+					return nullptr;
+				}
+
+				{
+					//@TODO: Generate Proper Call
+
+					const auto op_func_metadata = m_Metadata.GetFunctionMetadata(op_func_id);
+
+					Expression* lhs = binaryExpr->Left;
+					Expression* rhs = binaryExpr->Right;
+
+					FunctionCall call;
+					call.Arguments.push_back(lhs);
+					call.Arguments.push_back(rhs);
+
+					call.Function.Symbol = op_func_metadata->Name;
+
+
+					IRSSAValue* op_result = (IRSSAValue*)ExpressionCodeGen(AST(call));
+
+					m_Metadata.RegExprType(op_result->SSA, op_func_metadata->ReturnType);
+
+					return op_result;
+				}
+			}
+		}
 
 		switch (binaryExpr->OPerator)
 		{
@@ -1023,19 +1236,22 @@ namespace Glass
 						type.ID = arg_ssa->Type;
 					}
 
-					bool type_mismatch = !CheckTypeConversion(decl_arg->Tipe.ID, type.ID);
+					if (type.ID != IR_any)
+					{
+						bool type_mismatch = !CheckTypeConversion(decl_arg->Tipe.ID, type.ID);
 
-					if (type_mismatch) {
+						if (type_mismatch) {
 
-						PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()),MessageType::Error });
-						PushMessage(CompilerMessage{ "type mismatch in function call",MessageType::Warning });
-						PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
-							PrintType(decl_arg->Tipe),
-							PrintType(type)),
+							PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()),MessageType::Error });
+							PushMessage(CompilerMessage{ "type mismatch in function call",MessageType::Warning });
+							PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
+								PrintType(decl_arg->Tipe),
+								PrintType(type)),
 
+								MessageType::Info });
+							PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
 							MessageType::Info });
-						PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
-						MessageType::Info });
+						}
 					}
 
 					if (decl_arg->Tipe.Pointer) {
@@ -1369,6 +1585,8 @@ namespace Glass
 
 			ssa_value->SSA = value_ssa->ID;
 
+			m_Metadata.RegExprType(ssa_value->SSA, m_Metadata.GetExprType(ir_address->SSA));
+
 			return ssa_value;
 		}
 		break;
@@ -1396,35 +1614,49 @@ namespace Glass
 		break;
 		case NodeType::Identifier:
 		{
-			auto ir_address = (IRSSAValue*)IdentifierCodeGen((Identifier*)expr);
+			Identifier* identifier = (Identifier*)expr;
 
-			if (!ir_address) {
-				return nullptr;
+			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) == SymbolType::Type) {
+
+				u64 type_id = m_Metadata.GetType(identifier->Symbol.Symbol);
+
+				NumericLiteral Node;
+				Node.Val.Int = type_id;
+				Node.type = NumericLiteral::Type::Int;
+
+				return (IRSSAValue*)ExpressionCodeGen(AST(Node));
 			}
+			else {
+				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
 
-			const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
+				if (!ir_address) {
+					return nullptr;
+				}
 
-			IRLoad load;
-			load.SSAddress = ir_address->SSA;
-			load.ReferencePointer = metadata->Tipe.Pointer > 0;
+				const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
 
-			IRSSA* ssa = CreateIRSSA();
+				IRLoad load;
+				load.SSAddress = ir_address->SSA;
+				load.ReferencePointer = metadata->Tipe.Pointer > 0;
 
-			IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
+				IRSSA* ssa = CreateIRSSA();
 
-			load.Type = metadata->Tipe.ID;
+				IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
 
-			ssa->Type = metadata->Tipe.ID;
-			ssa->Value = IR(load);
-			ssa->Pointer = metadata->Tipe.Pointer > 0;
+				load.Type = metadata->Tipe.ID;
 
-			ssa->Reference = true;
-			ssa->ReferenceType = metadata->Tipe.ID;
-			ssa->PointerReference = metadata->Tipe.Pointer > 0;
+				ssa->Type = metadata->Tipe.ID;
+				ssa->Value = IR(load);
+				ssa->Pointer = metadata->Tipe.Pointer > 0;
 
-			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
+				ssa->Reference = true;
+				ssa->ReferenceType = metadata->Tipe.ID;
+				ssa->PointerReference = metadata->Tipe.Pointer > 0;
 
-			return IR(IRSSAValue(ssa->ID));
+				m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
+
+				return IR(IRSSAValue(ssa->ID));
+			}
 		}
 		break;
 		default:

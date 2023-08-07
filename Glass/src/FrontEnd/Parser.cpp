@@ -122,6 +122,27 @@ namespace Glass
 			return Application::AllocateAstNode(Node);
 		}
 
+		if (At().Symbol == "operator") {
+			Consume();
+
+			OperatorNode Node;
+
+			Operator op = GetOperator(Consume());
+
+			if (op == Operator::Invalid) {
+				Abort("Expected an Operator #operator directive");
+			}
+
+			Node.statement = ParseStatement();
+			Node.OPerator = op;
+
+			if (Node.statement == nullptr) {
+				Abort("Expected A Function Name or Function definition After #operator Directive");
+			}
+
+			return Application::AllocateAstNode(Node);
+		}
+
 		Abort(fmt::format("Un-recognized directive: {}", At().Symbol));
 
 		return nullptr;

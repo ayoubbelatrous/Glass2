@@ -55,6 +55,15 @@ typedef struct type_info
 			)";
 		header += "\n";
 
+		header += R"(
+typedef struct Any
+{	
+	u64 type;
+	u64* data;
+} Any;
+			)";
+		header += "\n";
+
 		{
 			header += fmt::format("static const type_info __type_info_table[{}] = ", m_Metadata->m_Types.size());
 			header += "{\n";
@@ -367,7 +376,21 @@ typedef struct type_info
 		case IRNodeType::While:
 		{
 			IRWhile* while_ = (IRWhile*)inst;
-			std::string code = fmt::format("while (__tmp{})", while_->SSA);
+
+			u64 label_id = PushLabel();
+
+			std::string code;
+			std::string goto_code = fmt::format("goto _l{}", label_id);
+
+			code += "_l" + std::to_string(label_id) + ":\n";
+
+			for (IRInstruction* inst : while_->ConditionBlock) {
+				IRNodeType Type = inst->GetType();
+				code += IRCodeGen(inst) + ";";
+				break;
+			}
+
+			code += fmt::format("if(__tmp{})", while_->SSA);
 
 			code += " {\n";
 
@@ -390,9 +413,12 @@ typedef struct type_info
 					break;
 				}
 			}
-
+			code += goto_code + ";";
 			code += "}\n";
-			return code;
+
+			PushLabelCode(code);
+
+			return goto_code;
 		}
 		break;
 		case IRNodeType::SizeOf:
@@ -434,15 +460,6 @@ typedef struct type_info
 	{
 		std::string code;
 
-		// 		if (IRF->Polymorphs.size() != 0) {
-		// 			for (IRFunction* irf : IRF->Polymorphs) {
-		// 				code += "\n";
-		// 				code += FunctionCodeGen(irf);
-		// 			}
-		// 
-		// 			return code;
-		// 		}
-
 		const auto func_metadata = m_Metadata->GetFunctionMetadata(IRF->ID);
 
 		const std::string& func_name = func_metadata->Name;
@@ -473,9 +490,9 @@ typedef struct type_info
 			i++;
 		}
 
-		code = fmt::format("{} {} ({})", return_type, func_name, arguments);
+		std::string header = fmt::format("{} {} ({})", return_type, func_name, arguments);
 
-		code += "{\n";
+		header += "{\n";
 
 		for (IRInstruction* inst : IRF->Instructions) {
 
@@ -484,8 +501,10 @@ typedef struct type_info
 			switch (Type)
 			{
 			case IRNodeType::SSA:
+			{
 				code += SSACodeGen((IRSSA*)inst) + "\n";
-				break;
+			}
+			break;
 			case IRNodeType::Return:
 			{
 				IRReturn* ret = (IRReturn*)inst;
@@ -498,25 +517,36 @@ typedef struct type_info
 			}
 		}
 
-		code += "}\n";
-		return code;
+		code += m_LabelCode;
+
+		ClearLabelCode();
+
+		std::string final_code = fmt::format("{} {} {}", header, m_SSAHeader, code);
+
+		final_code += "}\n";
+
+		ClearSSAHeader();
+
+		return final_code;
 	}
 
 	std::string CTranspiler::SSACodeGen(IRSSA* SSA)
 	{
 		std::string type = m_Metadata->GetType(SSA->Type);
 
+
 		for (u64 i = 0; i < SSA->Pointer; i++)
 		{
 			type.push_back('*');
 		}
 
+		PushSSAHeader(fmt::format("{} __tmp{};", type, SSA->ID));
+
 		if (SSA->Value) {
-			return fmt::format("const {} __tmp{} = {};", type, SSA->ID, IRCodeGen(SSA->Value));
+			return fmt::format("__tmp{} = {};", SSA->ID, IRCodeGen(SSA->Value));
 		}
-		else {
-			return fmt::format("const {} __tmp{};", type, SSA->ID);
-		}
+
+		return "";
 	}
 
 	std::string CTranspiler::StructCodeGen(IRStruct* ir_struct)

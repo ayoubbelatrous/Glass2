@@ -24,6 +24,7 @@ namespace Glass
 
 		IR_bool,
 
+		IR_any,
 		IR_typeinfo,
 	};
 
@@ -48,7 +49,7 @@ namespace Glass
 		IR_f64,
 
 		IR_bool,
-
+		IR_any,
 		IR_typeinfo,
 	};
 
@@ -572,6 +573,7 @@ namespace Glass
 	struct IRWhile : public IRInstruction {
 		u64 ID = 0;
 		u64 SSA = 0;
+		std::vector<IRSSA*> ConditionBlock;
 		std::vector<IRInstruction*> Instructions;
 
 		virtual std::string ToString() const override

@@ -30,6 +30,7 @@ namespace Glass
 		Reference,
 		DeReference,
 		TypeOf,
+		Operator,
 		ArrayAccess,
 	};
 
@@ -245,7 +246,7 @@ namespace Glass
 		{
 			double Double;
 			float Float;
-			int Int;
+			u64 Int;
 		} Val;
 
 		int Value = 0;
@@ -712,6 +713,27 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return What->GetLocation();
+		}
+	};
+
+	class OperatorNode : public Statement
+	{
+	public:
+
+		Statement* statement = nullptr;
+		Operator OPerator;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Operator;
+		}
+
+		virtual std::string ToString() const {
+			return "#operator {TODO}" + statement->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return statement->GetLocation();
 		}
 	};
 }

@@ -27,7 +27,33 @@ namespace Glass
 
 		std::string GetType(u64 ID);
 
+		u64 PushLabel() {
+			m_LabelCounter++;
+			return m_LabelCounter;
+		}
+
+		void PushLabelCode(const std::string& code) {
+			m_LabelCode += code;
+		}
+
+		void ClearLabelCode() {
+			m_LabelCode.clear();
+			m_LabelCounter = 0;
+		}
+
+		void PushSSAHeader(const std::string& code) {
+			m_SSAHeader += code;
+		}
+
+		void ClearSSAHeader() {
+			m_SSAHeader.clear();
+		}
+
 	private:
+
+		u64 m_LabelCounter = 0;
+		std::string m_LabelCode;
+		std::string m_SSAHeader;
 
 		std::unordered_map <u64, TypeInfo> m_VariableTypeInfo;
 

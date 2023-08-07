@@ -6,14 +6,20 @@
 
 namespace Glass
 {
-	struct ContextScope
-	{
+
+	using TypeFlags = u64;
+
+	enum TypeFlag {
+		FLAG_BASE_TYPE = BIT(0),
+		FLAG_NUMERIC_TYPE = BIT(1),
+	};
+
+	struct ContextScope {
 		u64 ID = 0;
 		std::vector<ContextScope> m_Children;
 	};
 
-	enum class SymbolType
-	{
+	enum class SymbolType {
 		None = 0,
 		Variable,
 		Function,
@@ -185,6 +191,55 @@ namespace Glass
 		}
 	};
 
+	struct OperatorQuery
+	{
+		std::vector<Type> TypeArguments;
+
+		//@TODO: Add return types
+
+		bool operator==(const OperatorQuery& other) const
+		{
+			if (other.TypeArguments.size() != other.TypeArguments.size())
+				return false;
+
+			for (size_t i = 0; i < other.TypeArguments.size(); i++)
+			{
+				const auto& oth = other.TypeArguments[i];
+				const auto& ths = TypeArguments[i];
+
+				if (ths.ID != oth.ID) {
+					return false;
+				}
+
+				if (ths.ID != oth.ID) {
+					return false;
+				}
+
+				if (ths.Pointer != oth.Pointer) {
+					return false;
+				}
+
+				if (ths.Array != oth.Array) {
+					return false;
+				}
+			}
+
+			return true;
+		}
+	};
+
+	struct OperatorQueryHasher
+	{
+		std::size_t operator()(const OperatorQuery& key) const {
+			size_t hash = 0;
+			for (const auto& arg : key.TypeArguments) {
+				size_t a = arg.ID + arg.Array + (u64)arg.Pointer;
+				hash += a / 3;
+			}
+			return hash;
+		}
+	};
+
 	class Compiler
 	{
 	public:
@@ -202,11 +257,33 @@ namespace Glass
 			std::unordered_map<u64, FunctionMetadata> m_Functions;
 			std::unordered_map<std::string, u64> m_FunctionNames;
 			std::unordered_map<u64, std::string> m_Types;
+
+			std::unordered_map<u64, TypeFlags> m_TypeFlags;
+
 			std::unordered_map<std::string, u64> m_TypeNames;
 			std::unordered_map<std::string, u64> m_StructNames;
 			std::unordered_map<u64, u64> m_TypeToStruct;
 
 			std::unordered_map<u64, std::unordered_map<u64, Type>> m_ExpressionType;
+
+			std::unordered_map<Operator, std::unordered_map<OperatorQuery, u64, OperatorQueryHasher>> m_Operators;
+
+			void RegisterOperator(Operator op, const OperatorQuery& query, u64 function_id) {
+				m_Operators[op][query] = function_id;
+			}
+
+			u64 GetOperator(Operator op, const OperatorQuery& query) {
+				auto it = m_Operators[op].find(query);
+				if (it != m_Operators[op].end()) {
+					return it->second;
+				}
+
+				return (u64)-1;
+			}
+
+			TypeFlags& GetTypeFlags(u64 id) {
+				return m_TypeFlags[id];
+			}
 
 			IRSSA* GetSSA(u64 ID) const {
 				return m_SSAs.at(m_CurrentFunction).at(ID);
@@ -365,6 +442,8 @@ namespace Glass
 		IRInstruction* StatementCodeGen(const Statement* statement);
 
 		IRInstruction* ForeignCodeGen(const ForeignNode* expression);
+
+		IRInstruction* OperatorCodeGen(const OperatorNode* op_node);
 
 		IRInstruction* FunctionCodeGen(FunctionNode* functionNode);
 
