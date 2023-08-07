@@ -85,6 +85,7 @@ namespace Glass
 		NotEqual,
 		GreaterThan,
 		LesserThan,
+		ForeignFunction,
 		TranslationUnit,
 	};
 
@@ -270,7 +271,7 @@ namespace Glass
 		IRInstruction* Value = nullptr;
 
 		u64 Type;
-		bool Pointer = false;
+		u64 Pointer = false;
 
 		RegType SSAType = RegType::None;
 
@@ -322,7 +323,6 @@ namespace Glass
 
 		std::vector<IRSSA*> Arguments;
 		std::vector<IRInstruction*> Instructions;
-		std::vector<IRFunction*> Polymorphs;
 
 		virtual std::string ToString() const override
 		{
@@ -383,6 +383,11 @@ namespace Glass
 		u64 ID = 0;
 		u64 SSA = 0;
 
+		IRAsAddress(u64 ssa)
+			:SSA(ssa)
+		{
+		}
+
 		virtual std::string ToString() const override {
 			return 	"(int*)$" + std::to_string(SSA);
 		}
@@ -432,7 +437,7 @@ namespace Glass
 	struct IRStore : public IRInstruction {
 		u64 ID = 0;
 		u64 Type = 0;
-		bool Pointer = 0;
+		u64 Pointer = 0;
 		u64 AddressSSA = 0;
 		IRInstruction* Data = nullptr;
 		virtual std::string ToString() const override {
@@ -448,7 +453,7 @@ namespace Glass
 		u64 ID = 0;
 		u64 SSAddress = 0;
 		u64 Type = 0;
-		bool ReferencePointer = false;
+		u64 ReferencePointer = false;
 
 		virtual std::string ToString() const override {
 			return 	fmt::format("LOAD ${}", SSAddress);
@@ -767,4 +772,20 @@ namespace Glass
 			return IRNodeType::LesserThan;
 		}
 	};
+
+	// 	struct IRForeignFunction : public IRInstruction {
+	// 		u64 ID;
+	// 
+	// 		std::string Name;
+	// 		std::vector<std::tuple<std::string, Glass::Type>> Arguments;
+	// 		Glass::Type ReturnType;
+	// 
+	// 		virtual std::string ToString() const override {
+	// 			return "foreign fn";
+	// 		}
+	// 
+	// 		virtual IRNodeType GetType() const {
+	// 			return IRNodeType::ForeignFunction;
+	// 		}
+	// 	};
 }

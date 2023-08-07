@@ -3,11 +3,13 @@
 #foreign fn fopen(u8* path,u8* mode) : u64* {}
 #foreign fn fclose(u64* file) : void {}
 
-#foreign fn malloc(i32 size) : void* {}
-#foreign fn free(u64* ptr) : void {}
+#foreign fn malloc(u64 size) : void* {}
+#foreign fn free(void* ptr) : void {}
 #foreign fn strlen(u8* ptr) : u64 {}
 
 fn main() : i32 {
-    i32** x;
-    i32 y;
+    printf("Hello World");
+    i32 test;
+    test = 30;
+    printf("Hello World: %i",test);
 }

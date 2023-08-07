@@ -1,13 +1,28 @@
-[13:05:23] [warning] Glass: C Includes
-[13:05:23] [warning] Glass: C Libs
-[13:05:23] [info] Glass: Compiling: ".\\Examples\\Main.glass"
-[13:05:23] [info] Glass: 
+[10:37:20] [warning] Glass: C Includes
+[10:37:20] [warning] Glass: C Libs
+[10:37:20] [info] Glass: Compiling: ".\\Examples\\Main.glass"
+[10:37:20] [info] Glass: 
+% 1
+[10:37:20] [info] Glass: 
+% 2
+[10:37:20] [info] Glass: 
+% 3
+[10:37:20] [info] Glass: 
+% 4
+[10:37:20] [info] Glass: 
 fn $9 i32 : () {
-$ 5 : 1 = 
-$ 10 : 2 = &$$1
-$ 5 : 3 = 
-$ 10 : 4 = &$$3
+$ 7 : 1 = % 1
+$ 7 : 2 = % 2
+$ 5 : 3 = CALL $2()
+$ 5 : 4 = 
+$ 10 : 5 = &$$4
+$ 1 : 6 = 30
+STORE $5 $6
+$ 7 : 7 = % 3
+$ 7 : 8 = % 4
+$ 5 : 9 = LOAD $5
+$ 5 : 10 = CALL $2()
 }
 
-[13:05:23] [warning] Glass: Running: clang -w generated.c
-[13:05:23] [warning] Glass: CodeGen Done: clang -w generated.c
+[10:37:20] [warning] Glass: Running: clang -w generated.c
+[10:37:21] [warning] Glass: CodeGen Done: clang -w generated.c

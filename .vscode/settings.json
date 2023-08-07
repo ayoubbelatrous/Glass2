@@ -19,7 +19,10 @@
 		"malloc.h": "c",
 		"glfw3.h": "c",
 		"glad.h": "c",
-		"windows.h": "c"
+		"windows.h": "c",
+		"cstdio": "c",
+		"winapifamily.h": "c",
+		"winpackagefamily.h": "c"
 	},
 	"cmake.configureOnOpen": false
 }

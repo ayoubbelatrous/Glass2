@@ -15,7 +15,7 @@ namespace Glass
 
 		header += "\n";
 
-		header += "#include <stdint.h>\n";
+		//header += "#include <stdint.h>\n";
 		header += "#include <stdio.h>\n";
 		header += "#include <string.h>\n";
 		header += "#include <malloc.h>\n";
@@ -29,17 +29,17 @@ namespace Glass
 		header += "#define true 1;		\n";
 		header += "#define false 0;		\n";
 
-		header += "typedef char i8;		\n";
-		header += "typedef int16_t i16;	\n";
-		header += "typedef int32_t i32;	\n";
-		header += "typedef int64_t i64;	\n";
+		header += "typedef signed char i8;		\n";
+		header += "typedef short i16;	\n";
+		header += "typedef int i32;	\n";
+		header += "typedef long long i64;	\n";
 
 		header += "\n";
 
-		header += "typedef uint8_t u8;	\n";
-		header += "typedef uint16_t u16;	\n";
-		header += "typedef uint32_t u32;	\n";
-		header += "typedef uint64_t u64;	\n";
+		header += "typedef unsigned char u8;	\n";
+		header += "typedef unsigned short u16;	\n";
+		header += "typedef unsigned int u32;	\n";
+		header += "typedef unsigned long long u64;	\n";
 
 		header += "typedef float f32;		\n";
 		header += "typedef double f64;	\n";
@@ -80,6 +80,51 @@ typedef struct type_info
 
 		std::string forward_declaration;
 
+		// 		for (const auto& [ID, metadata] : m_Metadata->m_StructMetadata) {
+		// 			if (metadata.Foreign) {
+		// 				forward_declaration += fmt::format("typedef struct {0} {0};", metadata.Name.Symbol);
+		// 			}
+		// 		}
+
+		// 		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
+		// 			if (metadata.Foreign) {
+		// 
+		// 				const std::string& func_name = metadata.Name;
+		// 				std::string return_type = m_Metadata->GetType(metadata.ReturnType.ID);
+		// 
+		// 				for (u64 i = 0; i < metadata.ReturnType.Pointer; i++) {
+		// 					return_type.push_back('*');
+		// 				}
+		// 
+		// 				std::string arguments;
+		// 
+		// 				u64 i = 0;
+		// 				for (const ArgumentMetadata& arg_metadata : metadata.Arguments) {
+		// 
+		// 					std::string type = m_Metadata->GetType(arg_metadata.Tipe.ID);
+		// 
+		// 					for (u64 i = 0; i < arg_metadata.Tipe.Pointer; i++) {
+		// 						type.push_back('*');
+		// 					}
+		// 
+		// 					arguments += fmt::format("{} {}", type, arg_metadata.Name);
+		// 
+		// 					if (i == metadata.Arguments.size() - 1) {
+		// 					}
+		// 					else {
+		// 						arguments += ", ";
+		// 					}
+		// 					i++;
+		// 				}
+		// 
+		// 				if (metadata.Variadic) {
+		// 					arguments.append(",...");
+		// 				}
+		// 
+		// 				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
+		// 			}
+		// 		}
+
 		for (IRInstruction* inst : m_Program->Instructions) {
 			if (inst->GetType() == IRNodeType::Function) {
 				IRFunction* IRF = (IRFunction*)inst;
@@ -89,7 +134,7 @@ typedef struct type_info
 				const std::string& func_name = func_metadata->Name;
 				std::string return_type = m_Metadata->GetType(func_metadata->ReturnType.ID);
 
-				if (func_metadata->ReturnType.TT == TypeType::Pointer) {
+				if (func_metadata->ReturnType.Pointer) {
 					return_type += '*';
 				}
 
@@ -241,8 +286,9 @@ typedef struct type_info
 
 			std::string ptr = "";
 
-			if (store->Pointer) {
-				ptr = "*";
+			for (u64 i = 0; i < store->Pointer; i++)
+			{
+				ptr += "*";
 			}
 
 			return fmt::format("*(({0}{1}*)__tmp{2}) = ({0}{1}){3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
@@ -254,8 +300,9 @@ typedef struct type_info
 
 			std::string ptr;
 
-			if (load->ReferencePointer) {
-				ptr = "*";
+			for (u64 i = 0; i < load->ReferencePointer; i++)
+			{
+				ptr += "*";
 			}
 
 			return fmt::format("*({} {}*)__tmp{}", m_Metadata->GetType(load->Type), ptr, load->SSAddress);
@@ -401,7 +448,7 @@ typedef struct type_info
 		const std::string& func_name = func_metadata->Name;
 		std::string return_type = m_Metadata->GetType(func_metadata->ReturnType.ID);
 
-		if (func_metadata->ReturnType.TT == TypeType::Pointer) {
+		if (func_metadata->ReturnType.Pointer) {
 			return_type += '*';
 		}
 
@@ -459,9 +506,11 @@ typedef struct type_info
 	{
 		std::string type = m_Metadata->GetType(SSA->Type);
 
-		if (SSA->Pointer) {
+		for (u64 i = 0; i < SSA->Pointer; i++)
+		{
 			type.push_back('*');
 		}
+
 		if (SSA->Value) {
 			return fmt::format("const {} __tmp{} = {};", type, SSA->ID, IRCodeGen(SSA->Value));
 		}
@@ -483,7 +532,8 @@ typedef struct type_info
 		for (const MemberMetadata& member : metadata->Members) {
 			std::string member_type = m_Metadata->GetType(member.Tipe.ID);
 
-			if (member.Tipe.TT == TypeType::Pointer) {
+			for (u64 i = 0; i < member.Tipe.Pointer; i++)
+			{
 				member_type += "*";
 			}
 

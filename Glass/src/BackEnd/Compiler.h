@@ -6,6 +6,12 @@
 
 namespace Glass
 {
+	struct ContextScope
+	{
+		u64 ID = 0;
+		std::vector<ContextScope> m_Children;
+	};
+
 	enum class SymbolType
 	{
 		None = 0,
@@ -37,7 +43,7 @@ namespace Glass
 	{
 		u64 ID;
 		bool Array = false;
-		TypeType TT = TypeType::Value;
+		u64 Pointer = 0;
 	};
 
 	struct VariableMetadata
@@ -60,6 +66,8 @@ namespace Glass
 	{
 		Token Name;
 		std::vector<MemberMetadata> Members;
+
+		bool Foreign = false;
 
 		u64 FindMember(const std::string& name) const {
 			u64 id_counter = 0;
@@ -109,7 +117,7 @@ namespace Glass
 					return false;
 				}
 
-				if (b.TT != other_b.TT) {
+				if (b.Pointer != other_b.Pointer) {
 					return false;
 				}
 
@@ -127,7 +135,7 @@ namespace Glass
 		std::size_t operator()(const PolyMorphOverloads& key) const {
 			size_t hash = 0;
 			for (const auto& [T, arg] : key.TypeArguments) {
-				size_t a = arg.ID + arg.Array + (u64)arg.TT;
+				size_t a = arg.ID + arg.Array + (u64)arg.Pointer;
 				hash += a / 3;
 			}
 			return hash;
@@ -537,7 +545,7 @@ namespace Glass
 				arr_ptr += "[]";
 			}
 
-			if (type.TT == TypeType::Pointer) {
+			if (type.Pointer) {
 				arr_ptr += "*";
 			}
 
