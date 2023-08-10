@@ -9,30 +9,27 @@
 #foreign fn putchar(u8 c) : void {}
 #foreign fn printf!(u8 * format) : i32{}
 
-#foreign struct GLFWwindow{
-   i32 null0;
-};
+#foreign struct GLFWwindow{ i32 null0; };
 
+#foreign fn glfwCreateWindow							(i32 width,i32 height,u8* title,i32* monitor,i32* display) : GLFWwindow* {};
+#foreign fn glfwInit									() : i32 {};
+#foreign fn glfwMakeContextCurrent						(GLFWwindow* window) : void {};
 
-#foreign fn glfwCreateWindow(i32 width,i32 height,u8* title,i32* monitor,i32* display) : GLFWwindow* {};
-#foreign fn glfwInit() : i32 {};
-#foreign fn glfwMakeContextCurrent(GLFWwindow* window) : void {};
+#foreign fn glfwSwapBuffers								(GLFWwindow* window) : void {};
+#foreign fn glfwPollEvents								() : void {};
 
-#foreign fn glfwSwapBuffers(GLFWwindow* window) : void {};
-#foreign fn glfwPollEvents() : void {};
+#foreign fn glfwWindowShouldClose						(GLFWwindow* window) : i32 {};
+#foreign fn glfwGetKey									(GLFWwindow* window,i32 keyCode) : i32 {};
 
-#foreign fn glfwWindowShouldClose(GLFWwindow* window) : i32 {};
-#foreign fn glfwGetKey(GLFWwindow* window,i32 keyCode) : i32 {};
+#foreign fn gladInit									() : void {};
+#foreign fn glClearColor								(f32 r, f32 g, f32 b, f32 a) : void {};
+#foreign fn glClear										(i32 mask) : void {};
 
-#foreign fn gladInit() : void {};
-#foreign fn glClearColor(f32 r, f32 g, f32 b, f32 a) : void {};
-#foreign fn glClear(i32 mask) : void {};
+#foreign fn glBegin										(i32 mode) : void {}
+#foreign fn glEnd										() : void {}
 
-#foreign fn glBegin		(i32 mode) : void {}
-#foreign fn glEnd		() : void {}
-
-#foreign fn glColor3f	(f32 r, f32 g, f32 b) : void {}
-#foreign fn glVertex2f	(f32 x, f32 y) : void {}
+#foreign fn glColor3f									(f32 r, f32 g, f32 b) : void {}
+#foreign fn glVertex2f									(f32 x, f32 y) : void {}
 
 struct vec3
 {
@@ -182,10 +179,17 @@ fn print(u8* fmt, Any... args) {
 	}
 }
 
+fn draw_trig() {
+	glBegin(4);
+    	glColor3f(1.0, 0.0, 0.0);   glVertex2f(0.0,   1.0);
+   	 	glColor3f(0.0, 1.0, 0.0);   glVertex2f(0.87,  0-0.5);
+    	glColor3f(0.0, 0.0, 1.0);   glVertex2f(0-0.87, 0-0.5);
+	glEnd();
+}
+
 fn main() {
 	i32 KEY_ESCAPE = 256;
    	i32 GL_COLOR_BUFFER_BIT = 16384;
-   	i32 GL_TRIANGLES = 4;
 
    	glfwInit();
    	i32* nullptr = 0;
@@ -207,17 +211,7 @@ fn main() {
       	glClearColor(0.8,1,1,1);
       	glClear(GL_COLOR_BUFFER_BIT);
 
-		glBegin(GL_TRIANGLES);
-    	glColor3f(1.0, 0.0, 0.0);   glVertex2f(0.0,   1.0);
-    	glColor3f(0.0, 1.0, 0.0);   glVertex2f(0.87,  0-0.5);
-    	glColor3f(0.0, 0.0, 1.0);   glVertex2f(0-0.87, 0-0.5);
-		glEnd();
-
-		glBegin(GL_TRIANGLES);
-    	glColor3f(1.0, 0.0, 0.0);   glVertex2f(1.0 - 0.0,   1.0);
-    	glColor3f(0.0, 1.0, 0.0);   glVertex2f(0.87,  0-0.5);
-    	glColor3f(0.0, 0.0, 1.0);   glVertex2f(0-0.87, 0-0.5);
-		glEnd();
+		draw_trig();
 
 		if glfwWindowShouldClose(window) {
 			print("%","Closing");

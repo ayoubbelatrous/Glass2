@@ -15,3 +15,7 @@ test.exe
 *.o
 *.dll
 .vscode/tasks.json
+generated.c
+generated.exe
+generated.obj
+GSodium.log
