@@ -45,6 +45,7 @@ namespace Glass
 		Expression* ParseMemberExpr();
 		Expression* ParseArrayAccessExpr();
 		Expression* ParseTypeOfExpr();
+		Expression* ParseCastExpr();
 
 		Operator GetOperator(const Token& token) {
 			TokenType Type = token.Type;

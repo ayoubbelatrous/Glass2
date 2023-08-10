@@ -16,9 +16,9 @@ namespace Glass
 		header += "\n";
 
 		//header += "#include <stdint.h>\n";
-		header += "#include <stdio.h>\n";
-		header += "#include <string.h>\n";
-		header += "#include <malloc.h>\n";
+// 		header += "#include <stdio.h>\n";
+// 		header += "#include <string.h>\n";
+// 		header += "#include <malloc.h>\n";
 
 		for (auto& include : m_Includes) {
 			header += fmt::format("#include \"{}\"\n", include);
@@ -64,6 +64,16 @@ typedef struct Any
 			)";
 		header += "\n";
 
+		header += R"(
+typedef struct Array
+{	
+	u64 count;
+	u64 data;
+} Array;
+			)";
+		header += "\n";
+
+
 		{
 			header += fmt::format("static const type_info __type_info_table[{}] = ", m_Metadata->m_Types.size());
 			header += "{\n";
@@ -89,50 +99,50 @@ typedef struct Any
 
 		std::string forward_declaration;
 
-		// 		for (const auto& [ID, metadata] : m_Metadata->m_StructMetadata) {
-		// 			if (metadata.Foreign) {
-		// 				forward_declaration += fmt::format("typedef struct {0} {0};", metadata.Name.Symbol);
-		// 			}
-		// 		}
+		for (const auto& [ID, metadata] : m_Metadata->m_StructMetadata) {
+			if (metadata.Foreign) {
+				forward_declaration += fmt::format("typedef struct {0} {0};", metadata.Name.Symbol);
+			}
+		}
 
-		// 		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
-		// 			if (metadata.Foreign) {
-		// 
-		// 				const std::string& func_name = metadata.Name;
-		// 				std::string return_type = m_Metadata->GetType(metadata.ReturnType.ID);
-		// 
-		// 				for (u64 i = 0; i < metadata.ReturnType.Pointer; i++) {
-		// 					return_type.push_back('*');
-		// 				}
-		// 
-		// 				std::string arguments;
-		// 
-		// 				u64 i = 0;
-		// 				for (const ArgumentMetadata& arg_metadata : metadata.Arguments) {
-		// 
-		// 					std::string type = m_Metadata->GetType(arg_metadata.Tipe.ID);
-		// 
-		// 					for (u64 i = 0; i < arg_metadata.Tipe.Pointer; i++) {
-		// 						type.push_back('*');
-		// 					}
-		// 
-		// 					arguments += fmt::format("{} {}", type, arg_metadata.Name);
-		// 
-		// 					if (i == metadata.Arguments.size() - 1) {
-		// 					}
-		// 					else {
-		// 						arguments += ", ";
-		// 					}
-		// 					i++;
-		// 				}
-		// 
-		// 				if (metadata.Variadic) {
-		// 					arguments.append(",...");
-		// 				}
-		// 
-		// 				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
-		// 			}
-		// 		}
+		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
+			if (metadata.Foreign) {
+
+				const std::string& func_name = metadata.Name;
+				std::string return_type = m_Metadata->GetType(metadata.ReturnType.ID);
+
+				for (u64 i = 0; i < metadata.ReturnType.Pointer; i++) {
+					return_type.push_back('*');
+				}
+
+				std::string arguments;
+
+				u64 i = 0;
+				for (const ArgumentMetadata& arg_metadata : metadata.Arguments) {
+
+					std::string type = m_Metadata->GetType(arg_metadata.Tipe.ID);
+
+					for (u64 i = 0; i < arg_metadata.Tipe.Pointer; i++) {
+						type.push_back('*');
+					}
+
+					arguments += fmt::format("{} {}", type, arg_metadata.Name);
+
+					if (i == metadata.Arguments.size() - 1) {
+					}
+					else {
+						arguments += ", ";
+					}
+					i++;
+				}
+
+				if (metadata.Variadic) {
+					arguments.append(",...");
+				}
+
+				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
+			}
+		}
 
 		for (IRInstruction* inst : m_Program->Instructions) {
 			if (inst->GetType() == IRNodeType::Function) {
@@ -207,29 +217,32 @@ typedef struct Any
 
 		std::string var_type_table;
 
-		var_type_table += "\n";
-
+		if (m_VariableTypeInfo.size() > 0)
 		{
-			var_type_table += fmt::format("static const type_info __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
-			var_type_table += "{\n";
+			var_type_table += "\n";
 
-			u64 i = 0;
+			{
+				var_type_table += fmt::format("static const type_info __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
+				var_type_table += "{\n";
 
-			for (const auto& [id, type] : m_VariableTypeInfo) {
-				m_TypeInfoTable[id] = i;
+				u64 i = 0;
 
-				var_type_table += "{";
-				var_type_table += fmt::format(".id={},", type.id);
-				var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
-				var_type_table += fmt::format(".name=\"{}\",", type.name);
-				var_type_table += "},";
+				for (const auto& [id, type] : m_VariableTypeInfo) {
+					m_TypeInfoTable[id] = i;
 
-				i++;
+					var_type_table += "{";
+					var_type_table += fmt::format(".id={},", type.id);
+					var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+					var_type_table += fmt::format(".name=\"{}\",", type.name);
+					var_type_table += "},";
+
+					i++;
+				}
+
+				var_type_table += "};\n";
 			}
-
-			var_type_table += "};\n";
+			var_type_table += "\n";
 		}
-		var_type_table += "\n";
 
 		return fmt::format("{}{}{}{}", header, var_type_table, forward_declaration, code);
 	}
@@ -263,6 +276,7 @@ typedef struct Any
 		case IRNodeType::MUL:
 		case IRNodeType::DIV:
 		case IRNodeType::Equal:
+		case IRNodeType::NotEqual:
 			return OpCodeGen(inst) + ";";
 			break;
 		case IRNodeType::SSAValue:
@@ -300,7 +314,8 @@ typedef struct Any
 				ptr += "*";
 			}
 
-			return fmt::format("*(({0}{1}*)__tmp{2}) = ({0}{1}){3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
+			//return fmt::format("*(({0}{1}*)__tmp{2}) = ({0}{1}){3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
+			return fmt::format("*(({0}{1}*)__tmp{2}) = {3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
 		}
 		break;
 		case IRNodeType::Load:
@@ -387,7 +402,6 @@ typedef struct Any
 			for (IRInstruction* inst : while_->ConditionBlock) {
 				IRNodeType Type = inst->GetType();
 				code += IRCodeGen(inst) + ";";
-				break;
 			}
 
 			code += fmt::format("if(__tmp{})", while_->SSA);
@@ -416,9 +430,9 @@ typedef struct Any
 			code += goto_code + ";";
 			code += "}\n";
 
-			PushLabelCode(code);
+			//PushLabelCode(code);
 
-			return goto_code;
+			return code;
 		}
 		break;
 		case IRNodeType::SizeOf:
@@ -444,11 +458,42 @@ typedef struct Any
 			return fmt::format("&__tmp{}", ref->SSA);
 		}
 		break;
+		case IRNodeType::DeRef:
+		{
+			IRDeRef* de_ref = (IRDeRef*)inst;
+			return fmt::format("*__tmp{}", de_ref->SSA);
+		}
+		break;
 		case IRNodeType::TypeOf:
 		{
 			IRTypeOf* type_of = (IRTypeOf*)inst;
 			m_VariableTypeInfo[m_VariableTypeInfo.size()] = type_of->Type;
 			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
+		}
+		break;
+		case IRNodeType::ArrayAllocate:
+		{
+			IRArrayAllocate* array_allocate = (IRArrayAllocate*)inst;
+
+			u64 counter = 0;
+
+			std::string data_str = "{";
+
+			for (auto data : array_allocate->Data) {
+
+				data_str.append("__tmp");
+				data_str.append(std::to_string(data));
+
+				if (counter != array_allocate->Data.size() - 1) {
+					data_str.push_back((','));
+				}
+
+				counter++;
+			}
+
+			data_str += "};";
+
+			return data_str;
 		}
 		break;
 		}
@@ -540,9 +585,22 @@ typedef struct Any
 			type.push_back('*');
 		}
 
-		PushSSAHeader(fmt::format("{} __tmp{};", type, SSA->ID));
+		if (SSA->Array) {
+		}
+		else {
+			PushSSAHeader(fmt::format("{} __tmp{};", type, SSA->ID));
+		}
 
-		if (SSA->Value) {
+		if (SSA->Array) {
+			IRArrayAllocate* array_allocate = (IRArrayAllocate*)SSA->Value;
+
+			std::string value = IRCodeGen(array_allocate);
+			u64 count = array_allocate->Data.size();
+
+			return fmt::format("{} __tmp{}[{}] = {};", type, SSA->ID, count, value);
+		}
+
+		if (SSA->Value && !SSA->Array) {
 			return fmt::format("__tmp{} = {};", SSA->ID, IRCodeGen(SSA->Value));
 		}
 
@@ -621,6 +679,13 @@ typedef struct Any
 			IREQ* eq = (IREQ*)op;
 
 			code = fmt::format("__tmp{} == __tmp{}", eq->SSA_A->SSA, eq->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::NotEqual:
+		{
+			IRNOTEQ* neq = (IRNOTEQ*)op;
+
+			code = fmt::format("__tmp{} != __tmp{}", neq->SSA_A->SSA, neq->SSA_B->SSA);
 		}
 		break;
 		}

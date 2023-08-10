@@ -93,12 +93,39 @@ namespace Glass
 				MemberMetadata data_member_metadata;
 				data_member_metadata.Name.Symbol = "data";
 				data_member_metadata.Tipe.ID = IR_u64;
-				data_member_metadata.Tipe.Pointer = 1;
+				data_member_metadata.Tipe.Pointer = 0;
 
 				any_info_Metadata.Members.push_back(data_member_metadata);
 			}
 
 			m_Metadata.RegisterStruct(GetStructID(), IR_any, any_info_Metadata);
+		}
+
+		{
+			StructMetadata array_info_Metadata;
+			array_info_Metadata.Name.Symbol = "Array";
+
+			//type
+			{
+				MemberMetadata count_member_metadata;
+				count_member_metadata.Name.Symbol = "count";
+				count_member_metadata.Tipe.ID = IR_u64;
+				count_member_metadata.Tipe.Pointer = 0;
+
+				array_info_Metadata.Members.push_back(count_member_metadata);
+			}
+
+			//data
+			{
+				MemberMetadata data_member_metadata;
+				data_member_metadata.Name.Symbol = "data";
+				data_member_metadata.Tipe.ID = IR_u64;
+				data_member_metadata.Tipe.Pointer = 1;
+
+				array_info_Metadata.Members.push_back(data_member_metadata);
+			}
+
+			m_Metadata.RegisterStruct(GetStructID(), IR_array, array_info_Metadata);
 		}
 
 		{
@@ -204,6 +231,7 @@ namespace Glass
 		case NodeType::Call:
 		case NodeType::MemberAccess:
 		case NodeType::ArrayAccess:
+		case NodeType::Cast:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -355,6 +383,7 @@ namespace Glass
 		if (functionNode->ReturnType) {
 			return_type.ID = m_Metadata.GetType(functionNode->ReturnType->Symbol.Symbol);
 			return_type.Pointer = functionNode->ReturnType->Pointer;
+			return_type.Array = functionNode->ReturnType->Array;
 		}
 
 		m_Metadata.RegisterFunction(poly_func_id, functionNode->Symbol.Symbol, return_type);
@@ -455,12 +484,20 @@ namespace Glass
 			Type
 			{
 				arg_type,
-				var->Type->Array,
+				var->Type->Array || var->Type->Variadic ,
 				var->Type->Pointer,
 			},
 			};
 
-			arg_ssa->Type = var_metadata.Tipe.ID;
+
+
+			if (!var->Type->Variadic) {
+				arg_ssa->Type = var_metadata.Tipe.ID;
+			}
+			else {
+				arg_ssa->Type = IR_array;
+			}
+
 			arg_ssa->Pointer = var->Type->Pointer;
 
 			m_Metadata.RegisterVariableMetadata(arg_address_ssa->ID, var_metadata);
@@ -471,7 +508,8 @@ namespace Glass
 
 			arg_metadata.Name = var->Symbol.Symbol;
 			arg_metadata.Tipe.Pointer = arg_ssa->Pointer;
-			arg_metadata.Tipe.ID = arg_ssa->Type;
+			arg_metadata.Tipe.ID = var_metadata.Tipe.ID;
+			arg_metadata.Variadic = var->Type->Variadic;
 
 			args_metadata.push_back(arg_metadata);
 		}
@@ -564,10 +602,11 @@ namespace Glass
 
 		IRSSA* StorageSSA = CreateIRSSA();
 
-		StorageSSA->Type = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
-
 		if (variableNode->Type->Array) {
-			StorageSSA->Pointer++;
+			StorageSSA->Type = IR_array;
+		}
+		else {
+			StorageSSA->Type = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
 		}
 
 		for (u64 i = 0; i < variableNode->Type->Pointer; i++) {
@@ -697,23 +736,18 @@ namespace Glass
 		IRIf IF;
 		IF.SSA = condition->SSA;
 
-		std::vector<IRInstruction*> instructions;
-
 		PushScope();
 
 		for (const Statement* stmt : ifNode->Scope->GetStatements()) {
-			instructions.push_back(StatementCodeGen(stmt));
-		}
+			auto first_inst = StatementCodeGen(stmt);
 
+			auto ir_ssa_stack = PoPIRSSA();
 
-		auto ir_ssa_stack = PoPIRSSA();
+			for (auto inst : ir_ssa_stack) {
+				IF.Instructions.push_back(inst);
+			}
 
-		for (auto inst : ir_ssa_stack) {
-			IF.Instructions.push_back(inst);
-		}
-
-		for (auto inst : instructions) {
-			IF.Instructions.push_back(inst);
+			IF.Instructions.push_back(first_inst);
 		}
 
 		PopScope();
@@ -733,27 +767,21 @@ namespace Glass
 
 		WHILE.ConditionBlock = condition_ssas;
 
-		std::vector<IRInstruction*> instructions;
-
 		PushScope();
 
 		for (const Statement* stmt : whileNode->Scope->GetStatements()) {
-			instructions.push_back(StatementCodeGen(stmt));
-		}
+			auto inst = StatementCodeGen(stmt);
 
+			auto ir_ssa_stack = PoPIRSSA();
 
-		auto ir_ssa_stack = PoPIRSSA();
+			for (auto ssa_inst : ir_ssa_stack) {
+				WHILE.Instructions.push_back(ssa_inst);
+			}
 
-		for (auto inst : ir_ssa_stack) {
-			WHILE.Instructions.push_back(inst);
-		}
-
-		for (auto inst : instructions) {
 			WHILE.Instructions.push_back(inst);
 		}
 
 		PopScope();
-
 
 		return IR(WHILE);
 	}
@@ -788,8 +816,14 @@ namespace Glass
 		case NodeType::Reference:
 			return RefCodeGen((RefNode*)expression);
 			break;
+		case NodeType::DeReference:
+			return DeRefCodeGen((DeRefNode*)expression);
+			break;
 		case NodeType::TypeOf:
 			return TypeofCodeGen((TypeOfNode*)expression);
+			break;
+		case NodeType::Cast:
+			return CastCodeGen((CastNode*)expression);
 			break;
 		}
 
@@ -894,6 +928,10 @@ namespace Glass
 		A = GetExpressionByValue(binaryExpr->Left);
 		B = GetExpressionByValue(binaryExpr->Right);
 
+		if (!A || !B) {
+			return nullptr;
+		}
+
 		const Glass::Type& left_type = m_Metadata.GetExprType(A->SSA);
 		const Glass::Type& right_type = m_Metadata.GetExprType(B->SSA);
 
@@ -903,7 +941,7 @@ namespace Glass
 
 		if ((left_type.Pointer == 0) && (right_type.Pointer == 0)) {
 			TypeFlags left_type_flags = m_Metadata.GetTypeFlags(left_type.ID);
-			TypeFlags right_type_flags = m_Metadata.GetTypeFlags(left_type.ID);
+			TypeFlags right_type_flags = m_Metadata.GetTypeFlags(right_type.ID);
 
 			auto op_to_word = [&](Operator op) -> std::string {
 				switch (op)
@@ -945,7 +983,10 @@ namespace Glass
 						op_to_word(binaryExpr->OPerator),PrintType(left_type),PrintType(right_type)),MessageType::Warning });
 			};
 
-			if (!((right_type_flags & FLAG_NUMERIC_TYPE) && (left_type_flags & FLAG_NUMERIC_TYPE))) {
+			bool right_numeric_type = right_type_flags & FLAG_NUMERIC_TYPE;
+			bool left_numeric_type = left_type_flags & FLAG_NUMERIC_TYPE;
+
+			if (!(right_numeric_type && left_numeric_type)) {
 
 				OperatorQuery op_query;
 
@@ -954,9 +995,23 @@ namespace Glass
 
 				u64 op_func_id = m_Metadata.GetOperator(binaryExpr->OPerator, op_query);
 
+				bool flipped = false;
+
 				if (op_func_id == (u64)-1) {
-					no_op_error();
-					return nullptr;
+
+					op_query.TypeArguments.clear();
+
+					op_query.TypeArguments.push_back(right_type);
+					op_query.TypeArguments.push_back(left_type);
+
+					op_func_id = m_Metadata.GetOperator(binaryExpr->OPerator, op_query);
+
+					flipped = true;
+
+					if (op_func_id == (u64)-1) {
+						no_op_error();
+						return nullptr;
+					}
 				}
 
 				{
@@ -968,11 +1023,17 @@ namespace Glass
 					Expression* rhs = binaryExpr->Right;
 
 					FunctionCall call;
-					call.Arguments.push_back(lhs);
-					call.Arguments.push_back(rhs);
+
+					if (!flipped) {
+						call.Arguments.push_back(lhs);
+						call.Arguments.push_back(rhs);
+					}
+					else {
+						call.Arguments.push_back(rhs);
+						call.Arguments.push_back(lhs);
+					}
 
 					call.Function.Symbol = op_func_metadata->Name;
-
 
 					IRSSAValue* op_result = (IRSSAValue*)ExpressionCodeGen(AST(call));
 
@@ -1064,6 +1125,8 @@ namespace Glass
 
 		ssa_value->SSA = IRssa->ID;
 
+		m_Metadata.RegExprType(ssa_value->SSA, left_type);
+
 		return ssa_value;
 	}
 
@@ -1073,7 +1136,7 @@ namespace Glass
 		auto right = binaryExpr->Right;
 
 		if (left->GetType() == NodeType::Identifier) {
-			IRSSAValue* right_val = (IRSSAValue*)ExpressionCodeGen(binaryExpr->Right);
+			IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
 			u64 var_ssa_id = GetVariableSSA(((Identifier*)left)->Symbol.Symbol);
 			IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
@@ -1133,15 +1196,20 @@ namespace Glass
 			return nullptr;
 		}
 		else {
-			if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
-				return nullptr;
-			}
-			if ((call->Arguments.size() < metadata->Arguments.size())) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
-				return nullptr;
+			if (metadata->Arguments.size() != 0) {
+
+				if (metadata->Arguments[metadata->Arguments.size() - 1].Variadic == false) {
+					if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic) {
+						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
+						PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
+						return nullptr;
+					}
+					if ((call->Arguments.size() < metadata->Arguments.size())) {
+						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
+						PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
+						return nullptr;
+					}
+				}
 			}
 		}
 
@@ -1236,7 +1304,7 @@ namespace Glass
 						type.ID = arg_ssa->Type;
 					}
 
-					if (type.ID != IR_any)
+					if (decl_arg->Tipe.ID != IR_any && !decl_arg->Variadic)
 					{
 						bool type_mismatch = !CheckTypeConversion(decl_arg->Tipe.ID, type.ID);
 
@@ -1254,11 +1322,22 @@ namespace Glass
 						}
 					}
 
-					if (decl_arg->Tipe.Pointer) {
-						arg = GetExpressionByValue(call->Arguments[i]);
+					if (!decl_arg->Variadic) {
+						if (decl_arg->Tipe.ID != IR_any)
+						{
+							if (decl_arg->Tipe.Pointer) {
+								arg = GetExpressionByValue(call->Arguments[i]);
+							}
+							else {
+								arg = IR(IRSSAValue(arg_SSAID));
+							}
+						}
+						else {
+							arg = PassAsAny(call->Arguments[i]);
+						}
 					}
 					else {
-						arg = IR(IRSSAValue(arg_SSAID));
+						arg = PassAsVariadicArray(i, call->Arguments, decl_arg);
 					}
 				}
 				else {
@@ -1266,6 +1345,11 @@ namespace Glass
 				}
 
 				ir_call.Arguments.push_back(arg);
+				if (decl_arg != nullptr) {
+					if (decl_arg->Variadic) {
+						break;
+					}
+				}
 			}
 
 		}
@@ -1331,7 +1415,14 @@ namespace Glass
 
 				const auto var_metadata = m_Metadata.GetVariableMetadata(var_ssa);
 
-				struct_id = m_Metadata.GetStructIDFromType(var_metadata->Tipe.ID);
+				if (!var_metadata->Tipe.Array) {
+					struct_id = m_Metadata.GetStructIDFromType(var_metadata->Tipe.ID);
+				}
+
+				if (var_metadata->Tipe.Array) {
+					struct_id = m_Metadata.GetStructIDFromType(IR_array);
+				}
+
 				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
 				object_ssa_id = var_ssa;
 
@@ -1417,42 +1508,65 @@ namespace Glass
 
 		type = obj_expr_type.ID;
 
-		// 		obj_address_ssa = object->SSA;
-		// 
-		// 		// 		if (obj_ssa->ReferenceType) {
-		// 		// 
-		// 		// 			Identifier* identifier = (Identifier*)arrayAccess->Object;
-		// 		// 
-		// 		// 			type = obj_ssa->ReferenceType;
-		// 		// 			obj_address_ssa = m_Metadata.GetVariableSSA(identifier->Symbol.Symbol);
-		// 		// 		}
-		//type = obj_ssa->Type;
-
-		if (!obj_expr_type.Pointer) {
+		if (!obj_expr_type.Pointer && !obj_expr_type.Array) {
 			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
 			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator",MessageType::Warning });
 		}
 
+		u64 base_address_ssa = 0;
+
+		//Size Of
 		auto sizeof_ssa = CreateIRSSA();
 
 		sizeof_ssa->Value = IR(IRSizeOF(type));
 		sizeof_ssa->Type = IR_u64;
 
+		// Ptr Mul
 		auto ptr_mul_ssa = CreateIRSSA();
 
 		ptr_mul_ssa->Value = IR(IRMUL(index, IR(IRSSAValue(sizeof_ssa->ID))));
 		ptr_mul_ssa->Type = IR_u64;
 
-		auto ptr_as_value = CreateIRSSA();
+		//Ptr As Value
+		if (!obj_expr_type.Array) {
+			auto ptr_as_value = CreateIRSSA();
 
-		ptr_as_value->Value = IR(IRAddressAsValue(obj_address_ssa));
-		ptr_as_value->Type = IR_u64;
+			ptr_as_value->Value = IR(IRAddressAsValue(obj_address_ssa));
+			ptr_as_value->Type = IR_u64;
 
+			base_address_ssa = ptr_as_value->ID;
+		}
+		else {
+			IRMemberAccess* type_member_access = IR(IRMemberAccess());
+
+			IRSSA* type_member_access_ssa = CreateIRSSA();
+
+			type_member_access->ObjectSSA = obj_address_ssa;
+			type_member_access->MemberID = 1;
+			type_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
+
+			type_member_access_ssa->Value = type_member_access;
+			type_member_access_ssa->Type = IR_u64;
+
+			auto ir_load_ssa = CreateIRSSA();
+
+			IRLoad* ir_load = IR(IRLoad());
+			ir_load->SSAddress = type_member_access_ssa->ID;
+			ir_load->Type = IR_u64;
+
+			ir_load_ssa->Value = ir_load;
+			ir_load_ssa->Type = IR_u64;
+
+			base_address_ssa = ir_load_ssa->ID;
+		}
+
+		// Ptr Add
 		auto ptr_add_ssa = CreateIRSSA();
 
-		ptr_add_ssa->Value = IR(IRADD(IR(IRSSAValue(ptr_mul_ssa->ID)), IR(IRSSAValue(ptr_as_value->ID))));
+		ptr_add_ssa->Value = IR(IRADD(IR(IRSSAValue(ptr_mul_ssa->ID)), IR(IRSSAValue(base_address_ssa))));
 		ptr_add_ssa->Type = IR_u64;
 
+		//Final Address
 		auto address_ssa = CreateIRSSA();
 
 		address_ssa->Value = IR(IRSSAValue(ptr_add_ssa->ID));
@@ -1460,6 +1574,7 @@ namespace Glass
 
 		Glass::Type expr_type = obj_expr_type;
 		expr_type.Pointer--;
+		expr_type.Array = false;
 
 		m_Metadata.RegExprType(address_ssa->ID, expr_type);
 
@@ -1527,6 +1642,25 @@ namespace Glass
 		return IR(IRSSAValue(ssa->ID));
 	}
 
+	IRInstruction* Compiler::CastCodeGen(const CastNode* cast)
+	{
+		auto expr_value = (IRSSAValue*)GetExpressionByValue(cast->Expr);
+
+		auto new_ssa = CreateIRSSA();
+
+		new_ssa->Type = m_Metadata.GetType(cast->Type->Symbol.Symbol);
+		new_ssa->Pointer = cast->Type->Pointer;
+		new_ssa->Value = IR(IRSSAValue(expr_value->SSA));
+
+		Glass::Type new_type;
+		new_type.ID = new_ssa->Type;
+		new_type.Pointer = new_ssa->Pointer;
+
+		m_Metadata.RegExprType(new_ssa->ID, new_type);
+
+		return IR(IRSSAValue(new_ssa->ID));
+	}
+
 	IRInstruction* Compiler::RefCodeGen(const RefNode* refNode)
 	{
 		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(refNode->What);
@@ -1547,9 +1681,42 @@ namespace Glass
 		return IR(IRSSAValue(ir_ssa->ID));
 	}
 
-	IRInstruction* Compiler::DeRefCodeGen(const RefNode* deRefNode)
+	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{
-		return nullptr;
+		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(deRefNode->What);
+		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
+
+		auto ir_load_ssa = CreateIRSSA();
+
+		IRLoad* ir_load = IR(IRLoad());
+
+		{
+			ir_load->SSAddress = expr_value->SSA;
+			ir_load->Type = exprType.ID;
+			ir_load->ReferencePointer = true;
+		}
+
+		ir_load_ssa->Value = ir_load;
+		ir_load_ssa->Type = ir_load->Type;
+		ir_load_ssa->Pointer = 1;
+
+		IRDeRef* ssa_value = IR(IRDeRef(ir_load_ssa->ID));
+
+		IRSSA* ir_ssa = CreateIRSSA();
+		ir_ssa->Type = exprType.ID;
+		//@TODO: fix member access return non pointer type where it shoudlnt
+		if (exprType.Pointer) {
+			ir_ssa->Pointer = exprType.Pointer - 1;
+		}
+
+		ir_ssa->Value = ssa_value;
+
+		Glass::Type expr_type = exprType;
+		expr_type.Pointer;
+
+		m_Metadata.RegExprType(ir_ssa->ID, expr_type);
+
+		return IR(IRSSAValue(ir_ssa->ID));
 	}
 
 	IRSSAValue* Compiler::GetExpressionByValue(const Expression* expr)
@@ -1634,28 +1801,32 @@ namespace Glass
 				}
 
 				const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
+				if (!metadata->Tipe.Array) {
+					IRLoad load;
+					load.SSAddress = ir_address->SSA;
+					load.ReferencePointer = metadata->Tipe.Pointer > 0;
 
-				IRLoad load;
-				load.SSAddress = ir_address->SSA;
-				load.ReferencePointer = metadata->Tipe.Pointer > 0;
+					IRSSA* ssa = CreateIRSSA();
 
-				IRSSA* ssa = CreateIRSSA();
+					IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
 
-				IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
+					load.Type = metadata->Tipe.ID;
 
-				load.Type = metadata->Tipe.ID;
+					ssa->Type = metadata->Tipe.ID;
+					ssa->Value = IR(load);
+					ssa->Pointer = metadata->Tipe.Pointer > 0;
 
-				ssa->Type = metadata->Tipe.ID;
-				ssa->Value = IR(load);
-				ssa->Pointer = metadata->Tipe.Pointer > 0;
+					ssa->Reference = true;
+					ssa->ReferenceType = metadata->Tipe.ID;
+					ssa->PointerReference = metadata->Tipe.Pointer > 0;
 
-				ssa->Reference = true;
-				ssa->ReferenceType = metadata->Tipe.ID;
-				ssa->PointerReference = metadata->Tipe.Pointer > 0;
+					m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
-				m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
-
-				return IR(IRSSAValue(ssa->ID));
+					return IR(IRSSAValue(ssa->ID));
+				}
+				else {
+					return ir_address;
+				}
 			}
 		}
 		break;
@@ -1663,6 +1834,198 @@ namespace Glass
 			return (IRSSAValue*)ExpressionCodeGen(expr);
 			break;
 		}
+	}
+
+	IRSSAValue* Compiler::PassAsAny(const Expression* expr)
+	{
+		IRSSAValue* expr_result = GetExpressionByValue(expr);
+
+		const Glass::Type& expr_type = m_Metadata.GetExprType(expr_result->SSA);
+
+		if (expr_type.ID == IR_any) {
+			return expr_result;
+		}
+
+		IRSSA* any_ssa = CreateIRSSA();
+		any_ssa->Type = m_Metadata.GetType("Any");
+
+		//type
+		{
+			IRSSA* ir_address_of = CreateIRSSA();
+
+			IRInstruction* address_of_val = IR(IRSSAValue(any_ssa->ID));
+			ir_address_of->Value = IR(IRAddressOf(address_of_val));
+			ir_address_of->Type = IR_u64;
+
+			IRMemberAccess* type_member_access = IR(IRMemberAccess());
+
+			IRSSA* type_member_access_ssa = CreateIRSSA();
+
+			type_member_access->ObjectSSA = ir_address_of->ID;
+			type_member_access->MemberID = 0;
+			type_member_access->StructID = m_Metadata.GetStructIDFromType(any_ssa->Type);
+
+			type_member_access_ssa->Value = type_member_access;
+			type_member_access_ssa->Type = IR_u64;
+			IRStore* ir_store = IR(IRStore());
+
+			ir_store->AddressSSA = type_member_access_ssa->ID;
+			ir_store->Type = IR_u64;
+
+			NumericLiteral Node;
+			Node.Val.Int = expr_type.ID;
+			Node.type = NumericLiteral::Type::Int;
+
+			ir_store->Data = (IRSSAValue*)ExpressionCodeGen(AST(Node));
+
+			IRSSA* ir_store_ssa = CreateIRSSA();
+			ir_store_ssa->Value = ir_store;
+			ir_store_ssa->Type = IR_u64;
+		}
+
+
+		//data
+		{
+			IRSSA* ir_address_of = CreateIRSSA();
+
+			IRInstruction* address_of_val = IR(IRSSAValue(any_ssa->ID));
+			ir_address_of->Value = IR(IRAddressOf(address_of_val));
+			ir_address_of->Type = IR_u64;
+
+			IRMemberAccess* type_member_access = IR(IRMemberAccess());
+
+			IRSSA* type_member_access_ssa = CreateIRSSA();
+
+			type_member_access->ObjectSSA = ir_address_of->ID;
+			type_member_access->MemberID = 1;
+			type_member_access->StructID = m_Metadata.GetStructIDFromType(any_ssa->Type);
+
+			type_member_access_ssa->Value = type_member_access;
+			type_member_access_ssa->Type = IR_u64;
+			IRStore* ir_store = IR(IRStore());
+
+			ir_store->AddressSSA = type_member_access_ssa->ID;
+			ir_store->Type = IR_u64;
+
+			if (expr_type.Pointer) {
+				ir_store->Data = IR(IRSSAValue(expr_result->SSA));
+			}
+			else {
+				IRSSA* ir_address_data = CreateIRSSA();
+
+				IRInstruction* address_of_val = IR(IRSSAValue(expr_result->SSA));
+				ir_address_data->Value = IR(IRAddressOf(address_of_val));
+				ir_address_data->Type = IR_u64;
+
+				ir_store->Data = IR(IRSSAValue(ir_address_data->ID));
+			}
+
+			IRSSA* ir_store_ssa = CreateIRSSA();
+			ir_store_ssa->Value = ir_store;
+			ir_store_ssa->Type = IR_u64;
+		}
+
+		Glass::Type result_type;
+		result_type.ID = any_ssa->Type;
+
+		m_Metadata.RegExprType(any_ssa->ID, result_type);
+
+		return IR(IRSSAValue(any_ssa->ID));
+	}
+
+	IRSSAValue* Compiler::PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg)
+	{
+		u64 element_type = decl_arg->Tipe.ID;
+
+		IRSSA* array_ssa = CreateIRSSA();
+		array_ssa->Type = IR_array;
+
+		IRSSA* array_address = CreateIRSSA();
+		array_address->Type = IR_u64;
+		array_address->Value = IR(IRAddressOf(IR(IRSSAValue(array_ssa->ID))));
+
+		//data
+		{
+			IRMemberAccess* data_member_access = IR(IRMemberAccess());
+
+			IRSSA* data_member_access_ssa = CreateIRSSA();
+
+			data_member_access->ObjectSSA = array_address->ID;
+			data_member_access->MemberID = 1;
+			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
+
+			data_member_access_ssa->Value = data_member_access;
+			data_member_access_ssa->Type = IR_u64;
+
+
+			IRArrayAllocate* array_allocate = IR(IRArrayAllocate());
+
+			array_allocate->Type = element_type;
+
+			std::vector<u64> array_data_ids;
+
+			for (size_t i = start; i < arguments.size(); i++)
+			{
+				auto a = arguments[i];
+				if (element_type != IR_any) {
+					array_data_ids.push_back(GetExpressionByValue(a)->SSA);
+				}
+				else {
+					array_data_ids.push_back(PassAsAny(a)->SSA);
+				}
+			}
+
+			array_allocate->Data = array_data_ids;
+
+			IRSSA* arguments_data = CreateIRSSA();
+			arguments_data->Value = array_allocate;
+			arguments_data->Type = element_type;
+			arguments_data->Array = true;
+
+			IRSSA* arguments_address = CreateIRSSA();
+			arguments_address->Type = IR_u64;
+			arguments_address->Value = IR(IRAddressOf(IR(IRSSAValue(arguments_data->ID))));
+
+			IRStore* data_store = IR(IRStore());
+
+			data_store->AddressSSA = data_member_access_ssa->ID;
+			data_store->Data = IR(IRSSAValue(arguments_address->ID));
+			data_store->Type = IR_u64;
+
+			auto data_store_ssa = CreateIRSSA();
+
+			data_store_ssa->Value = data_store;
+			data_store_ssa->Type = IR_u64;
+		}
+		//count
+		{
+			IRMemberAccess* count_member_access = IR(IRMemberAccess());
+
+			IRSSA* count_member_access_ssa = CreateIRSSA();
+
+			count_member_access->ObjectSSA = array_address->ID;
+			count_member_access->MemberID = 0;
+			count_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
+
+			count_member_access_ssa->Value = count_member_access;
+			count_member_access_ssa->Type = IR_u64;
+
+			IRStore* data_store = IR(IRStore());
+			data_store->AddressSSA = count_member_access_ssa->ID;
+
+			NumericLiteral Node;
+			Node.Val.Int = arguments.size() - start;
+			Node.type = NumericLiteral::Type::Int;
+
+			data_store->Data = (IRSSAValue*)ExpressionCodeGen(AST(Node));
+			data_store->Type = IR_u64;
+
+			auto store_ssa = CreateIRSSA();
+			store_ssa->Type = IR_u64;
+			store_ssa->Value = data_store;
+		}
+
+		return IR(IRSSAValue(array_ssa->ID));
 	}
 
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)

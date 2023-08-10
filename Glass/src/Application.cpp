@@ -89,9 +89,12 @@ namespace Glass
 			code = compiler.CodeGen();
 			m_CompilerEnd = std::chrono::high_resolution_clock::now();
 
-			for (const auto inst : code->Instructions) {
-				std::string inst_string = inst->ToString();
-				GS_CORE_INFO("\n" + inst_string);
+			if (m_Options.DumpIR)
+			{
+				for (const auto inst : code->Instructions) {
+					std::string inst_string = inst->ToString();
+					GS_CORE_INFO("\n" + inst_string);
+				}
 			}
 
 			for (const CompilerMessage& msg : compiler.GetMessages()) {
@@ -119,6 +122,10 @@ namespace Glass
 			}
 		}
 
+		if (!m_Options.DumpIR) {
+			GS_CORE_INFO("IR Generation Done");
+		}
+
 		if (compilation_successful)
 		{
 			m_TranspilerStart = std::chrono::high_resolution_clock::now();
@@ -136,7 +143,13 @@ namespace Glass
 				fs_path output = fs_path(m_Options.Output);
 				fs_path input = "generated.c";
 
-				std::string compiler_cmd = fmt::format("clang -w {}", input.string());
+				std::string libraries;
+
+				for (auto& library : m_Options.CLibs) {
+					libraries.push_back(' ');
+					libraries += library;
+				}
+				std::string compiler_cmd = fmt::format("cl.exe /w /nologo {} {} /IGNORE:4217", input.string(), libraries);
 
 				GS_CORE_WARN("Running: {}", compiler_cmd);
 				auto clang_start = std::chrono::high_resolution_clock::now();
@@ -155,11 +168,11 @@ namespace Glass
 				auto compiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_CompilerEnd - m_CompilerStart).count() / 1000.0f;
 				auto transpiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_TranspilerEnd - m_TranspilerStart).count() / 1000.0f;
 
-				if (false) {
+				if (true) {
 					GS_CORE_WARN("Timings: ");
-					GS_CORE_WARN("Clang: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - clang_start).count() / 1000.0f);
+					GS_CORE_WARN("CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - clang_start).count() / 1000.0f);
 					GS_CORE_WARN("Total: {}", lexer_time + parser_time + compiler_time + transpiler_time);
-					GS_CORE_WARN("Total With Clang: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - m_LexerStart).count() / 1000.0f);
+					GS_CORE_WARN("Total With CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - m_LexerStart).count() / 1000.0f);
 					GS_CORE_WARN("Lexer: {}", lexer_time);
 					GS_CORE_WARN("Parser: {}", parser_time);
 					GS_CORE_WARN("Compiler: {}", compiler_time);
@@ -261,6 +274,11 @@ namespace Glass
 				}
 			}
 			else {
+				if (arg == "--ir") {
+					options.DumpIR = true;
+					continue;
+				}
+
 				if (!FindStringIC(arg, "-")) {
 					if (std::filesystem::exists(arg)) {
 						options.Files.push_back(arg);

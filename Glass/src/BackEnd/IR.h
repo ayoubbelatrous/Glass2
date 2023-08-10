@@ -25,6 +25,9 @@ namespace Glass
 		IR_bool,
 
 		IR_any,
+
+		IR_array,
+
 		IR_typeinfo,
 	};
 
@@ -49,7 +52,11 @@ namespace Glass
 		IR_f64,
 
 		IR_bool,
+
 		IR_any,
+
+		IR_array,
+
 		IR_typeinfo,
 	};
 
@@ -81,12 +88,14 @@ namespace Glass
 		SizeOf,
 		Break,
 		Ref,
+		DeRef,
 		TypeOf,
 		Equal,
 		NotEqual,
 		GreaterThan,
 		LesserThan,
 		ForeignFunction,
+		ArrayAllocate,
 		TranslationUnit,
 	};
 
@@ -273,6 +282,7 @@ namespace Glass
 
 		u64 Type;
 		u64 Pointer = false;
+		bool Array = false;
 
 		RegType SSAType = RegType::None;
 
@@ -772,6 +782,38 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::LesserThan;
+		}
+	};
+
+	struct IRArrayAllocate : public IRInstruction {
+
+		u64 ID;
+		u64 Type;
+		std::vector<u64> Data;
+
+		virtual std::string ToString() const override {
+			return "ArrayAllocate()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::ArrayAllocate;
+		}
+	};
+
+	struct IRDeRef : public IRInstruction {
+		u64 ID = 0;
+		u64 SSA = 0;
+
+		IRDeRef(u64 ssa)
+			:SSA(ssa) {}
+
+		virtual std::string ToString() const override
+		{
+			return "<<";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::DeRef;
 		}
 	};
 

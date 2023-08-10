@@ -91,6 +91,7 @@ namespace Glass
 	{
 		std::string Name;
 		Type Tipe;
+		bool Variadic = false;
 
 		bool PolyMorphic = false;
 		u64 PolyMorhID = 0;
@@ -318,9 +319,12 @@ namespace Glass
 			}
 
 			const u64 GetType(const std::string& type_name) const {
-				if (m_TypeNames.find(type_name) != m_TypeNames.end())
+				if (m_TypeNames.find(type_name) != m_TypeNames.end()) {
 					return m_TypeNames.at(type_name);
-				return (u64)-1;
+				}
+				else {
+					return (u64)-1;
+				}
 			}
 
 			u64 GetVariableSSA(const std::string& name) const {
@@ -466,11 +470,14 @@ namespace Glass
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
+		IRInstruction* CastCodeGen(const CastNode* typeof);
 
 		IRInstruction* RefCodeGen(const RefNode* refNode);
-		IRInstruction* DeRefCodeGen(const RefNode* deRefNode);
+		IRInstruction* DeRefCodeGen(const DeRefNode* deRefNode);
 
 		IRSSAValue* GetExpressionByValue(const Expression* expr);
+		IRSSAValue* PassAsAny(const Expression* expr);
+		IRSSAValue* PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();

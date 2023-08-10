@@ -26,6 +26,7 @@ namespace Glass
 
 		bool GenerateDebugInfo = false;
 		bool Verbose = true;
+		bool DumpIR = false;
 
 		std::vector<std::string> CIncludes;
 		std::vector<std::string> CLibs;

@@ -31,6 +31,7 @@ namespace Glass
 		DeReference,
 		TypeOf,
 		Operator,
+		Cast,
 		ArrayAccess,
 	};
 
@@ -734,6 +735,27 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return statement->GetLocation();
+		}
+	};
+
+	class CastNode : public Expression
+	{
+	public:
+
+		Expression* Expr;
+		TypeExpression* Type;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Cast;
+		}
+
+		virtual std::string ToString() const {
+			return "CAST " + Type->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Type->GetLocation();
 		}
 	};
 }

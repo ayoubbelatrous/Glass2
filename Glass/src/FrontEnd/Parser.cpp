@@ -65,6 +65,9 @@ namespace Glass
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Dollar && At(1).Type == TokenType::Symbol;
 
+
+				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(3).Type == TokenType::Period; // i32[..]
+
 				i32 star_counter = 1;
 
 				if (At().Type == TokenType::Symbol) {
@@ -199,6 +202,19 @@ namespace Glass
 
 		if (At().Type == TokenType::OpenBracket) {
 			Consume();
+
+			if (ExpectedToken(TokenType::Period)) {
+				Abort("Expected . in type");
+			}
+
+			Consume();
+
+			if (ExpectedToken(TokenType::Period)) {
+				Abort("Expected . in type");
+			}
+
+			Consume();
+
 			if (ExpectedToken(TokenType::CloseBracket)) {
 				Abort("Expected ']' after type Instead Got");
 			}
@@ -571,6 +587,35 @@ namespace Glass
 		return Application::AllocateAstNode(Node);
 	}
 
+	Expression* Parser::ParseCastExpr()
+	{
+		CastNode Node;
+
+		if (ExpectedToken(TokenType::Symbol)) {
+			return ParseExpression();
+		}
+
+		Consume();
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' on cast expression");
+		}
+
+		Consume();
+
+		Node.Type = (TypeExpression*)ParseTypeExpr();
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected '(' on cast expression");
+		}
+
+		Consume();
+
+		Node.Expr = ParseExpression();
+
+		return AST(Node);
+	}
+
 	Expression* Parser::ParseMemberExpr()
 	{
 		Expression* left = ParseCallExpr();
@@ -672,10 +717,14 @@ namespace Glass
 		break;
 		case TokenType::Symbol:
 		{
-			Identifier identifier;
-			identifier.Symbol = Consume();
-
-			return Application::AllocateAstNode(identifier);
+			if (At().Symbol == "cast") {
+				return ParseCastExpr();
+			}
+			else {
+				Identifier identifier;
+				identifier.Symbol = Consume();
+				return AST(identifier);
+			}
 		}
 		case TokenType::BOL:
 		{
