@@ -45,6 +45,10 @@ namespace Glass
 			{
 				return ParseIf();
 			}
+			else if (At().Symbol == "enum")
+			{
+				return ParseEnum();
+			}
 			else if (At().Symbol == "while")
 			{
 				return ParseWhile();
@@ -332,6 +336,76 @@ namespace Glass
 		Consume();
 
 		return Application::AllocateIRNode(Node);
+	}
+
+	Statement* Parser::ParseEnum()
+	{
+		Consume();
+
+		EnumNode Node;
+
+		if (At().Type == TokenType::Pound) {
+
+			Consume();
+
+			if (ExpectedToken(TokenType::Symbol)) {
+				Abort("Expected a directive name after '#', Instead Got: ");
+			}
+
+			if (At().Symbol == "flags") {
+				Consume();
+				Node.Flags = true;
+			}
+			else {
+				GS_CORE_WARN("Supported enum directives are: #flags");
+				Abort("Invalid Enum Directive:");
+			}
+		}
+
+		if (ExpectedToken(TokenType::Symbol)) {
+			Abort("Expected a name after enum keyword, Instead Got: ");
+		}
+
+		Node.Name = Consume();
+
+		if (ExpectedToken(TokenType::OpenCurly)) {
+			Abort("Expected a '{' after enum name, Instead Got: ");
+		}
+
+		Consume();
+
+		while (At().Type != TokenType::CloseCurly)
+		{
+
+			Expression* expression = ParseExpression();
+
+			if (expression == nullptr) {
+				break;
+			}
+
+			if (expression->GetType() != NodeType::Identifier) {
+				Abort("Expected Identifier Inside enum body, Instead Got: ");
+			}
+
+			Node.Members.push_back((Identifier*)expression);
+
+			if (At().Type == TokenType::CloseCurly)
+				break;
+		}
+
+		if (ExpectedToken(TokenType::CloseCurly)) {
+			Abort("Expected a '}', Instead Got: ");
+		}
+
+		Consume();
+
+		if (ExpectedToken(TokenType::SemiColon)) {
+			Abort("Expected a ';', Instead Got: ");
+		}
+
+		Consume();
+
+		return AST(Node);
 	}
 
 	Statement* Parser::ParseScope()

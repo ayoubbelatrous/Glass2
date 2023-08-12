@@ -67,4 +67,5 @@ fn print_type($T any) {
 }
 
 fn main() {
+
 }

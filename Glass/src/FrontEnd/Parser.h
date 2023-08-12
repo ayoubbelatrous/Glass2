@@ -34,6 +34,8 @@ namespace Glass
 
 		Statement* ParseStruct();
 
+		Statement* ParseEnum();
+
 		Expression* ParseExpression();
 
 		Statement* ParsePrimaryExpr();

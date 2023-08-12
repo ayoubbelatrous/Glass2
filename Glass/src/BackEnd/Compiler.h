@@ -24,6 +24,7 @@ namespace Glass
 		Variable,
 		Function,
 		Type,
+		Enum,
 	};
 
 	enum class MessageType
@@ -31,6 +32,34 @@ namespace Glass
 		Info,
 		Warning,
 		Error,
+	};
+
+	struct EnumMemberMetadata
+	{
+		std::string Name;
+		u64 Value = 0;
+	};
+
+	struct EnumMetadata
+	{
+		Token Name;
+
+		std::unordered_map<std::string, u64> MemberIndices;
+		std::vector<EnumMemberMetadata> Members;
+
+		void InsertMember(const std::string& name, const EnumMemberMetadata& member) {
+			Members.push_back(member);
+			MemberIndices[name] = Members.size() - 1;
+		}
+
+		const EnumMemberMetadata* GetMember(const std::string& member) const {
+			auto it = MemberIndices.find(member);
+			if (it != MemberIndices.end()) {
+				return &Members[it->second];
+			}
+
+			return nullptr;
+		}
 	};
 
 	struct CompilerMessage
@@ -274,6 +303,10 @@ namespace Glass
 			std::unordered_map<std::string, u64> m_StructNames;
 			std::unordered_map<u64, StructMetadata> m_StructMetadata;
 
+			std::unordered_map<u64, u64> m_TypeToEnum;
+			std::unordered_map<std::string, u64> m_EnumNames;
+			std::unordered_map<u64, EnumMetadata> m_Enums;
+
 			std::unordered_map<u64, std::unordered_map<u64, Type>> m_ExpressionType;
 
 			std::unordered_map<Operator, std::unordered_map<OperatorQuery, u64, OperatorQueryHasher>> m_Operators;
@@ -474,12 +507,58 @@ namespace Glass
 					return SymbolType::Variable;
 				}
 
+				if (GetEnum(symbol) != nullptr) {
+					return SymbolType::Enum;
+				}
+
 				if (GetType(symbol) != (u64)-1) {
 					return SymbolType::Type;
 				}
 
 				return SymbolType::None;
 			}
+
+			void RegisterEnum(u64 ID, u64 TypeID, const EnumMetadata& metadata)
+			{
+				m_EnumNames[metadata.Name.Symbol] = ID;
+				m_Enums[ID] = metadata;
+				m_TypeToEnum[TypeID] = ID;
+
+				//@TODO: Set correct enum size
+				RegisterType(TypeID, metadata.Name.Symbol, 8);
+				m_TypeFlags[TypeID] |= FLAG_NUMERIC_TYPE;
+			}
+
+			const EnumMetadata* GetEnumFromType(u64 type_id) {
+				auto it = m_TypeToEnum.find(type_id);
+
+				if (it != m_TypeToEnum.end()) {
+					return &m_Enums[it->second];
+				}
+
+				return nullptr;
+			}
+
+			const EnumMetadata* GetEnum(u64 enum_id) {
+				auto it = m_Enums.find(enum_id);
+
+				if (it != m_Enums.end()) {
+					return &it->second;
+				}
+
+				return nullptr;
+			}
+
+			const EnumMetadata* GetEnum(const std::string& name) {
+				auto it = m_EnumNames.find(name);
+
+				if (it != m_EnumNames.end()) {
+					return &m_Enums[it->second];
+				}
+
+				return nullptr;
+			}
+
 		};
 
 		Compiler(std::vector<CompilerFile*> files);
@@ -499,6 +578,8 @@ namespace Glass
 		IRInstruction* ReturnCodeGen(const ReturnNode* returnNode);
 		IRInstruction* StructCodeGen(const StructNode* structNode);
 
+		IRInstruction* EnumCodeGen(const EnumNode* enumNode);
+
 		IRInstruction* IfCodeGen(const IfNode* ifNode);
 		IRInstruction* WhileCodeGen(const WhileNode* ifNode);
 
@@ -511,6 +592,8 @@ namespace Glass
 		IRInstruction* AssignmentCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
+		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
+
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
 		IRInstruction* CastCodeGen(const CastNode* typeof);
@@ -691,6 +774,11 @@ namespace Glass
 			return m_StructIDCounter;
 		}
 
+		u64 GetEnumID() {
+			m_EnumIDCounter++;
+			return m_EnumIDCounter;
+		}
+
 		u64 GetFunctionID() {
 			m_FunctionIDCounter++;
 			return m_FunctionIDCounter;
@@ -707,6 +795,7 @@ namespace Glass
 		u64 m_DATAIDCounter = 1;
 		u64 m_TypeIDCounter = 99;
 		u64 m_StructIDCounter = 99;
+		u64 m_EnumIDCounter = 0;
 
 		std::vector<CompilerMessage> m_Messages;
 		u64 m_CurrentFile = 0;

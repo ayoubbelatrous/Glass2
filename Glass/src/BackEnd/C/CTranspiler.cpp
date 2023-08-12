@@ -136,6 +136,10 @@ typedef struct Any
 			}
 		}
 
+		for (const auto& [ID, metadata] : m_Metadata->m_Enums) {
+			forward_declaration += fmt::format("typedef u64 {0};", metadata.Name.Symbol);
+		}
+
 		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
 			if (metadata.Foreign) {
 

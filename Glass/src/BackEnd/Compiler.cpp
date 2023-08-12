@@ -8,6 +8,10 @@
 #include "Interpeter/Interpeter.h"
 
 #define NULL_ID (u64)-1
+#define MSG_LOC(x) PushMessage(CompilerMessage{ PrintTokenLocation((x->GetLocation())), MessageType::Error })
+#define AST_LOC(x) PrintTokenLocation((x->GetLocation()))
+
+#define FMT_WARN(x, ...) PushMessage(CompilerMessage{ fmt::format(x, __VA_ARGS__), MessageType::Warning})
 
 namespace Glass
 {
@@ -366,6 +370,9 @@ namespace Glass
 			break;
 		case NodeType::StructNode:
 			return StructCodeGen((StructNode*)statement);
+			break;
+		case NodeType::Enum:
+			return EnumCodeGen((EnumNode*)statement);
 			break;
 		case NodeType::If:
 			return IfCodeGen((IfNode*)statement);
@@ -898,6 +905,70 @@ namespace Glass
 		}
 
 		return IR(ir_struct);
+	}
+
+	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode)
+	{
+		{
+			SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
+
+			if (symbol_type == SymbolType::Enum) {
+				const EnumMetadata* previous = m_Metadata.GetEnum(enumNode->Name.Symbol);
+
+				MSG_LOC(enumNode);
+				FMT_WARN("enum '{}' is already defined At: {}", enumNode->Name.Symbol, PrintTokenLocation(previous->Name));
+
+				return nullptr;
+			}
+
+			if (symbol_type != SymbolType::None) {
+				MSG_LOC(enumNode);
+				FMT_WARN("enum '{}' name is already taken", enumNode->Name.Symbol);
+
+				return nullptr;
+			}
+		}
+
+
+		EnumMetadata metadata;
+
+		metadata.Name = enumNode->Name;
+
+		u64 IOTA = 0;
+
+		if (enumNode->Members.size() > 64) {
+			MSG_LOC(enumNode);
+			FMT_WARN("enum #flags '{}' exceeded maximum number of members which is 64,\nif you wish to add more remove #flags directive and unlock 18,446,744,073,709,551,551 more members", enumNode->Name.Symbol);
+			return nullptr;
+		}
+
+		for (Identifier* identifier : enumNode->Members) {
+			EnumMemberMetadata member_metadata;
+
+			member_metadata.Name = identifier->Symbol.Symbol;
+
+			if (enumNode->Flags) {
+				member_metadata.Value = 1ULL << IOTA;
+			}
+			else {
+				member_metadata.Value = IOTA;
+			}
+
+			if (metadata.GetMember(member_metadata.Name)) {
+				MSG_LOC(enumNode);
+				MSG_LOC(identifier);
+				FMT_WARN("enum '{}' .member already declared before", enumNode->Name.Symbol);
+				return nullptr;
+			}
+
+			metadata.InsertMember(member_metadata.Name, member_metadata);
+
+			IOTA++;
+		}
+
+		m_Metadata.RegisterEnum(GetEnumID(), GetTypeID(), metadata);
+
+		return nullptr;
 	}
 
 	IRInstruction* Compiler::IfCodeGen(const IfNode* ifNode)
@@ -1602,6 +1673,15 @@ namespace Glass
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
 	{
+		if (memberAccess->Object->GetType() == NodeType::Identifier) {
+
+			SymbolType symbol_type = m_Metadata.GetSymbolType(((Identifier*)memberAccess->Object)->Symbol.Symbol);
+
+			if (symbol_type == SymbolType::Enum) {
+				return (IRSSAValue*)EnumMemberAccessCodeGen(memberAccess);
+			}
+		}
+
 		u64 struct_id = 0;
 		u64 member_id = 0;
 		u64 object_ssa_id = 0;
@@ -1735,6 +1815,43 @@ namespace Glass
 
 			return IR(address_ssa_val);
 		}
+	}
+
+	IRInstruction* Compiler::EnumMemberAccessCodeGen(const MemberAccess* memberAccess)
+	{
+		Identifier* Object = (Identifier*)memberAccess->Object;
+		Identifier* Member = (Identifier*)memberAccess->Member;
+
+		const EnumMetadata* metadata = m_Metadata.GetEnum(Object->Symbol.Symbol);
+		GS_CORE_ASSERT(metadata, "Can't be null at this point");
+
+		u64 Value = 0;
+
+		if (const EnumMemberMetadata* member = metadata->GetMember(Member->Symbol.Symbol)) {
+			Value = member->Value;
+		}
+		else {
+			MSG_LOC(Member);
+			FMT_WARN("enum '{}' has no member named '{}', defined at '{}'", metadata->Name.Symbol, Member->Symbol.Symbol, PrintTokenLocation(metadata->Name));
+			return nullptr;
+		}
+
+		//@Gross
+		NumericLiteral node;
+		node.Val.Int = Value;
+		node.type = NumericLiteral::Type::Int;
+
+		IRSSAValue* result = (IRSSAValue*)NumericLiteralCodeGen(AST(node));
+
+		Glass::Type Type;
+		Type.ID = m_Metadata.GetType(metadata->Name.Symbol);
+
+		Type.Array = 0;
+		Type.Pointer = 0;
+
+		m_Metadata.RegExprType(result->SSA, Type);
+
+		return result;
 	}
 
 	IRInstruction* Compiler::ArrayAccessCodeGen(const ArrayAccess* arrayAccess)
@@ -2036,7 +2153,18 @@ namespace Glass
 		{
 		case NodeType::MemberAccess:
 		{
-			auto ir_address = (IRSSAValue*)MemberAccessCodeGen((MemberAccess*)expr);
+			MemberAccess* member_access = (MemberAccess*)expr;
+
+			if (member_access->Object->GetType() == NodeType::Identifier) {
+
+				SymbolType symbol_type = m_Metadata.GetSymbolType(((Identifier*)member_access->Object)->Symbol.Symbol);
+
+				if (symbol_type == SymbolType::Enum) {
+					return (IRSSAValue*)EnumMemberAccessCodeGen(member_access);
+				}
+			}
+
+			auto ir_address = (IRSSAValue*)MemberAccessCodeGen(member_access);
 
 			if (ir_address == nullptr)
 				return nullptr;

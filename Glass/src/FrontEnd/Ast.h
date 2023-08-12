@@ -33,6 +33,7 @@ namespace Glass
 		Operator,
 		Cast,
 		ArrayAccess,
+		Enum,
 	};
 
 	enum class Operator
@@ -759,6 +760,29 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Type->GetLocation();
+		}
+	};
+
+	class EnumNode : public Expression
+	{
+	public:
+
+		Token Name;
+		std::vector <Identifier*> Members;
+
+		bool Flags;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Enum;
+		}
+
+		virtual std::string ToString() const {
+			return "Enum";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Name;
 		}
 	};
 }
