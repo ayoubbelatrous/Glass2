@@ -1311,6 +1311,11 @@ namespace Glass
 			IRssa->Value = IR(IRBitAnd(A, B));
 		}
 		break;
+		case Operator::BitOr:
+		{
+			IRssa->Value = IR(IRBitOr(A, B));
+		}
+		break;
 		default:
 			return nullptr;
 			break;

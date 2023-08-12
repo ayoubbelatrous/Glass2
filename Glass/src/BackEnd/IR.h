@@ -101,6 +101,7 @@ namespace Glass
 		GreaterThan,
 		LesserThan,
 		BitAnd,
+		BitOr,
 		ForeignFunction,
 		ArrayAllocate,
 		TranslationUnit,
@@ -846,6 +847,33 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::BitAnd;
+		}
+	};
+
+	struct IRBitOr : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRBitOr() = default;
+		IRBitOr(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "BitOr ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::BitOr;
 		}
 	};
 

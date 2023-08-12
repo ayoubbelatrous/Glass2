@@ -25,6 +25,8 @@ namespace Glass
 		Comma,			// ','
 		Ampersand,		// '&'
 
+		Pipe,			// '|'
+
 		DoubleQoute,	// '"'
 		SingleQoute,	// '''
 

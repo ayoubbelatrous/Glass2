@@ -378,6 +378,7 @@ typedef struct Any
 		case IRNodeType::Equal:
 		case IRNodeType::NotEqual:
 		case IRNodeType::BitAnd:
+		case IRNodeType::BitOr:
 			return OpCodeGen(inst) + ";";
 			break;
 		case IRNodeType::SSAValue:
@@ -808,6 +809,13 @@ typedef struct Any
 			IRBitAnd* bit_and = (IRBitAnd*)op;
 
 			code = fmt::format("__tmp{} & __tmp{}", bit_and->SSA_A->SSA, bit_and->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::BitOr:
+		{
+			IRBitOr* bit_or = (IRBitOr*)op;
+
+			code = fmt::format("__tmp{} | __tmp{}", bit_or->SSA_A->SSA, bit_or->SSA_B->SSA);
 		}
 		break;
 		}

@@ -67,13 +67,13 @@ namespace Glass
 
 		std::string accumulator;
 
-		const std::array<char, 22> splitters =
+		const std::array<char, 23> splitters =
 		{
 			'!',
 			'#',
 			'.',';',',',':',
 
-			'&',
+			'&','|',
 
 			'"','\'',
 
@@ -101,6 +101,7 @@ namespace Glass
 			{':',TokenType::Colon},
 
 			{'&',TokenType::Ampersand},
+			{'|',TokenType::Pipe},
 
 			//{'"',TokenType::DoubleQoute},
 			//{'\'',TokenType::SingleQoute},

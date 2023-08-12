@@ -92,6 +92,9 @@ namespace Glass
 			case TokenType::Ampersand:
 				return Operator::BitAnd;
 				break;
+			case TokenType::Pipe:
+				return Operator::BitOr;
+				break;
 			default:
 				return Operator::Invalid;
 				break;
