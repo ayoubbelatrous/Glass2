@@ -1,0 +1,69 @@
+fn print_any(Any any) : i32
+{
+	if any.type == int {
+		printf("%i", *any.data);
+        return 0;
+	}
+
+	if any.type == i32 {
+		printf("%i", *any.data);
+        return 0;
+	}
+
+    if any.type == u32 {
+		printf("%i", *any.data);
+        return 0;
+	}
+
+    if any.type == u64 {
+		printf("%zu", *any.data);
+        return 0;
+	}
+
+     if any.type == i64 {
+		printf("%zu", *any.data);
+        return 0;
+	}
+
+	if any.type == float {
+		float* f = any.data;
+		printf("%f", *f);
+        return 0;
+	}
+
+	if any.type == f32 {
+		float* f_32 = any.data;
+		printf("%f", *f_32);
+        return 0;
+	}
+
+	if any.type == u8 {
+		printf("%s", any.data);
+        return 0;
+	}
+}
+
+fn print(Any... args) {
+	Any fmt_any = args[0];
+	u8* fmt  = fmt_any.data;
+
+	i32 arg_i = 1;
+	i32 fmt_i = 0;
+
+	i32 fmt_count = strlen(fmt);
+
+	while fmt_i != fmt_count {
+		u8 c = fmt[fmt_i];
+
+		if c == "%"[0] {
+			print_any(args[arg_i]);
+			arg_i = arg_i + 1;
+		}
+
+		if c != "%"[0] {
+			putchar(c);
+		}
+
+		fmt_i = fmt_i + 1;
+	}
+}

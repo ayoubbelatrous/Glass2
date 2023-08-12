@@ -46,22 +46,6 @@ namespace Glass
 
 		header += "typedef u8 bool;		\n";
 
-		header += R"(
-typedef struct type_info
-{	u64 id;
-	bool pointer;
-	const char* name;
-} type_info;
-			)";
-		header += "\n";
-
-		header += R"(
-typedef struct Any
-{	
-	u64 type;
-	u64* data;
-} Any;
-			)";
 		header += "\n";
 
 		header += R"(
@@ -73,9 +57,56 @@ typedef struct Array
 			)";
 		header += "\n";
 
+		header += R"(
+typedef struct TypeInfo
+{	
+	u64 id;
+	bool pointer;
+	const char* name;
+	u64 size;
+} TypeInfo;
+			)";
+		header += "\n";
+
+		header += R"(
+typedef struct TypeInfo_Struct
+{	
+	u64 id;
+	bool pointer;
+	const char* name;
+	u64 size;
+	
+	Array members;
+} TypeInfo_Struct;
+			)";
+
+		header += "\n";
+
+		header += R"(
+typedef struct TypeInfo_Member
+{
+	u64 id;
+	bool pointer;
+	const char* name;
+	u64 size;
+
+	const char* member_name;
+} TypeInfo_Member;
+			)";
+
+		header += "\n";
+
+		header += R"(
+typedef struct Any
+{	
+	u64 type;
+	u64* data;
+} Any;
+			)";
+		header += "\n";
 
 		{
-			header += fmt::format("static const type_info __type_info_table[{}] = ", m_Metadata->m_Types.size());
+			header += fmt::format("static const TypeInfo __type_info_table[{}] = ", m_Metadata->m_Types.size());
 			header += "{\n";
 
 			u64 i = 0;
@@ -215,36 +246,105 @@ typedef struct Array
 			}
 		}
 
-		std::string var_type_table;
+		std::string type_info_code;
+		std::string type_info_struct_member_data;
 
-		if (m_VariableTypeInfo.size() > 0)
+		//Type Info
 		{
-			var_type_table += "\n";
+			{//Base Type Info
+				std::string var_type_table;
 
-			{
-				var_type_table += fmt::format("static const type_info __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
-				var_type_table += "{\n";
+				if (m_VariableTypeInfo.size() > 0)
+				{
+					var_type_table += "\n";
 
-				u64 i = 0;
+					{
+						var_type_table += fmt::format("static const TypeInfo __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
+						var_type_table += "{\n";
 
-				for (const auto& [id, type] : m_VariableTypeInfo) {
-					m_TypeInfoTable[id] = i;
+						u64 i = 0;
 
-					var_type_table += "{";
-					var_type_table += fmt::format(".id={},", type.id);
-					var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
-					var_type_table += fmt::format(".name=\"{}\",", type.name);
-					var_type_table += "},";
+						for (const auto [id, type] : m_VariableTypeInfo) {
+							m_TypeInfoTable[id] = i;
 
-					i++;
+							var_type_table += "{";
+							var_type_table += fmt::format(".id={},", type.id);
+							var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+							var_type_table += fmt::format(".name=\"{}\",", type.name);
+							var_type_table += fmt::format(".size={},", type.size);
+							var_type_table += "},";
+
+							i++;
+						}
+
+						var_type_table += "};\n";
+					}
+					var_type_table += "\n";
 				}
 
-				var_type_table += "};\n";
+				type_info_code += var_type_table;
 			}
-			var_type_table += "\n";
+
+			{//Struct Type Info
+				std::string var_struct_type_table;
+
+				if (m_VariableStructTypeInfo.size() > 0)
+				{
+					var_struct_type_table += "\n";
+
+					{
+						var_struct_type_table += fmt::format("static const TypeInfo_Struct __var_type_info_struct_table[{}] = ", m_VariableStructTypeInfo.size());
+						var_struct_type_table += "{\n";
+
+						u64 i = 0;
+
+						for (const auto [id, type] : m_VariableStructTypeInfo) {
+							m_TypeInfoTable[id] = i;
+
+							var_struct_type_table += "{";
+							var_struct_type_table += fmt::format(".id={},", type.id);
+							var_struct_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+							var_struct_type_table += fmt::format(".name=\"{}\",", type.name);
+							var_struct_type_table += fmt::format(".size={},", type.size);
+
+							std::string member_type_info_name = fmt::format("__struct_{}_members", id);
+
+							type_info_struct_member_data += fmt::format("static const TypeInfo_Member {} [{}]", member_type_info_name, type.members.size());
+							type_info_struct_member_data += "= { \n";
+							for (const TypeInfoMember& member : type.members) {
+								type_info_struct_member_data += "{";
+
+								type_info_struct_member_data += fmt::format(".id={},", member.id);
+								type_info_struct_member_data += fmt::format(".pointer={},", (u64)member.pointer);
+								type_info_struct_member_data += fmt::format(".name=\"{}\",", m_Metadata->GetType(member.id));
+								type_info_struct_member_data += fmt::format(".size={},", m_Metadata->GetTypeSize(member.id));
+								type_info_struct_member_data += fmt::format(".member_name=\"{}\",", member.member_name);
+
+								type_info_struct_member_data += "},";
+							}
+							type_info_struct_member_data += "};\n";
+
+							var_struct_type_table += "\n.members = {";
+							var_struct_type_table += fmt::format(".data = &{},", member_type_info_name);
+							var_struct_type_table += fmt::format(".count = {}", type.members.size());
+							var_struct_type_table += "}\n";
+
+							var_struct_type_table += "},";
+
+							i++;
+						}
+
+						var_struct_type_table += "};\n";
+					}
+					var_struct_type_table += "\n";
+				}
+
+				type_info_code += var_struct_type_table;
+			}
+
 		}
 
-		return fmt::format("{}{}{}{}", header, var_type_table, forward_declaration, code);
+		return fmt::format("{}{}{}{}{}", header, type_info_struct_member_data, type_info_code, forward_declaration, code);
 	}
 
 	std::string CTranspiler::IRCodeGen(IRInstruction* inst)
@@ -277,6 +377,7 @@ typedef struct Array
 		case IRNodeType::DIV:
 		case IRNodeType::Equal:
 		case IRNodeType::NotEqual:
+		case IRNodeType::BitAnd:
 			return OpCodeGen(inst) + ";";
 			break;
 		case IRNodeType::SSAValue:
@@ -466,9 +567,7 @@ typedef struct Array
 		break;
 		case IRNodeType::TypeOf:
 		{
-			IRTypeOf* type_of = (IRTypeOf*)inst;
-			m_VariableTypeInfo[m_VariableTypeInfo.size()] = type_of->Type;
-			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
+			return TypeOfCodeGen((IRTypeOf*)inst);
 		}
 		break;
 		case IRNodeType::ArrayAllocate:
@@ -496,6 +595,22 @@ typedef struct Array
 			return data_str;
 		}
 		break;
+		}
+
+		return "";
+	}
+
+	std::string CTranspiler::TypeOfCodeGen(IRTypeOf* type_of)
+	{
+		if (type_of->typeInfoType == TypeInfoType::Base) {
+			m_VariableTypeInfo[m_VariableTypeInfo.size()] = *type_of->Type;
+
+			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
+		}
+		else if (type_of->typeInfoType == TypeInfoType::Struct) {
+			m_VariableStructTypeInfo[m_VariableStructTypeInfo.size()] = *(TypeInfoStruct*)type_of->Type;
+
+			return fmt::format("(&__var_type_info_struct_table[{}])", m_VariableStructTypeInfo.size() - 1);
 		}
 
 		return "";
@@ -686,6 +801,13 @@ typedef struct Array
 			IRNOTEQ* neq = (IRNOTEQ*)op;
 
 			code = fmt::format("__tmp{} != __tmp{}", neq->SSA_A->SSA, neq->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::BitAnd:
+		{
+			IRBitAnd* bit_and = (IRBitAnd*)op;
+
+			code = fmt::format("__tmp{} & __tmp{}", bit_and->SSA_A->SSA, bit_and->SSA_B->SSA);
 		}
 		break;
 		}

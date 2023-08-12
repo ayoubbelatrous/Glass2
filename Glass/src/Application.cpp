@@ -149,7 +149,22 @@ namespace Glass
 					libraries.push_back(' ');
 					libraries += library;
 				}
-				std::string compiler_cmd = fmt::format("cl.exe /w /nologo {} {} /IGNORE:4217", input.string(), libraries);
+
+				std::string compiler_cmd;
+
+				if (0) {
+					compiler_cmd = fmt::format("cl.exe {} {} /INCREMENTAL:NO /w /nologo", input.string(), libraries);
+				}
+				else {
+
+					std::string libraries_cmd;
+
+					for (auto& library : libraries) {
+						libraries_cmd += "-l" + library;
+					}
+
+					compiler_cmd = fmt::format("tcc.exe -w {} {} ", input.string(), libraries);
+				}
 
 				GS_CORE_WARN("Running: {}", compiler_cmd);
 				auto clang_start = std::chrono::high_resolution_clock::now();

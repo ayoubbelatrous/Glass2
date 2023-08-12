@@ -1,79 +1,233 @@
-#foreign fn printf!(u8* format) : i32 {}
+#foreign fn printf!										(u8 * format) : i32{}
+#foreign fn sprintf!									(u8 * format, u8 * buffer) : i32{}
+#foreign fn fopen										(u8* path, u8* mode) : u64* {}
+#foreign fn fclose										(u64* file) : void{}
+#foreign fn malloc										(u64 size) : u64* {}
+#foreign fn free										(u64 ptr) : void{}
+#foreign fn strlen										(u8* ptr) : u64{}
+#foreign fn memcpy										(u8* dst, u8* src, int count) : u64{}
+#foreign fn putchar										(u8 c) : void {}
+#foreign fn printf!										(u8 * format) : i32{}
 
-#foreign fn fopen(u8* path,u8* mode) : u64* {}
-#foreign fn fclose(u64* file) : void {}
+#foreign struct GLFWwindow								{ i32 null0; };
 
-#foreign fn malloc(i32 size) : void* {}
-#foreign fn free(void* ptr) : void {}
+#foreign fn glfwCreateWindow							(i32 width,i32 height,u8* title,i32* monitor,i32* display) : GLFWwindow* {};
+#foreign fn glfwInit									() : i32 {};
+#foreign fn glfwMakeContextCurrent						(GLFWwindow* window) : void {};
 
-#foreign struct GLFWwindow{
-   i32 null0;
+#foreign fn glfwSwapBuffers								(GLFWwindow* window) : void {};
+#foreign fn glfwPollEvents								() : void {};
+
+#foreign fn glfwWindowShouldClose						(GLFWwindow* window) : i32 {};
+#foreign fn glfwGetKey									(GLFWwindow* window,i32 keyCode) : i32 {};
+
+#foreign fn gladInit									() : void {};
+#foreign fn glClearColor								(f32 r, f32 g, f32 b, f32 a) : void {};
+#foreign fn glClear										(i32 mask) : void {};
+
+#foreign fn glBegin										(i32 mode) : void {}
+#foreign fn glEnd										() : void {}
+
+#foreign fn glColor3f									(f32 r, f32 g, f32 b) : void {}
+#foreign fn glVertex2f									(f32 x, f32 y) : void {}
+
+struct vec3
+{
+	f32 x;
+	f32 y;
+	f32 z;
 };
 
-#foreign fn glfwCreateWindow(i32 width,i32 height,u8* title,i32* monitor,i32* display) : GLFWwindow* {};
-#foreign fn glfwInit() : void {};
-#foreign fn glfwMakeContextCurrent(GLFWwindow* window) : void {};
-
-#foreign fn glfwSwapBuffers(GLFWwindow* window) : void {};
-#foreign fn glfwPollEvents() : void {};
-
-#foreign fn glfwWindowShouldClose(GLFWwindow* window) : i32 {};
-#foreign fn glfwGetKey(GLFWwindow* window,i32 keyCode) : i32 {};
-
-#foreign fn gladInit() : i32 {};
-#foreign fn glClearColor(f32 r,f32 g, f32 b, f32 a) : void {};
-#foreign fn glClear(i32 mask) : void {};
-
-struct vec2 {
-   f32 x;
-   f32 y;
+struct mat4
+{
+	f32 x;	f32 y;	f32 z;	f32 w;
+	f32 x1;	f32 y1;	f32 z1;	f32 w1;
+	f32 x2;	f32 y2;	f32 z2;	f32 w2;
+	f32 x3;	f32 y3;	f32 z3;	f32 w3;
 };
 
-struct vec3 {
-   f32 x;
-   f32 y;
-   f32 z;
+fn add_vec3(vec3 lhs, vec3 rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x + rhs.x;
+	result.y = lhs.y + rhs.y;
+	result.z = lhs.z + rhs.z;
+	return result;
+}
+
+fn sub_vec3(vec3 lhs, vec3 rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x - rhs.x;
+	result.y = lhs.y - rhs.y;
+	result.z = lhs.z - rhs.z;
+	return result;
+}
+
+fn mul_vec3(vec3 lhs, vec3 rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x * rhs.x;
+	result.y = lhs.y * rhs.y;
+	result.z = lhs.z * rhs.z;
+	return result;
+}
+
+fn div_vec3(vec3 lhs, vec3 rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x / rhs.x;
+	result.y = lhs.y / rhs.y;
+	result.z = lhs.z / rhs.z;
+	return result;
+}
+
+fn transform_vec3_mat4(vec3 lhs, mat4 rhs) : vec3
+{
+	vec3 test = lhs;
+	return test;
+}
+
+fn add_vec3_f32(vec3 lhs, float rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x + rhs;
+	result.y = lhs.y + rhs;
+	result.z = lhs.z + rhs;
+	return result;
+}
+
+fn add_vec3_float(vec3 lhs, float rhs) : vec3
+{
+	vec3 result;
+	result.x = lhs.x + rhs;
+	result.y = lhs.y + rhs;
+	result.z = lhs.z + rhs;
+	return result;
+}
+
+#operator+ add_vec3;
+#operator- sub_vec3;
+#operator* mul_vec3;
+#operator/ div_vec3;
+
+#operator+ add_vec3_float;
+#operator+ add_vec3_f32;
+
+#operator* transform_vec3_mat4;
+
+fn print_vec3(u8* name, vec3* vec)
+{
+	printf("%s = {x: %f, y: %f, z: %f}\n", name, vec.x, vec.y, vec.z);
+}
+
+fn _vec3(f32 x, f32 y, f32 z) : vec3 {
+	vec3 res; res.x = x; res.y = y; res.z = z;
+	return res;
+}
+
+fn print_any(Any any)
+{
+	if any.type == int {
+		printf("%i", *any.data);
+	}
+
+	if any.type == i32 {
+		printf("%i", *any.data);
+	}
+
+	if any.type == float {
+		float* f = any.data;
+		printf("%f", *f);
+	}
+
+	if any.type == f32 {
+		float* f_32 = any.data;
+		printf("%f", *f_32);
+	}
+
+	if any.type == u8 {
+		printf("%s", any.data);
+	}
+
+	if any.type == vec3 {
+		vec3* v = any.data;
+		printf("vec3::{%f, %f, %f}", v.x, v.y, v.z);
+	}
+}
+
+fn print(u8* fmt, Any... args) {
+
+	i32 arg_i = 0;
+	i32 fmt_i = 0;
+
+	i32 fmt_count = strlen(fmt);
+
+	while fmt_i != fmt_count {
+		u8 c = fmt[fmt_i];
+
+		if c == "%"[0] {
+			print_any(args[arg_i]);
+			arg_i = arg_i + 1;
+		}
+
+		if c != "%"[0] {
+			putchar(c);
+		}
+
+		fmt_i = fmt_i + 1;
+	}
+}
+
+fn draw_trig() {
+	glBegin(4);
+		glColor3f(1.0, 0.0, 0.0);   glVertex2f(0.0,   1.0);
+		glColor3f(0.0, 1.0, 0.0);   glVertex2f(0.87,  0-0.5);
+		glColor3f(0.0, 0.0, 1.0);   glVertex2f(0-0.87, 0-0.5);
+	glEnd();
+}
+
+struct Vertex
+{
+	vec3 position;
+	vec3 color;
 };
 
-struct vec4 {
-   f32 x;
-   f32 y;
-   f32 z;
-   f32 w;
-};
+fn main() {
 
-fn main() : i32 {
+	i32 KEY_ESCAPE = 256;
+   	i32 GL_COLOR_BUFFER_BIT = 16384;
 
-   i32 KEY_ESCAPE = 256;
-   i32 GL_COLOR_BUFFER_BIT = 16384;
+   	glfwInit();
+   	i32* nullptr = 0;
 
-   glfwInit();
-   i32* nullptr = 0;
+  	GLFWwindow* window;
 
-   GLFWwindow* window;
+   	window = glfwCreateWindow(1280 / 2,720 / 2, "A Window", nullptr, nullptr);
 
-   window = glfwCreateWindow(1280,720,"Glass Game Example",nullptr, nullptr);
+   	glfwMakeContextCurrent(window);
 
-   glfwMakeContextCurrent(window);
+   	gladInit();
 
-   gladInit();
+	i32 run = 1;
 
-   while 1 {
-      glfwSwapBuffers(window);
-      glfwPollEvents();
+	while run {
+      	glClearColor(0.8,1,1,1);
+      	glClear(GL_COLOR_BUFFER_BIT);
 
-      glClearColor(0.8,1,1,1);
-      glClear(GL_COLOR_BUFFER_BIT);
+		draw_trig();
 
-      if(glfwWindowShouldClose(window)){
-         break;
-      }
+		if glfwWindowShouldClose(window) {
+			print("%","Closing");
+			run = 0;
+		}
 
-      if glfwGetKey(window,KEY_ESCAPE) {
-         break;
-      }
-   }
+		if glfwGetKey(window, KEY_ESCAPE) {
+			print("%","Closing");
+			run = 0;
+		}
 
-   type_info* ti = typeof(vec4);
-   printf("%s",ti.name);
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+   	}
 }

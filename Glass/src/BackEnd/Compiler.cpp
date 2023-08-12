@@ -7,29 +7,31 @@
 #include "FrontEnd/AstPolymorpher.h"
 #include "Interpeter/Interpeter.h"
 
+#define NULL_ID (u64)-1
+
 namespace Glass
 {
-	Compiler::Compiler(std::vector<CompilerFile*> files) :m_Files(files)
+	Compiler::Compiler(std::vector<CompilerFile*> files) : m_Files(files)
 	{
-		m_Metadata.RegisterType((u64)IRType::IR_void, "void");
+		m_Metadata.RegisterType((u64)IRType::IR_void, "void", 0);
 
-		m_Metadata.RegisterType((u64)IRType::IR_float, "float");
-		m_Metadata.RegisterType((u64)IRType::IR_int, "int");
+		m_Metadata.RegisterType((u64)IRType::IR_float, "float", 4);
+		m_Metadata.RegisterType((u64)IRType::IR_int, "int", 4);
 
-		m_Metadata.RegisterType((u64)IRType::IR_i8, "i8");
-		m_Metadata.RegisterType((u64)IRType::IR_i16, "i16");
-		m_Metadata.RegisterType((u64)IRType::IR_i32, "i32");
-		m_Metadata.RegisterType((u64)IRType::IR_i64, "i64");
+		m_Metadata.RegisterType((u64)IRType::IR_i8, "i8", 1);
+		m_Metadata.RegisterType((u64)IRType::IR_i16, "i16", 2);
+		m_Metadata.RegisterType((u64)IRType::IR_i32, "i32", 4);
+		m_Metadata.RegisterType((u64)IRType::IR_i64, "i64", 8);
 
-		m_Metadata.RegisterType((u64)IRType::IR_u8, "u8");
-		m_Metadata.RegisterType((u64)IRType::IR_u16, "u16");
-		m_Metadata.RegisterType((u64)IRType::IR_u32, "u32");
-		m_Metadata.RegisterType((u64)IRType::IR_u64, "u64");
+		m_Metadata.RegisterType((u64)IRType::IR_u8, "u8", 1);
+		m_Metadata.RegisterType((u64)IRType::IR_u16, "u16", 2);
+		m_Metadata.RegisterType((u64)IRType::IR_u32, "u32", 4);
+		m_Metadata.RegisterType((u64)IRType::IR_u64, "u64", 8);
 
-		m_Metadata.RegisterType((u64)IRType::IR_f32, "f32");
-		m_Metadata.RegisterType((u64)IRType::IR_f64, "f64");
+		m_Metadata.RegisterType((u64)IRType::IR_f32, "f32", 4);
+		m_Metadata.RegisterType((u64)IRType::IR_f64, "f64", 8);
 
-		m_Metadata.RegisterType((u64)IRType::IR_bool, "bool");
+		m_Metadata.RegisterType((u64)IRType::IR_bool, "bool", 1);
 
 		m_Metadata.GetTypeFlags(IR_int) |= FLAG_BASE_TYPE;
 
@@ -78,7 +80,7 @@ namespace Glass
 			StructMetadata any_info_Metadata;
 			any_info_Metadata.Name.Symbol = "Any";
 
-			//type
+			// type
 			{
 				MemberMetadata type_member_metadata;
 				type_member_metadata.Name.Symbol = "type";
@@ -88,7 +90,7 @@ namespace Glass
 				any_info_Metadata.Members.push_back(type_member_metadata);
 			}
 
-			//data
+			// data
 			{
 				MemberMetadata data_member_metadata;
 				data_member_metadata.Name.Symbol = "data";
@@ -105,7 +107,7 @@ namespace Glass
 			StructMetadata array_info_Metadata;
 			array_info_Metadata.Name.Symbol = "Array";
 
-			//type
+			// type
 			{
 				MemberMetadata count_member_metadata;
 				count_member_metadata.Name.Symbol = "count";
@@ -115,7 +117,7 @@ namespace Glass
 				array_info_Metadata.Members.push_back(count_member_metadata);
 			}
 
-			//data
+			// data
 			{
 				MemberMetadata data_member_metadata;
 				data_member_metadata.Name.Symbol = "data";
@@ -130,10 +132,107 @@ namespace Glass
 
 		{
 
-			StructMetadata type_info_Metadata;
-			type_info_Metadata.Name.Symbol = "type_info";
+			StructMetadata type_info_member_Metadata;
+			type_info_member_Metadata.Name.Symbol = "TypeInfo_Member";
 
-			//id
+			// id
+			{
+				MemberMetadata id_member_metadata;
+				id_member_metadata.Name.Symbol = "id";
+				id_member_metadata.Tipe.ID = IR_u64;
+				id_member_metadata.Tipe.Pointer = 0;
+
+				type_info_member_Metadata.Members.push_back(id_member_metadata);
+			}
+
+			// name
+			{
+				MemberMetadata name_member_metadata;
+				name_member_metadata.Name.Symbol = "name";
+				name_member_metadata.Tipe.ID = IR_u8;
+				name_member_metadata.Tipe.Pointer = 1;
+
+				type_info_member_Metadata.Members.push_back(name_member_metadata);
+			}
+
+			// size
+			{
+				MemberMetadata size_member_metadata;
+				size_member_metadata.Name.Symbol = "size";
+				size_member_metadata.Tipe.ID = IR_u64;
+				size_member_metadata.Tipe.Pointer = 0;
+
+				type_info_member_Metadata.Members.push_back(size_member_metadata);
+			}
+
+			// member_name
+			{
+				MemberMetadata mem_name_member_metadata;
+				mem_name_member_metadata.Name.Symbol = "member_name";
+				mem_name_member_metadata.Tipe.ID = IR_u8;
+				mem_name_member_metadata.Tipe.Pointer = 1;
+
+				type_info_member_Metadata.Members.push_back(mem_name_member_metadata);
+			}
+
+			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo_member, type_info_member_Metadata);
+		}
+
+		{
+
+			StructMetadata type_info_struct_Metadata;
+			type_info_struct_Metadata.Name.Symbol = "TypeInfo_Struct";
+
+			// id
+			{
+				MemberMetadata id_member_metadata;
+				id_member_metadata.Name.Symbol = "id";
+				id_member_metadata.Tipe.ID = IR_u64;
+				id_member_metadata.Tipe.Pointer = 0;
+
+				type_info_struct_Metadata.Members.push_back(id_member_metadata);
+			}
+
+			// name
+			{
+				MemberMetadata name_member_metadata;
+				name_member_metadata.Name.Symbol = "name";
+				name_member_metadata.Tipe.ID = IR_u8;
+				name_member_metadata.Tipe.Pointer = 1;
+
+				type_info_struct_Metadata.Members.push_back(name_member_metadata);
+			}
+
+			// size
+			{
+				MemberMetadata size_member_metadata;
+				size_member_metadata.Name.Symbol = "size";
+				size_member_metadata.Tipe.ID = IR_u64;
+				size_member_metadata.Tipe.Pointer = 0;
+
+				type_info_struct_Metadata.Members.push_back(size_member_metadata);
+			}
+
+			// members
+			{
+				MemberMetadata members_member_metadata;
+				members_member_metadata.Name.Symbol = "members";
+				members_member_metadata.Tipe.ID = IR_typeinfo_member;
+				members_member_metadata.Tipe.Pointer = 1;
+				members_member_metadata.Tipe.Array = 1;
+
+				type_info_struct_Metadata.Members.push_back(members_member_metadata);
+			}
+
+			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo_struct, type_info_struct_Metadata);
+		}
+
+		{
+
+			StructMetadata type_info_Metadata;
+			type_info_Metadata.Name.Symbol = "TypeInfo";
+
+			// id
 			{
 				MemberMetadata id_member_metadata;
 				id_member_metadata.Name.Symbol = "id";
@@ -143,7 +242,7 @@ namespace Glass
 				type_info_Metadata.Members.push_back(id_member_metadata);
 			}
 
-			//name
+			// name
 			{
 				MemberMetadata name_member_metadata;
 				name_member_metadata.Name.Symbol = "name";
@@ -151,6 +250,16 @@ namespace Glass
 				name_member_metadata.Tipe.Pointer = 1;
 
 				type_info_Metadata.Members.push_back(name_member_metadata);
+			}
+
+			// size
+			{
+				MemberMetadata size_member_metadata;
+				size_member_metadata.Name.Symbol = "size";
+				size_member_metadata.Tipe.ID = IR_u64;
+				size_member_metadata.Tipe.Pointer = 0;
+
+				type_info_Metadata.Members.push_back(size_member_metadata);
 			}
 
 			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo, type_info_Metadata);
@@ -162,20 +271,27 @@ namespace Glass
 	IRTranslationUnit* Compiler::CodeGen()
 	{
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
-		for (CompilerFile* file : m_Files) {
+		for (CompilerFile* file : m_Files)
+		{
 			ModuleFile* module_file = file->GetAST();
-			for (const Statement* stmt : module_file->GetStatements()) {
+			for (const Statement* stmt : module_file->GetStatements())
+			{
 				auto stmt_code = StatementCodeGen(stmt);
-				if (stmt_code != nullptr) {
+				if (stmt_code != nullptr)
+				{
 					tu->Instructions.push_back(stmt_code);
 				}
 			}
+			m_CurrentFile++;
 		}
 
-		for (auto& func : m_Metadata.m_Functions) {
+		for (auto& func : m_Metadata.m_Functions)
+		{
 			FunctionMetadata& metadata = func.second;
-			if (metadata.PolyMorphic) {
-				for (auto [irf, function_node] : metadata.PendingPolymorphInstantiations) {
+			if (metadata.PolyMorphic)
+			{
+				for (auto [irf, function_node] : metadata.PendingPolymorphInstantiations)
+				{
 					IRFunction* ir_function = (IRFunction*)FunctionCodeGen(function_node);
 					irf->Instructions = ir_function->Instructions;
 					irf->Arguments = ir_function->Arguments;
@@ -189,21 +305,26 @@ namespace Glass
 
 		std::vector<IRInstruction*> instructions;
 
-		for (auto entry : ir_data) {
+		for (auto entry : ir_data)
+		{
 			instructions.push_back(entry);
 		}
 
-		for (auto entry : tu->Instructions) {
+		for (auto entry : tu->Instructions)
+		{
 			instructions.push_back(entry);
 		}
 
 		tu->Instructions = instructions;
 
-		for (auto& func : m_Metadata.m_Functions) {
+		for (auto& func : m_Metadata.m_Functions)
+		{
 			FunctionMetadata& metadata = func.second;
-			if (metadata.PolyMorphic) {
+			if (metadata.PolyMorphic)
+			{
 
-				for (auto& [overload, irf] : metadata.PolyMorhOverLoads) {
+				for (auto& [overload, irf] : metadata.PolyMorhOverLoads)
+				{
 					tu->Instructions.push_back(irf);
 				}
 			}
@@ -271,9 +392,10 @@ namespace Glass
 		{
 			FunctionNode* fn_decl = (FunctionNode*)frn->statement;
 
-			if (tipe != NodeType::Function) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(frn->statement->GetLocation()),MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("#foreign directive only supports functions at the moment"),MessageType::Warning });
+			if (tipe != NodeType::Function)
+			{
+				PushMessage(CompilerMessage{ PrintTokenLocation(frn->statement->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("#foreign directive only supports functions at the moment"), MessageType::Warning });
 			}
 
 			u64 ID = GetFunctionID();
@@ -303,13 +425,14 @@ namespace Glass
 			FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(ID);
 			metadata->Foreign = true;
 		}
-		else if (tipe == NodeType::StructNode) {
+		else if (tipe == NodeType::StructNode)
+		{
 			u64 type_id = GetTypeID();
 			u64 struct_id = GetStructID();
 
 			StructNode* strct_decl = (StructNode*)frn->statement;
 
-			m_Metadata.RegisterType(type_id, strct_decl->Name.Symbol);
+			m_Metadata.RegisterType(type_id, strct_decl->Name.Symbol, 0);
 
 			StructMetadata struct_metadata;
 
@@ -325,14 +448,16 @@ namespace Glass
 	{
 		auto stmt_type = op_node->statement->GetType();
 
-		if (stmt_type == NodeType::Function) {
+		if (stmt_type == NodeType::Function)
+		{
 			IRFunction* IRF = (IRFunction*)FunctionCodeGen((FunctionNode*)op_node->statement);
 
 			const FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
 
 			OperatorQuery op_query;
 
-			for (const ArgumentMetadata& arg : metadata->Arguments) {
+			for (const ArgumentMetadata& arg : metadata->Arguments)
+			{
 				op_query.TypeArguments.push_back(arg.Tipe);
 			}
 
@@ -341,13 +466,15 @@ namespace Glass
 			return IRF;
 		}
 
-		if (stmt_type == NodeType::Identifier) {
+		if (stmt_type == NodeType::Identifier)
+		{
 
 			Identifier* identifier = (Identifier*)op_node->statement;
 
-			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) != SymbolType::Function) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()),MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("operator directive function '{}()' is not defined",identifier->Symbol.Symbol),MessageType::Warning });
+			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) != SymbolType::Function)
+			{
+				PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("operator directive function '{}()' is not defined", identifier->Symbol.Symbol), MessageType::Warning });
 				return nullptr;
 			}
 			u64 function_id = m_Metadata.GetFunctionMetadata(identifier->Symbol.Symbol);
@@ -356,7 +483,8 @@ namespace Glass
 
 			OperatorQuery op_query;
 
-			for (const ArgumentMetadata& arg : metadata->Arguments) {
+			for (const ArgumentMetadata& arg : metadata->Arguments)
+			{
 				op_query.TypeArguments.push_back(arg.Tipe);
 			}
 
@@ -365,8 +493,8 @@ namespace Glass
 			return nullptr;
 		}
 
-		PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()),MessageType::Error });
-		PushMessage(CompilerMessage{ "Expected a function name or a function definition after operator directive",MessageType::Warning });
+		PushMessage(CompilerMessage{ PrintTokenLocation(op_node->GetLocation()), MessageType::Error });
+		PushMessage(CompilerMessage{ "Expected a function name or a function definition after operator directive", MessageType::Warning });
 
 		return nullptr;
 	}
@@ -380,7 +508,8 @@ namespace Glass
 		Type return_type;
 		return_type.ID = (u64)IRType::IR_void;
 
-		if (functionNode->ReturnType) {
+		if (functionNode->ReturnType)
+		{
 			return_type.ID = m_Metadata.GetType(functionNode->ReturnType->Symbol.Symbol);
 			return_type.Pointer = functionNode->ReturnType->Pointer;
 			return_type.Array = functionNode->ReturnType->Array;
@@ -393,9 +522,11 @@ namespace Glass
 		{
 			const auto& arg_list = functionNode->GetArgList()->GetArguments();
 
-			for (const auto arg : arg_list) {
+			for (const auto arg : arg_list)
+			{
 				auto var = (VariableNode*)arg;
-				if (var->Type->PolyMorphic) {
+				if (var->Type->PolyMorphic)
+				{
 					poly_morphic = true;
 					break;
 				}
@@ -412,18 +543,21 @@ namespace Glass
 
 			std::vector<ArgumentMetadata> args_metadata;
 
-			for (auto arg : arg_list) {
+			for (auto arg : arg_list)
+			{
 				auto var = (VariableNode*)arg;
 
 				ArgumentMetadata arg_metadata;
 
 				arg_metadata.Name = var->Symbol.Symbol;
 
-				if (var->Type->PolyMorphic) {
+				if (var->Type->PolyMorphic)
+				{
 					arg_metadata.PolyMorphic = true;
 					arg_metadata.PolyMorhID = func_metadata->GetPolyMorphID(var->Type->Symbol.Symbol);
 				}
-				else {
+				else
+				{
 					arg_metadata.Tipe.ID = m_Metadata.GetType(var->Type->Symbol.Symbol);
 				}
 
@@ -445,7 +579,8 @@ namespace Glass
 
 		PoPIRSSA();
 
-		for (auto a : functionNode->GetArgList()->GetArguments()) {
+		for (auto a : functionNode->GetArgList()->GetArguments())
+		{
 
 			IRSSA* arg_ssa = IR(IRSSA());
 			arg_ssa->ID = m_SSAIDCounter;
@@ -469,32 +604,32 @@ namespace Glass
 
 			u64 arg_type = m_Metadata.GetType(var->Type->Symbol.Symbol);
 
-			if (arg_type == (u64)-1) {
+			if (arg_type == (u64)-1)
+			{
 
-				PushMessage(CompilerMessage{ PrintTokenLocation(var->Type->GetLocation()),MessageType::Error });
+				PushMessage(CompilerMessage{ PrintTokenLocation(var->Type->GetLocation()), MessageType::Error });
 				PushMessage(CompilerMessage{ fmt::format("argument '{}' is of undefined type '{}', at '{}' function definition",
-					var->Symbol.Symbol,var->Type->Symbol.Symbol,functionNode->DefinitionTk.Symbol
-				),MessageType::Warning });
+														var->Symbol.Symbol, var->Type->Symbol.Symbol, functionNode->DefinitionTk.Symbol),
+											MessageType::Warning });
 
 				return nullptr;
 			}
 
 			VariableMetadata var_metadata = {
-			var->Symbol,
-			Type
-			{
-				arg_type,
-				var->Type->Array || var->Type->Variadic ,
-				var->Type->Pointer,
-			},
+				var->Symbol,
+				Type{
+					arg_type,
+					var->Type->Array || var->Type->Variadic,
+					var->Type->Pointer,
+				},
 			};
 
-
-
-			if (!var->Type->Variadic) {
+			if (!var->Type->Variadic)
+			{
 				arg_ssa->Type = var_metadata.Tipe.ID;
 			}
-			else {
+			else
+			{
 				arg_ssa->Type = IR_array;
 			}
 
@@ -516,11 +651,12 @@ namespace Glass
 
 		m_Metadata.RegisterFunction(IRF->ID, functionNode->Symbol.Symbol, return_type, args_metadata);
 
-		for (const Statement* stmt : functionNode->GetStatements()) {
+		for (const Statement* stmt : functionNode->GetStatements())
+		{
 
 			// 			if (stmt->GetType() == NodeType::If) {
 			// 				auto post_ssas = PoPIRSSA();
-			// 
+			//
 			// 				for (auto ssa : post_ssas) {
 			// 					IRF->Instructions.push_back(ssa);
 			// 				}
@@ -530,43 +666,53 @@ namespace Glass
 
 			auto SSAs = PoPIRSSA();
 
-			for (auto ssa : SSAs) {
+			for (auto ssa : SSAs)
+			{
 				IRF->Instructions.push_back(ssa);
 			}
 
-			if (dynamic_cast<IRSSA*>(code) != nullptr) {
+			if (dynamic_cast<IRSSA*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRReturn*>(code) != nullptr) {
+			if (dynamic_cast<IRReturn*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRStore*>(code) != nullptr) {
+			if (dynamic_cast<IRStore*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRLoad*>(code) != nullptr) {
+			if (dynamic_cast<IRLoad*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRFunctionCall*>(code) != nullptr) {
+			if (dynamic_cast<IRFunctionCall*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRMemberAccess*>(code) != nullptr) {
+			if (dynamic_cast<IRMemberAccess*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRIf*>(code) != nullptr) {
+			if (dynamic_cast<IRIf*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRWhile*>(code) != nullptr) {
+			if (dynamic_cast<IRWhile*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRBreak*>(code) != nullptr) {
+			if (dynamic_cast<IRBreak*>(code) != nullptr)
+			{
 				IRF->Instructions.push_back(code);
 			}
 
@@ -574,7 +720,6 @@ namespace Glass
 			// 				IRF->Instructions.push_back(code);
 			// 			}
 		}
-
 
 		m_Metadata.m_CurrentFunction++;
 
@@ -587,30 +732,62 @@ namespace Glass
 
 		if (metadata != nullptr)
 		{
-			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->GetLocation()),MessageType::Error });
-			PushMessage(CompilerMessage{ fmt::format("variable '{}' is already defined",variableNode->Symbol.Symbol),MessageType::Warning });
-			PushMessage(CompilerMessage{ fmt::format("Defined At!",variableNode->Symbol.Symbol),MessageType::Info });
-			PushMessage(CompilerMessage{ "\t" + PrintTokenLocation(metadata->Name),MessageType::Info });
+			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("variable '{}' is already defined", variableNode->Symbol.Symbol), MessageType::Warning });
+			PushMessage(CompilerMessage{ fmt::format("Defined At!", variableNode->Symbol.Symbol), MessageType::Info });
+			PushMessage(CompilerMessage{ "\t" + PrintTokenLocation(metadata->Name), MessageType::Info });
 			return nullptr;
 		}
 
-		IRInstruction* value = nullptr;
+		IRSSAValue* value = nullptr;
+		Glass::Type Type;
 
-		if (variableNode->Assignment != nullptr) {
+		if (variableNode->Assignment != nullptr)
+		{
 			value = GetExpressionByValue(variableNode->Assignment);
 		}
 
 		IRSSA* StorageSSA = CreateIRSSA();
 
-		if (variableNode->Type->Array) {
-			StorageSSA->Type = IR_array;
+		if (variableNode->Type == nullptr) {
+			const Glass::Type& assignment_type = m_Metadata.GetExprType(value->SSA);
+			Type = assignment_type;
+
+			StorageSSA->Type = Type.ID;
+			StorageSSA->Pointer = Type.Pointer;
+
+			if (Type.Array)
+			{
+				StorageSSA->Type = IR_array;
+			}
 		}
 		else {
-			StorageSSA->Type = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
-		}
 
-		for (u64 i = 0; i < variableNode->Type->Pointer; i++) {
-			StorageSSA->Pointer++;
+			Type.ID = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
+			Type.Pointer = variableNode->Type->Pointer;
+			Type.Array = variableNode->Type->Array;
+
+			if (variableNode->Type->Array)
+			{
+				StorageSSA->Type = IR_array;
+			}
+			else
+			{
+				StorageSSA->Type = Type.ID;
+
+				if (StorageSSA->Type == NULL_ID) {
+					PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
+					PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
+					return nullptr;
+				}
+			}
+			if (!variableNode->Type->Array)
+			{
+				for (u64 i = 0; i < variableNode->Type->Pointer; i++)
+				{
+					StorageSSA->Pointer++;
+				}
+			}
 		}
 
 		StorageSSA->Value = nullptr;
@@ -636,23 +813,17 @@ namespace Glass
 
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
-			Type
-			{
-				 m_Metadata.GetType(variableNode->Type->Symbol.Symbol),
-				variableNode->Type->Array,
-				variableNode->Type->Pointer,
-			},
-			false
-			,
+			Type,
+			false,
 			StorageSSA,
-			IRssa
-		};
+			IRssa };
 
 		m_Metadata.RegisterVariableMetadata(IRssa->ID, var_metadata);
 
 		m_Metadata.RegExprType(IRssa->ID, var_metadata.Tipe);
 
-		if (value != nullptr) {
+		if (value != nullptr)
+		{
 			IRStore store;
 			store.AddressSSA = IRssa->ID;
 			store.Data = value;
@@ -661,7 +832,8 @@ namespace Glass
 
 			return IR(store);
 		}
-		else {
+		else
+		{
 			return nullptr;
 		}
 	}
@@ -687,7 +859,8 @@ namespace Glass
 		StructMetadata struct_metadata;
 		struct_metadata.Name = struct_name;
 
-		for (VariableNode* member : struct_members) {
+		for (VariableNode* member : struct_members)
+		{
 
 			MemberMetadata member_metadata;
 			member_metadata.Name = member->Symbol;
@@ -710,7 +883,8 @@ namespace Glass
 
 		u64 member_id_counter = 0;
 
-		for (MemberMetadata& member : struct_metadata.Members) {
+		for (MemberMetadata& member : struct_metadata.Members)
+		{
 
 			IRStructMember ir_member;
 
@@ -738,12 +912,14 @@ namespace Glass
 
 		PushScope();
 
-		for (const Statement* stmt : ifNode->Scope->GetStatements()) {
+		for (const Statement* stmt : ifNode->Scope->GetStatements())
+		{
 			auto first_inst = StatementCodeGen(stmt);
 
 			auto ir_ssa_stack = PoPIRSSA();
 
-			for (auto inst : ir_ssa_stack) {
+			for (auto inst : ir_ssa_stack)
+			{
 				IF.Instructions.push_back(inst);
 			}
 
@@ -769,12 +945,14 @@ namespace Glass
 
 		PushScope();
 
-		for (const Statement* stmt : whileNode->Scope->GetStatements()) {
+		for (const Statement* stmt : whileNode->Scope->GetStatements())
+		{
 			auto inst = StatementCodeGen(stmt);
 
 			auto ir_ssa_stack = PoPIRSSA();
 
-			for (auto ssa_inst : ir_ssa_stack) {
+			for (auto ssa_inst : ir_ssa_stack)
+			{
 				WHILE.Instructions.push_back(ssa_inst);
 			}
 
@@ -836,8 +1014,8 @@ namespace Glass
 
 		if (metadata == nullptr)
 		{
-			PushMessage(CompilerMessage{ PrintTokenLocation(identifier->GetLocation()),MessageType::Error });
-			PushMessage(CompilerMessage{ fmt::format("variable '{}' is not defined",identifier->Symbol.Symbol),MessageType::Warning });
+			PushMessage(CompilerMessage{ PrintTokenLocation(identifier->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("variable '{}' is not defined", identifier->Symbol.Symbol), MessageType::Warning });
 			return nullptr;
 		}
 
@@ -862,17 +1040,18 @@ namespace Glass
 
 		IRCONSTValue* Value = (IRCONSTValue*)IRssa->Value;
 
-		if (numericLiteral->type == NumericLiteral::Type::Float) {
+		if (numericLiteral->type == NumericLiteral::Type::Float)
+		{
 			IRssa->Type = (u64)IRType::IR_float;
 			memcpy(&Value->Data, &numericLiteral->Val.Float, sizeof(float));
 		}
-		if (numericLiteral->type == NumericLiteral::Type::Int) {
+		if (numericLiteral->type == NumericLiteral::Type::Int)
+		{
 			IRssa->Type = (u64)IRType::IR_int;
 			memcpy(&Value->Data, &numericLiteral->Val.Int, sizeof(i32));
 		}
 
 		Value->Type = IRssa->Type;
-
 
 		IRSSAValue* ssa_value = IR(IRSSAValue());
 
@@ -891,7 +1070,8 @@ namespace Glass
 	{
 		IRData* data = CreateIRData();
 
-		for (char c : stringLiteral->Symbol.Symbol) {
+		for (char c : stringLiteral->Symbol.Symbol)
+		{
 			data->Data.push_back(c);
 		}
 
@@ -928,7 +1108,8 @@ namespace Glass
 		A = GetExpressionByValue(binaryExpr->Left);
 		B = GetExpressionByValue(binaryExpr->Right);
 
-		if (!A || !B) {
+		if (!A || !B)
+		{
 			return nullptr;
 		}
 
@@ -939,11 +1120,13 @@ namespace Glass
 
 		IRssa->Type = left_type.ID;
 
-		if ((left_type.Pointer == 0) && (right_type.Pointer == 0)) {
+		if ((left_type.Pointer == 0) && (right_type.Pointer == 0))
+		{
 			TypeFlags left_type_flags = m_Metadata.GetTypeFlags(left_type.ID);
 			TypeFlags right_type_flags = m_Metadata.GetTypeFlags(right_type.ID);
 
-			auto op_to_word = [&](Operator op) -> std::string {
+			auto op_to_word = [&](Operator op) -> std::string
+			{
 				switch (op)
 				{
 				case Operator::Add:
@@ -975,18 +1158,21 @@ namespace Glass
 				}
 			};
 
-			auto no_op_error = [&]() {
-				PushMessage(CompilerMessage{ PrintTokenLocation(binaryExpr->OperatorToken),MessageType::Error });
+			auto no_op_error = [&]()
+			{
+				PushMessage(CompilerMessage{ PrintTokenLocation(binaryExpr->OperatorToken), MessageType::Error });
 				PushMessage(CompilerMessage{
 					fmt::format(
-					"No {} were defined between '{}' and '{}'",
-						op_to_word(binaryExpr->OPerator),PrintType(left_type),PrintType(right_type)),MessageType::Warning });
+						"No {} were defined between '{}' and '{}'",
+						op_to_word(binaryExpr->OPerator), PrintType(left_type), PrintType(right_type)),
+					MessageType::Warning });
 			};
 
 			bool right_numeric_type = right_type_flags & FLAG_NUMERIC_TYPE;
 			bool left_numeric_type = left_type_flags & FLAG_NUMERIC_TYPE;
 
-			if (!(right_numeric_type && left_numeric_type)) {
+			if (!(right_numeric_type && left_numeric_type))
+			{
 
 				OperatorQuery op_query;
 
@@ -997,7 +1183,8 @@ namespace Glass
 
 				bool flipped = false;
 
-				if (op_func_id == (u64)-1) {
+				if (op_func_id == (u64)-1)
+				{
 
 					op_query.TypeArguments.clear();
 
@@ -1008,7 +1195,8 @@ namespace Glass
 
 					flipped = true;
 
-					if (op_func_id == (u64)-1) {
+					if (op_func_id == (u64)-1)
+					{
 						no_op_error();
 						return nullptr;
 					}
@@ -1024,11 +1212,13 @@ namespace Glass
 
 					FunctionCall call;
 
-					if (!flipped) {
+					if (!flipped)
+					{
 						call.Arguments.push_back(lhs);
 						call.Arguments.push_back(rhs);
 					}
-					else {
+					else
+					{
 						call.Arguments.push_back(rhs);
 						call.Arguments.push_back(lhs);
 					}
@@ -1116,6 +1306,11 @@ namespace Glass
 			IRssa->Value = IR(IRLesser(A, B));
 		}
 		break;
+		case Operator::BitAnd:
+		{
+			IRssa->Value = IR(IRBitAnd(A, B));
+		}
+		break;
 		default:
 			return nullptr;
 			break;
@@ -1135,7 +1330,8 @@ namespace Glass
 		auto left = binaryExpr->Left;
 		auto right = binaryExpr->Right;
 
-		if (left->GetType() == NodeType::Identifier) {
+		if (left->GetType() == NodeType::Identifier)
+		{
 			IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
 			u64 var_ssa_id = GetVariableSSA(((Identifier*)left)->Symbol.Symbol);
@@ -1153,7 +1349,8 @@ namespace Glass
 
 			return store;
 		}
-		if (left->GetType() == NodeType::MemberAccess) {
+		if (left->GetType() == NodeType::MemberAccess)
+		{
 			IRSSAValue* member_access = (IRSSAValue*)ExpressionCodeGen(left);
 			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
 
@@ -1167,7 +1364,8 @@ namespace Glass
 
 			return store;
 		}
-		if (left->GetType() == NodeType::ArrayAccess) {
+		if (left->GetType() == NodeType::ArrayAccess)
+		{
 			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
 			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
 
@@ -1179,7 +1377,8 @@ namespace Glass
 			}
 			return store;
 		}
-		else {
+		else
+		{
 		}
 		return nullptr;
 	}
@@ -1191,22 +1390,27 @@ namespace Glass
 
 		if (metadata == nullptr)
 		{
-			PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-			PushMessage(CompilerMessage{ fmt::format("trying to call a undefined function '{}'",call->Function.Symbol),MessageType::Warning });
+			PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("trying to call a undefined function '{}'", call->Function.Symbol), MessageType::Warning });
 			return nullptr;
 		}
-		else {
-			if (metadata->Arguments.size() != 0) {
+		else
+		{
+			if (metadata->Arguments.size() != 0)
+			{
 
-				if (metadata->Arguments[metadata->Arguments.size() - 1].Variadic == false) {
-					if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic) {
-						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
+				if (metadata->Arguments[metadata->Arguments.size() - 1].Variadic == false)
+				{
+					if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic)
+					{
+						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+						PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
 						return nullptr;
 					}
-					if ((call->Arguments.size() < metadata->Arguments.size())) {
-						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ",call->Function.Symbol),MessageType::Warning });
+					if ((call->Arguments.size() < metadata->Arguments.size()))
+					{
+						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+						PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
 						return nullptr;
 					}
 				}
@@ -1215,7 +1419,8 @@ namespace Glass
 
 		std::vector<IRSSAValue*> argument_expr_results;
 
-		if (metadata->PolyMorphic) {
+		if (metadata->PolyMorphic)
+		{
 			// 			PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
 			// 			PushMessage(CompilerMessage{ fmt::format("calls to polymorphic '{}' function is unsupported",call->Function.Symbol),MessageType::Warning });
 			// 			return nullptr;
@@ -1228,13 +1433,15 @@ namespace Glass
 			{
 				auto expr_code = GetExpressionByValue(args[i]);
 
-				if (!expr_code) {
+				if (!expr_code)
+				{
 					return nullptr;
 				}
 
 				argument_expr_results.push_back(expr_code);
 
-				if (!metadata->Arguments[i].PolyMorphic) {
+				if (!metadata->Arguments[i].PolyMorphic)
+				{
 					continue;
 				}
 
@@ -1249,9 +1456,10 @@ namespace Glass
 
 			IRF = overload->ID;
 
-			if (overload == nullptr) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("failed to instantiate polymorphic function '{}'",call->Function.Symbol),MessageType::Warning });
+			if (overload == nullptr)
+			{
+				PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("failed to instantiate polymorphic function '{}'", call->Function.Symbol), MessageType::Warning });
 				return nullptr;
 			}
 		}
@@ -1260,20 +1468,23 @@ namespace Glass
 
 		ir_call.FuncID = IRF;
 
-		if (metadata->PolyMorphic) {
+		if (metadata->PolyMorphic)
+		{
 			for (size_t i = 0; i < call->Arguments.size(); i++)
 			{
 				ir_call.Arguments.push_back(IR(IRSSAValue(argument_expr_results[i]->SSA)));
 			}
 		}
-		else {
+		else
+		{
 			for (size_t i = 0; i < call->Arguments.size(); i++)
 			{
 				const ArgumentMetadata* decl_arg = metadata->GetArgument(i);
 
 				IRInstruction* arg = nullptr;
 
-				if (decl_arg != nullptr) {
+				if (decl_arg != nullptr)
+				{
 
 					IRSSAValue* expr = nullptr;
 
@@ -1297,10 +1508,12 @@ namespace Glass
 
 					Glass::Type type;
 
-					if (arg_ssa->SSAType == RegType::VarAddress) {
+					if (arg_ssa->SSAType == RegType::VarAddress)
+					{
 						type = m_Metadata.GetVariableMetadata(arg_ssa->ID)->Tipe;
 					}
-					else {
+					else
+					{
 						type.ID = arg_ssa->Type;
 					}
 
@@ -1308,50 +1521,58 @@ namespace Glass
 					{
 						bool type_mismatch = !CheckTypeConversion(decl_arg->Tipe.ID, type.ID);
 
-						if (type_mismatch) {
+						if (type_mismatch)
+						{
 
-							PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()),MessageType::Error });
-							PushMessage(CompilerMessage{ "type mismatch in function call",MessageType::Warning });
+							PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()), MessageType::Error });
+							PushMessage(CompilerMessage{ "type mismatch in function call", MessageType::Warning });
 							PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
-								PrintType(decl_arg->Tipe),
-								PrintType(type)),
+																	PrintType(decl_arg->Tipe),
+																	PrintType(type)),
 
-								MessageType::Info });
+														MessageType::Info });
 							PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
-							MessageType::Info });
+														MessageType::Info });
 						}
 					}
 
-					if (!decl_arg->Variadic) {
+					if (!decl_arg->Variadic)
+					{
 						if (decl_arg->Tipe.ID != IR_any)
 						{
-							if (decl_arg->Tipe.Pointer) {
+							if (decl_arg->Tipe.Pointer)
+							{
 								arg = GetExpressionByValue(call->Arguments[i]);
 							}
-							else {
+							else
+							{
 								arg = IR(IRSSAValue(arg_SSAID));
 							}
 						}
-						else {
+						else
+						{
 							arg = PassAsAny(call->Arguments[i]);
 						}
 					}
-					else {
+					else
+					{
 						arg = PassAsVariadicArray(i, call->Arguments, decl_arg);
 					}
 				}
-				else {
+				else
+				{
 					arg = GetExpressionByValue(call->Arguments[i]);
 				}
 
 				ir_call.Arguments.push_back(arg);
-				if (decl_arg != nullptr) {
-					if (decl_arg->Variadic) {
+				if (decl_arg != nullptr)
+				{
+					if (decl_arg->Variadic)
+					{
 						break;
 					}
 				}
 			}
-
 		}
 
 		if (metadata->ReturnType.ID != (u64)IRType::IR_void)
@@ -1365,6 +1586,8 @@ namespace Glass
 			IRSSAValue* ir_sss_val = IR(IRSSAValue());
 
 			ir_sss_val->SSA = ir_ssa->ID;
+
+			m_Metadata.RegExprType(ir_sss_val->SSA, metadata->ReturnType);
 
 			return ir_sss_val;
 		}
@@ -1385,28 +1608,32 @@ namespace Glass
 		Glass::Type type;
 
 		{
-			switch (memberAccess->Object->GetType()) {
+			switch (memberAccess->Object->GetType())
+			{
 			case NodeType::Identifier:
 			{
 				Identifier* object = (Identifier*)memberAccess->Object;
 
 				{
 					SymbolType symbol_type = m_Metadata.GetSymbolType(object->Symbol.Symbol);
-					if (symbol_type == SymbolType::None) {
+					if (symbol_type == SymbolType::None)
+					{
 						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("unknown symbol '{}'",object->ToString()),MessageType::Warning });
+						PushMessage(CompilerMessage{ fmt::format("unknown symbol '{}'", object->ToString()), MessageType::Warning });
 						return nullptr;
 					}
 
-					if (symbol_type == SymbolType::Type) {
+					if (symbol_type == SymbolType::Type)
+					{
 						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a type, cannot have members",object->ToString()),MessageType::Warning });
+						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a type, cannot have members", object->ToString()), MessageType::Warning });
 						return nullptr;
 					}
 
-					if (symbol_type == SymbolType::Function) {
+					if (symbol_type == SymbolType::Function)
+					{
 						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a function, cannot have members",object->ToString()),MessageType::Warning });
+						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a function, cannot have members", object->ToString()), MessageType::Warning });
 						return nullptr;
 					}
 				}
@@ -1415,18 +1642,21 @@ namespace Glass
 
 				const auto var_metadata = m_Metadata.GetVariableMetadata(var_ssa);
 
-				if (!var_metadata->Tipe.Array) {
+				if (!var_metadata->Tipe.Array)
+				{
 					struct_id = m_Metadata.GetStructIDFromType(var_metadata->Tipe.ID);
 				}
 
-				if (var_metadata->Tipe.Array) {
+				if (var_metadata->Tipe.Array)
+				{
 					struct_id = m_Metadata.GetStructIDFromType(IR_array);
 				}
 
 				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
 				object_ssa_id = var_ssa;
 
-				if (var_metadata->Tipe.Pointer) {
+				if (var_metadata->Tipe.Pointer)
+				{
 					reference_access = true;
 				}
 			}
@@ -1434,8 +1664,18 @@ namespace Glass
 			case NodeType::MemberAccess:
 			{
 				auto object_code = (IRSSAValue*)ExpressionCodeGen(memberAccess->Object);
-				struct_id = m_Metadata.GetStructIDFromType(GetSSA(object_code->SSA)->ReferenceType);
-				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
+
+				const Glass::Type& obj_type = m_Metadata.GetExprType(object_code->SSA);
+				if (!obj_type.Array)
+				{
+					struct_id = m_Metadata.GetStructIDFromType(obj_type.ID);
+					struct_metadata = m_Metadata.GetStructMetadata(struct_id);
+				}
+				else
+				{
+					struct_id = m_Metadata.GetStructIDFromType(IR_array);
+					struct_metadata = m_Metadata.GetStructMetadata(struct_id);
+				}
 
 				object_ssa_id = object_code->SSA;
 			}
@@ -1444,7 +1684,8 @@ namespace Glass
 		}
 
 		{
-			switch (memberAccess->Member->GetType()) {
+			switch (memberAccess->Member->GetType())
+			{
 			case NodeType::Identifier:
 			{
 				Identifier* member = (Identifier*)memberAccess->Member;
@@ -1508,14 +1749,15 @@ namespace Glass
 
 		type = obj_expr_type.ID;
 
-		if (!obj_expr_type.Pointer && !obj_expr_type.Array) {
+		if (!obj_expr_type.Pointer && !obj_expr_type.Array)
+		{
 			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
-			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator",MessageType::Warning });
+			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator", MessageType::Warning });
 		}
 
 		u64 base_address_ssa = 0;
 
-		//Size Of
+		// Size Of
 		auto sizeof_ssa = CreateIRSSA();
 
 		sizeof_ssa->Value = IR(IRSizeOF(type));
@@ -1527,8 +1769,9 @@ namespace Glass
 		ptr_mul_ssa->Value = IR(IRMUL(index, IR(IRSSAValue(sizeof_ssa->ID))));
 		ptr_mul_ssa->Type = IR_u64;
 
-		//Ptr As Value
-		if (!obj_expr_type.Array) {
+		// Ptr As Value
+		if (!obj_expr_type.Array)
+		{
 			auto ptr_as_value = CreateIRSSA();
 
 			ptr_as_value->Value = IR(IRAddressAsValue(obj_address_ssa));
@@ -1536,22 +1779,23 @@ namespace Glass
 
 			base_address_ssa = ptr_as_value->ID;
 		}
-		else {
-			IRMemberAccess* type_member_access = IR(IRMemberAccess());
+		else
+		{
+			IRMemberAccess* data_member_access = IR(IRMemberAccess());
 
-			IRSSA* type_member_access_ssa = CreateIRSSA();
+			IRSSA* data_member_access_ssa = CreateIRSSA();
 
-			type_member_access->ObjectSSA = obj_address_ssa;
-			type_member_access->MemberID = 1;
-			type_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
+			data_member_access->ObjectSSA = obj_address_ssa;
+			data_member_access->MemberID = 1;
+			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
 
-			type_member_access_ssa->Value = type_member_access;
-			type_member_access_ssa->Type = IR_u64;
+			data_member_access_ssa->Value = data_member_access;
+			data_member_access_ssa->Type = IR_u64;
 
 			auto ir_load_ssa = CreateIRSSA();
 
 			IRLoad* ir_load = IR(IRLoad());
-			ir_load->SSAddress = type_member_access_ssa->ID;
+			ir_load->SSAddress = data_member_access_ssa->ID;
 			ir_load->Type = IR_u64;
 
 			ir_load_ssa->Value = ir_load;
@@ -1566,14 +1810,22 @@ namespace Glass
 		ptr_add_ssa->Value = IR(IRADD(IR(IRSSAValue(ptr_mul_ssa->ID)), IR(IRSSAValue(base_address_ssa))));
 		ptr_add_ssa->Type = IR_u64;
 
-		//Final Address
+		// Final Address
 		auto address_ssa = CreateIRSSA();
 
 		address_ssa->Value = IR(IRSSAValue(ptr_add_ssa->ID));
 		address_ssa->Type = IR_u64;
 
 		Glass::Type expr_type = obj_expr_type;
-		expr_type.Pointer--;
+
+		if (obj_expr_type.Array)
+		{
+		}
+		else
+		{
+			expr_type.Pointer--;
+		}
+
 		expr_type.Array = false;
 
 		m_Metadata.RegExprType(address_ssa->ID, expr_type);
@@ -1584,49 +1836,102 @@ namespace Glass
 	IRInstruction* Compiler::TypeofCodeGen(const TypeOfNode* typeof)
 	{
 		u64 type_id = 0;
+		u64 type_size = 0;
+
 		u64 variable_id = 0;
 		bool pointer = false;
 
-		if (typeof->What->GetType() == NodeType::Identifier) {
+		if (typeof->What->GetType() == NodeType::Identifier)
+		{
 
 			Identifier* type_ident = (Identifier*)typeof->What;
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(type_ident->Symbol.Symbol);
 
-			if (symbol_type == SymbolType::None) {
+			if (symbol_type == SymbolType::None)
+			{
 				PushMessage(CompilerMessage{ PrintTokenLocation(type_ident->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ "typeof() undefined expression inside '()' parentheses",MessageType::Warning });
+				PushMessage(CompilerMessage{ "typeof() undefined expression inside '()' parentheses", MessageType::Warning });
 			}
 
-			if (symbol_type == SymbolType::Type) {
+			if (symbol_type == SymbolType::Type)
+			{
 				type_id = m_Metadata.GetType(type_ident->Symbol.Symbol);
 			}
 
-			if (symbol_type == SymbolType::Variable) {
+			if (symbol_type == SymbolType::Variable)
+			{
 				const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariableSSA(type_ident->Symbol.Symbol));
 				type_id = metadata->Tipe.ID;
 				pointer = metadata->Tipe.Pointer;
 				variable_id = metadata->DataSSA->ID;
 			}
 
-			if (symbol_type == SymbolType::Function) {
+			if (symbol_type == SymbolType::Function)
+			{
 				PushMessage(CompilerMessage{ PrintTokenLocation(type_ident->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ "typeof() doesn't support functions for now",MessageType::Warning });
+				PushMessage(CompilerMessage{ "typeof() doesn't support functions for now", MessageType::Warning });
 			}
-
 		}
-		else {
+		else
+		{
 			IRSSAValue* code = (IRSSAValue*)ExpressionCodeGen(typeof->What);
 			type_id = m_Metadata.GetExprType(code->SSA).ID;
+		}
+
+		type_size = m_Metadata.GetTypeSize(type_id);
+
+		TypeInfoType type_info_type;
+		TypeInfo* type_info = nullptr;
+
+		{
+			u64 struct_id = m_Metadata.GetStructIDFromType(type_id);
+
+			if (struct_id != (u64)-1)
+			{
+
+				const StructMetadata* struct_metadata = m_Metadata.GetStructMetadata(struct_id);
+
+				TypeInfoStruct* type_info_struct = IR(TypeInfoStruct());
+
+				type_info_struct->id = type_id;
+				type_info_struct->name = m_Metadata.GetType(type_id);
+				type_info_struct->pointer = pointer;
+				type_info_struct->size = type_size;
+
+				for (const MemberMetadata& member : struct_metadata->Members)
+				{
+
+					TypeInfoMember member_type_info;
+					member_type_info.id = member.Tipe.ID;
+					member_type_info.member_name = member.Name.Symbol;
+					type_info_struct->members.push_back(member_type_info);
+				}
+
+				type_info_type = TypeInfoType::Struct;
+				type_info = (TypeInfo*)type_info_struct;
+			}
+			else
+			{
+
+				TypeInfo* type_info_basic = IR(TypeInfo());
+
+				type_info_basic->id = type_id;
+				type_info_basic->name = m_Metadata.GetType(type_id);
+				type_info_basic->pointer = pointer;
+				type_info_basic->size = type_size;
+
+				type_info_type = TypeInfoType::Base;
+				type_info = type_info_basic;
+			}
 		}
 
 		IRSSA* ssa = CreateIRSSA();
 
 		IRTypeOf type_of;
-		type_of.VariableID = variable_id;
-		type_of.Type.id = type_id;
-		type_of.Type.name = m_Metadata.GetType(type_id);
-		type_of.Type.pointer = pointer;
+
+		type_of.typeInfoType = type_info_type;
+		type_of.Type = type_info;
 
 		ssa->Value = IR(type_of);
 
@@ -1705,7 +2010,8 @@ namespace Glass
 		IRSSA* ir_ssa = CreateIRSSA();
 		ir_ssa->Type = exprType.ID;
 		//@TODO: fix member access return non pointer type where it shoudlnt
-		if (exprType.Pointer) {
+		if (exprType.Pointer)
+		{
 			ir_ssa->Pointer = exprType.Pointer - 1;
 		}
 
@@ -1739,7 +2045,8 @@ namespace Glass
 			load.SSAddress = ir_address->SSA;
 			load.Type = expr_type.ID;
 
-			if (expr_type.Pointer == 1 || expr_type.Array) {
+			if (expr_type.Pointer == 1 || expr_type.Array)
+			{
 				load.ReferencePointer = true;
 			}
 
@@ -1763,27 +2070,33 @@ namespace Glass
 
 			auto& expr_type = m_Metadata.GetExprType(ir_address->SSA);
 
-			IRSSA* value_ssa = CreateIRSSA();
+			if (!expr_type.Pointer && !expr_type.Array)
+			{
+				IRSSA* value_ssa = CreateIRSSA();
 
-			IRLoad load;
+				IRLoad load;
 
-			load.SSAddress = ir_address->SSA;
-			load.Type = expr_type.ID;
+				load.SSAddress = ir_address->SSA;
+				load.Type = expr_type.ID;
 
-			value_ssa->Value = IR(load);
-			value_ssa->Type = load.Type;
-			value_ssa->Pointer = false;
+				value_ssa->Value = IR(load);
+				value_ssa->Type = load.Type;
+				value_ssa->Pointer = expr_type.Pointer;
 
-			m_Metadata.RegExprType(value_ssa->ID, expr_type);
+				m_Metadata.RegExprType(value_ssa->ID, expr_type);
 
-			return IR(IRSSAValue(value_ssa->ID));
+				return IR(IRSSAValue(value_ssa->ID));
+			}
+
+			return ir_address;
 		}
 		break;
 		case NodeType::Identifier:
 		{
 			Identifier* identifier = (Identifier*)expr;
 
-			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) == SymbolType::Type) {
+			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) == SymbolType::Type)
+			{
 
 				u64 type_id = m_Metadata.GetType(identifier->Symbol.Symbol);
 
@@ -1793,15 +2106,18 @@ namespace Glass
 
 				return (IRSSAValue*)ExpressionCodeGen(AST(Node));
 			}
-			else {
+			else
+			{
 				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
 
-				if (!ir_address) {
+				if (!ir_address)
+				{
 					return nullptr;
 				}
 
 				const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
-				if (!metadata->Tipe.Array) {
+				if (!metadata->Tipe.Array)
+				{
 					IRLoad load;
 					load.SSAddress = ir_address->SSA;
 					load.ReferencePointer = metadata->Tipe.Pointer > 0;
@@ -1824,7 +2140,8 @@ namespace Glass
 
 					return IR(IRSSAValue(ssa->ID));
 				}
-				else {
+				else
+				{
 					return ir_address;
 				}
 			}
@@ -1842,14 +2159,15 @@ namespace Glass
 
 		const Glass::Type& expr_type = m_Metadata.GetExprType(expr_result->SSA);
 
-		if (expr_type.ID == IR_any) {
+		if (expr_type.ID == IR_any)
+		{
 			return expr_result;
 		}
 
 		IRSSA* any_ssa = CreateIRSSA();
 		any_ssa->Type = m_Metadata.GetType("Any");
 
-		//type
+		// type
 		{
 			IRSSA* ir_address_of = CreateIRSSA();
 
@@ -1883,8 +2201,7 @@ namespace Glass
 			ir_store_ssa->Type = IR_u64;
 		}
 
-
-		//data
+		// data
 		{
 			IRSSA* ir_address_of = CreateIRSSA();
 
@@ -1907,10 +2224,12 @@ namespace Glass
 			ir_store->AddressSSA = type_member_access_ssa->ID;
 			ir_store->Type = IR_u64;
 
-			if (expr_type.Pointer) {
+			if (expr_type.Pointer)
+			{
 				ir_store->Data = IR(IRSSAValue(expr_result->SSA));
 			}
-			else {
+			else
+			{
 				IRSSA* ir_address_data = CreateIRSSA();
 
 				IRInstruction* address_of_val = IR(IRSSAValue(expr_result->SSA));
@@ -1944,7 +2263,7 @@ namespace Glass
 		array_address->Type = IR_u64;
 		array_address->Value = IR(IRAddressOf(IR(IRSSAValue(array_ssa->ID))));
 
-		//data
+		// data
 		{
 			IRMemberAccess* data_member_access = IR(IRMemberAccess());
 
@@ -1957,7 +2276,6 @@ namespace Glass
 			data_member_access_ssa->Value = data_member_access;
 			data_member_access_ssa->Type = IR_u64;
 
-
 			IRArrayAllocate* array_allocate = IR(IRArrayAllocate());
 
 			array_allocate->Type = element_type;
@@ -1967,10 +2285,12 @@ namespace Glass
 			for (size_t i = start; i < arguments.size(); i++)
 			{
 				auto a = arguments[i];
-				if (element_type != IR_any) {
+				if (element_type != IR_any)
+				{
 					array_data_ids.push_back(GetExpressionByValue(a)->SSA);
 				}
-				else {
+				else
+				{
 					array_data_ids.push_back(PassAsAny(a)->SSA);
 				}
 			}
@@ -1997,7 +2317,7 @@ namespace Glass
 			data_store_ssa->Value = data_store;
 			data_store_ssa->Type = IR_u64;
 		}
-		//count
+		// count
 		{
 			IRMemberAccess* count_member_access = IR(IRMemberAccess());
 
@@ -2086,7 +2406,8 @@ namespace Glass
 
 		auto& args = new_function->GetArgList()->GetArguments();
 
-		for (Statement* a : args) {
+		for (Statement* a : args)
+		{
 			VariableNode* arg = (VariableNode*)a;
 
 			arg->Type->PolyMorphic = false;
@@ -2094,7 +2415,7 @@ namespace Glass
 
 		IRFunction* ir_func = CreateIRFunction(new_function);
 
-		metadata->PendingPolymorphInstantiations.push_back({ ir_func ,new_function });
+		metadata->PendingPolymorphInstantiations.push_back({ ir_func, new_function });
 
 		return ir_func;
 	}

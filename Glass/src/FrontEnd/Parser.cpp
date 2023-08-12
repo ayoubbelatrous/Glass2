@@ -67,6 +67,7 @@ namespace Glass
 
 
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(3).Type == TokenType::Period; // i32[..]
+				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::OpenBracket; // i32[..]
 
 				i32 star_counter = 1;
 
@@ -82,9 +83,14 @@ namespace Glass
 				if (var_decl) {
 					return ParseVarDecl();
 				}
-				else {
-					return ParseExpression();
+
+				bool var_decl_infer = At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Assign;
+
+				if (var_decl_infer) {
+					return ParseVarDeclInfer();
 				}
+
+				return ParseExpression();
 			}
 			break;
 		case TokenType::OpenCurly:
@@ -200,6 +206,11 @@ namespace Glass
 
 		Node.Symbol = Consume();
 
+		while (At().Type == TokenType::Multiply) {
+			Consume();
+			Node.Pointer++;
+		}
+
 		if (At().Type == TokenType::OpenBracket) {
 			Consume();
 
@@ -254,6 +265,25 @@ namespace Glass
 		}
 
 		Node.Symbol = Consume();
+
+		if (At().Type == TokenType::Assign) {
+			Consume();
+			Node.Assignment = ParseExpression();
+		}
+
+		return Application::AllocateAstNode(Node);
+	}
+
+	Statement* Parser::ParseVarDeclInfer()
+	{
+		VariableNode Node;
+		Node.Type = nullptr;
+
+		Node.Symbol = Consume();
+
+		if (At().Type == TokenType::Colon) {
+			Consume();
+		}
 
 		if (At().Type == TokenType::Assign) {
 			Consume();
@@ -470,7 +500,7 @@ namespace Glass
 
 	Expression* Parser::ParseCompExpr()
 	{
-		Expression* left = ParseMulExpr();
+		Expression* left = ParseLogiExpr();
 
 		auto is_comp_op = [](Operator op) -> bool {
 
@@ -489,7 +519,7 @@ namespace Glass
 
 		while (is_comp_op(GetOperator(At()))) {
 			Token Op = Consume();
-			auto right = ParseMulExpr();
+			auto right = ParseLogiExpr();
 
 			BinaryExpression binExpr;
 
@@ -501,6 +531,40 @@ namespace Glass
 			binExpr.OperatorToken = Op;
 
 			left = AST(binExpr);
+		}
+
+		return left;
+	}
+
+	Expression* Parser::ParseLogiExpr()
+	{
+		Expression* left = ParseMulExpr();
+
+		auto is_logical_op = [](Operator op) -> bool {
+			if (op == Operator::Invalid)
+				return false;
+
+			if (op == Operator::BitAnd || op == Operator::BitOr)
+				return true;
+
+			return false;
+		};
+
+		while (is_logical_op(GetOperator(At()))) {
+
+			Token Op = Consume();
+			auto right = ParseMulExpr();
+
+			BinaryExpression binExpr;
+
+			binExpr.Left = left;
+			binExpr.Right = right;
+
+			binExpr.OPerator = GetOperator(Op);
+
+			binExpr.OperatorToken = Op;
+
+			left = Application::AllocateAstNode(binExpr);
 		}
 
 		return left;

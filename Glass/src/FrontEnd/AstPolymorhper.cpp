@@ -120,7 +120,8 @@ namespace Glass
 			PolyStatement(statement);
 		}
 
-		PolyStatement(func->ReturnType);
+		if (func->ReturnType)
+			PolyStatement(func->ReturnType);
 	}
 
 	void ASTPolyMorpher::PolyScope(ScopeNode* scope)

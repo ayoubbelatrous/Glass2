@@ -50,6 +50,13 @@ namespace Glass
 		u64 ID;
 		bool Array = false;
 		u64 Pointer = 0;
+
+		Type* Ext = nullptr;
+	};
+
+	struct FunctionType {
+		std::vector <Type*> Arguments;
+		Type ReturnType;
 	};
 
 	struct VariableMetadata
@@ -250,20 +257,22 @@ namespace Glass
 			u64 m_CurrentFunction = 0;
 
 			std::unordered_map<u64, std::unordered_map<u64, IRSSA*>> m_SSAs;
+
 			std::unordered_map<u64, std::unordered_map<std::string, u64>> m_VariableSSAs;
 			std::unordered_map<u64, std::unordered_map<std::string, u64>> m_Variables;
 			std::unordered_map<u64, std::unordered_map<u64, VariableMetadata >> m_VariableMetadata;
-			std::unordered_map<u64, StructMetadata> m_StructMetadata;
 
 			std::unordered_map<u64, FunctionMetadata> m_Functions;
 			std::unordered_map<std::string, u64> m_FunctionNames;
+
 			std::unordered_map<u64, std::string> m_Types;
-
 			std::unordered_map<u64, TypeFlags> m_TypeFlags;
-
 			std::unordered_map<std::string, u64> m_TypeNames;
-			std::unordered_map<std::string, u64> m_StructNames;
+			std::unordered_map<u64, u64> m_TypeSizes;
+
 			std::unordered_map<u64, u64> m_TypeToStruct;
+			std::unordered_map<std::string, u64> m_StructNames;
+			std::unordered_map<u64, StructMetadata> m_StructMetadata;
 
 			std::unordered_map<u64, std::unordered_map<u64, Type>> m_ExpressionType;
 
@@ -321,6 +330,15 @@ namespace Glass
 			const u64 GetType(const std::string& type_name) const {
 				if (m_TypeNames.find(type_name) != m_TypeNames.end()) {
 					return m_TypeNames.at(type_name);
+				}
+				else {
+					return (u64)-1;
+				}
+			}
+
+			const u64 GetTypeSize(u64 id) const {
+				if (m_TypeSizes.find(id) != m_TypeSizes.end()) {
+					return m_TypeSizes.at(id);
 				}
 				else {
 					return (u64)-1;
@@ -385,9 +403,29 @@ namespace Glass
 				m_FunctionNames[name] = ID;
 			}
 
-			void RegisterType(u64 ID, const std::string& name) {
+			void RegisterType(u64 ID, const std::string& name, u64 size) {
 				m_Types[ID] = name;
 				m_TypeNames[name] = ID;
+				m_TypeSizes[ID] = size;
+			}
+
+			u64 ComputeStructSize(const StructMetadata* metadata) {
+
+				u64 size = 0;
+
+				for (const MemberMetadata& member : metadata->Members) {
+					if (!member.Tipe.Pointer && !member.Tipe.Array) {
+						size += GetTypeSize(member.Tipe.ID);
+					}
+					else if (member.Tipe.Pointer) {
+						size += 8;
+					}
+					else if (member.Tipe.Array) {
+						size += 16;
+					}
+				}
+
+				return size;
 			}
 
 			void RegisterStruct(u64 ID, u64 TypeID, const StructMetadata& metadata)
@@ -396,7 +434,7 @@ namespace Glass
 				m_StructMetadata[ID] = metadata;
 				m_TypeToStruct[TypeID] = ID;
 
-				RegisterType(TypeID, metadata.Name.Symbol);
+				RegisterType(TypeID, metadata.Name.Symbol, ComputeStructSize(&metadata));
 			}
 
 			const StructMetadata* GetStructMetadata(u64 ID) const
@@ -411,7 +449,12 @@ namespace Glass
 
 			u64 GetStructIDFromType(u64 ID) const
 			{
-				return m_TypeToStruct.at(ID);
+				auto it = m_TypeToStruct.find(ID);
+				if (it != m_TypeToStruct.end()) {
+					return it->second;
+				}
+
+				return (u64)-1;
 			}
 
 			const Type& GetExprType(u64 ssa) const {
@@ -620,7 +663,7 @@ namespace Glass
 
 		std::string PrintTokenLocation(const Token& token)
 		{
-			return fmt::format("{}:{}:{}", m_Files[0]->GetPath().string(), token.Line + 1, token.Begin);
+			return fmt::format("{}:{}:{}", m_Files[m_CurrentFile]->GetPath().string(), token.Line + 1, token.Begin);
 		}
 
 		std::string PrintType(const Type& type)
@@ -666,6 +709,7 @@ namespace Glass
 		u64 m_StructIDCounter = 99;
 
 		std::vector<CompilerMessage> m_Messages;
+		u64 m_CurrentFile = 0;
 
 		u64 m_Scope = 0;
 

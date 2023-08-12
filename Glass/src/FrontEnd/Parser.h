@@ -28,6 +28,7 @@ namespace Glass
 		Statement* ParseFunction();
 
 		Statement* ParseVarDecl();
+		Statement* ParseVarDeclInfer();
 
 		Statement* ParseReturn();
 
@@ -40,6 +41,7 @@ namespace Glass
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
 		Expression* ParseCompExpr();
+		Expression* ParseLogiExpr();
 		Expression* ParseMulExpr();
 		Expression* ParseCallExpr();
 		Expression* ParseMemberExpr();
@@ -86,6 +88,9 @@ namespace Glass
 				break;
 			case TokenType::LesserEq:
 				return Operator::LesserThanEq;
+				break;
+			case TokenType::Ampersand:
+				return Operator::BitAnd;
 				break;
 			default:
 				return Operator::Invalid;

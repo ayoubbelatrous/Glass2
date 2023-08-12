@@ -15,6 +15,8 @@ namespace Glass
 
 		std::string IRCodeGen(IRInstruction* inst);
 
+		std::string TypeOfCodeGen(IRTypeOf* type_of);
+
 		std::string FunctionCodeGen(IRFunction* IRF);
 		std::string SSACodeGen(IRSSA* SSA);
 
@@ -56,6 +58,8 @@ namespace Glass
 		std::string m_SSAHeader;
 
 		std::unordered_map <u64, TypeInfo> m_VariableTypeInfo;
+		std::unordered_map <u64, TypeInfoStruct> m_VariableStructTypeInfo;
+		std::unordered_map <u64, TypeInfoMember> m_VariableMemberTypeInfo;
 
 		u64 GetVarTypeInfoID() {
 			return m_VariableTypeInfo.size() + 1;

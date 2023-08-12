@@ -56,6 +56,9 @@ namespace Glass
 
 		GreaterThanEq,
 		LesserThanEq,
+
+		BitAnd,
+		BitOr,
 	};
 
 	class Statement

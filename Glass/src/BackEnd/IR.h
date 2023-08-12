@@ -28,6 +28,9 @@ namespace Glass
 
 		IR_array,
 
+		IR_typeinfo_member,
+		IR_typeinfo_struct,
+
 		IR_typeinfo,
 	};
 
@@ -56,6 +59,9 @@ namespace Glass
 		IR_any,
 
 		IR_array,
+
+		IR_typeinfo_member,
+		IR_typeinfo_struct,
 
 		IR_typeinfo,
 	};
@@ -94,6 +100,7 @@ namespace Glass
 		NotEqual,
 		GreaterThan,
 		LesserThan,
+		BitAnd,
 		ForeignFunction,
 		ArrayAllocate,
 		TranslationUnit,
@@ -660,16 +667,46 @@ namespace Glass
 		u64 id;
 		bool pointer = false;
 		std::string name;
+		u64 size;
+	};
+
+	struct TypeInfoMember
+	{
+		u64 id;
+		bool pointer = false;
+		std::string name;
+		u64 size;
+
+		std::string member_name;
+	};
+
+	struct TypeInfoStruct
+	{
+		u64 id;
+		bool pointer = false;
+		std::string name;
+		u64 size;
+
+		std::vector<TypeInfoMember> members;
+	};
+
+	enum class TypeInfoType
+	{
+		Base = 0,
+		Member,
+		Struct,
 	};
 
 	struct IRTypeOf : public IRInstruction {
 		u64 ID = 0;
 		u64 VariableID;
-		TypeInfo Type;
+
+		TypeInfoType typeInfoType;
+		TypeInfo* Type;
 
 		virtual std::string ToString() const override
 		{
-			return "typeof(" + std::to_string(Type.id) + ")";
+			return "typeof(" + std::to_string(Type->id) + ")";
 		}
 
 		virtual IRNodeType GetType() const {
@@ -782,6 +819,33 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::LesserThan;
+		}
+	};
+
+	struct IRBitAnd : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRBitAnd() = default;
+		IRBitAnd(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "BitAnd ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::BitAnd;
 		}
 	};
 

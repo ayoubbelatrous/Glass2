@@ -1,6 +1,12 @@
 #foreign fn printf!(u8 * format) : i32{}
 #foreign fn sprintf!(u8 * format, u8 * buffer) : i32{}
 
+struct vec2
+{
+	f32 x;
+	f32 y;
+};
+
 struct vec3
 {
 	f32 x;
@@ -8,12 +14,12 @@ struct vec3
 	f32 z;
 };
 
-struct mat4
+struct vec4
 {
-	f32 x;	f32 y;	f32 z;	f32 w;
-	f32 x1;	f32 y1;	f32 z1;	f32 w1;
-	f32 x2;	f32 y2;	f32 z2;	f32 w2;
-	f32 x3;	f32 y3;	f32 z3;	f32 w3;
+	f32 x;
+	f32 y;
+	f32 z;
+	f32 w;
 };
 
 fn add_vec3(vec3 lhs, vec3 rhs) : vec3
@@ -52,12 +58,6 @@ fn div_vec3(vec3 lhs, vec3 rhs) : vec3
 	return result;
 }
 
-fn transform_vec3_mat4(vec3 lhs, mat4 rhs) : vec3
-{
-	vec3 test = lhs;
-	return test;
-}
-
 fn add_vec3_f32(vec3 lhs, float rhs) : vec3
 {
 	vec3 result;
@@ -76,6 +76,66 @@ fn add_vec3_float(vec3 lhs, float rhs) : vec3
 	return result;
 }
 
+fn add_vec4(vec4 lhs, vec4 rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x + rhs.x;
+	result.y = lhs.y + rhs.y;
+	result.z = lhs.z + rhs.z;
+	result.w = lhs.w + rhs.w;
+	return result;
+}
+
+fn sub_vec4(vec4 lhs, vec4 rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x - rhs.x;
+	result.y = lhs.y - rhs.y;
+	result.z = lhs.z - rhs.z;
+	result.w = lhs.w - rhs.w;
+	return result;
+}
+
+fn mul_vec4(vec4 lhs, vec4 rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x * rhs.x;
+	result.y = lhs.y * rhs.y;
+	result.z = lhs.z * rhs.z;
+	result.w = lhs.w * rhs.w;
+	return result;
+}
+
+fn div_vec4(vec4 lhs, vec4 rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x / rhs.x;
+	result.y = lhs.y / rhs.y;
+	result.z = lhs.z / rhs.z;
+	result.w = lhs.w / rhs.w;
+	return result;
+}
+
+fn add_vec4_f32(vec4 lhs, float rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x + rhs;
+	result.y = lhs.y + rhs;
+	result.z = lhs.z + rhs;
+	result.w = lhs.w + rhs;
+	return result;
+}
+
+fn add_vec4_float(vec4 lhs, float rhs) : vec4
+{
+	vec4 result;
+	result.x = lhs.x + rhs;
+	result.y = lhs.y + rhs;
+	result.z = lhs.z + rhs;
+	result.w = lhs.w + rhs;
+	return result;
+}
+
 #operator+ add_vec3;
 #operator- sub_vec3;
 #operator* mul_vec3;
@@ -84,24 +144,20 @@ fn add_vec3_float(vec3 lhs, float rhs) : vec3
 #operator+ add_vec3_float;
 #operator+ add_vec3_f32;
 
-#operator* transform_vec3_mat4;
+#operator+ add_vec4;
+#operator- sub_vec4;
+#operator* mul_vec4;
+#operator/ div_vec4;
 
-fn print_vec3(u8* name, vec3* vec)
-{
-	printf("%s = {x: %f, y: %f, z: %f}\n", name, vec.x, vec.y, vec.z);
-}
+#operator+ add_vec4_float;
+#operator+ add_vec4_f32;
 
-fn _vec3(f32 x, f32 y, f32 z) : vec3 {
+fn Vec3(f32 x, f32 y, f32 z) : vec3 {
 	vec3 res; res.x = x; res.y = y; res.z = z;
 	return res;
 }
 
-fn main() : i32
-{
-	vec3 a = _vec3(1, 1, 1);
-	vec3 b = _vec3(1, 2, 1);
-
-	vec3 x = 1.0 + b;
-
-	print_vec3("x", &x);
+fn Vec4(f32 x, f32 y, f32 z, f32 w) : vec4 {
+	vec4 res; res.x = x; res.y = y; res.z = z; res.w = w;
+	return res;
 }
