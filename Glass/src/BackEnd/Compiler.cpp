@@ -274,6 +274,11 @@ namespace Glass
 
 	IRTranslationUnit* Compiler::CodeGen()
 	{
+		//////////////////////////////////////////////////////////////////////////
+		//		@PUSH_SCOPE @GLOBAL
+		m_Metadata.PushContextGlobal();
+		//////////////////////////////////////////////////////////////////////////
+
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
 		for (CompilerFile* file : m_Files)
 		{
@@ -586,6 +591,11 @@ namespace Glass
 
 		PoPIRSSA();
 
+		//////////////////////////////////////////////////////////////////////////
+		//		@PUSH_SCOPE
+		m_Metadata.PushContext(ContextScopeType::FUNC);
+		//////////////////////////////////////////////////////////////////////////
+
 		for (auto a : functionNode->GetArgList()->GetArguments())
 		{
 
@@ -660,15 +670,6 @@ namespace Glass
 
 		for (const Statement* stmt : functionNode->GetStatements())
 		{
-
-			// 			if (stmt->GetType() == NodeType::If) {
-			// 				auto post_ssas = PoPIRSSA();
-			//
-			// 				for (auto ssa : post_ssas) {
-			// 					IRF->Instructions.push_back(ssa);
-			// 				}
-			// 			}
-
 			IRInstruction* code = StatementCodeGen(stmt);
 
 			auto SSAs = PoPIRSSA();
@@ -678,55 +679,23 @@ namespace Glass
 				IRF->Instructions.push_back(ssa);
 			}
 
-			if (dynamic_cast<IRSSA*>(code) != nullptr)
-			{
+			if (code != nullptr) {
 				IRF->Instructions.push_back(code);
 			}
 
-			if (dynamic_cast<IRReturn*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
+			if (stmt->GetType() == NodeType::Scope) {
+				std::vector<IRInstruction*> scope_code_stack = ScopeCodeGen((ScopeNode*)stmt);
 
-			if (dynamic_cast<IRStore*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
+				for (auto scope_code : scope_code_stack) {
+					IRF->Instructions.push_back(scope_code);
+				}
 			}
-
-			if (dynamic_cast<IRLoad*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			if (dynamic_cast<IRFunctionCall*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			if (dynamic_cast<IRMemberAccess*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			if (dynamic_cast<IRIf*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			if (dynamic_cast<IRWhile*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			if (dynamic_cast<IRBreak*>(code) != nullptr)
-			{
-				IRF->Instructions.push_back(code);
-			}
-
-			// 			if (dynamic_cast<IRForeignFunction*>(code) != nullptr) {
-			// 				IRF->Instructions.push_back(code);
-			// 			}
 		}
+
+		//////////////////////////////////////////////////////////////////////////
+		//		@POP_SCOPE
+		m_Metadata.PopContext();
+		//////////////////////////////////////////////////////////////////////////
 
 		m_Metadata.m_CurrentFunction++;
 
@@ -1854,6 +1823,42 @@ namespace Glass
 		return result;
 	}
 
+	std::vector<IRInstruction*> Compiler::ScopeCodeGen(const ScopeNode* scope)
+	{
+		m_Metadata.PushContext(ContextScopeType::FUNC);
+
+		std::vector<IRInstruction*> Instructions;
+
+		for (auto stmt : scope->GetStatements()) {
+
+			auto code = StatementCodeGen(stmt);
+
+
+			auto SSAs = PoPIRSSA();
+
+			for (auto ssa : SSAs)
+			{
+				Instructions.push_back(ssa);
+			}
+
+			if (code != nullptr) {
+				Instructions.push_back(code);
+			}
+			else {
+				if (stmt->GetType() == NodeType::Scope) {
+					std::vector<IRInstruction*> scope_code_stack = ScopeCodeGen((ScopeNode*)stmt);
+					for (auto scope_code : scope_code_stack) {
+						Instructions.push_back(scope_code);
+					}
+				}
+			}
+		}
+
+		m_Metadata.PopContext();
+
+		return Instructions;
+	}
+
 	IRInstruction* Compiler::ArrayAccessCodeGen(const ArrayAccess* arrayAccess)
 	{
 		auto object = (IRSSAValue*)GetExpressionByValue(arrayAccess->Object);
@@ -1987,6 +1992,14 @@ namespace Glass
 				type_id = metadata->Tipe.ID;
 				pointer = metadata->Tipe.Pointer;
 				variable_id = metadata->DataSSA->ID;
+			}
+
+			if (symbol_type == SymbolType::Enum)
+			{
+				const auto metadata = m_Metadata.GetEnum(type_ident->Symbol.Symbol);
+				type_id = m_Metadata.GetType(type_ident->Symbol.Symbol);
+				pointer = 0;
+				variable_id = 0;
 			}
 
 			if (symbol_type == SymbolType::Function)

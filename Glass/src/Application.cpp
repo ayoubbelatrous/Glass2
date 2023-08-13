@@ -339,6 +339,8 @@ namespace Glass
 		return compilerFiles;
 	}
 
-	LinearAllocator Application::m_AstAllocator = LinearAllocator(1024 * 1024 * 10);
-	LinearAllocator Application::m_IRAllocator = LinearAllocator(1024 * 1024 * 10);
+	const u64 allocator_buffer_size = (1024 * 1024) * 30;
+
+	LinearAllocator Application::m_AstAllocator = LinearAllocator(allocator_buffer_size);
+	LinearAllocator Application::m_IRAllocator = LinearAllocator(allocator_buffer_size);
 }

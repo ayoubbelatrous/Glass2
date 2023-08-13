@@ -14,9 +14,19 @@ namespace Glass
 		FLAG_NUMERIC_TYPE = BIT(1),
 	};
 
+	enum class ContextScopeType {
+		GLOB = 0,
+		FUNC = 1,
+		STRUCT = 2,
+		ENUM = 3,
+	};
+
 	struct ContextScope {
+		std::vector<u64> Children;
+		u64 Parent;
+
 		u64 ID = 0;
-		std::vector<ContextScope> m_Children;
+		ContextScopeType Type;
 	};
 
 	enum class SymbolType {
@@ -285,6 +295,57 @@ namespace Glass
 		{
 			u64 m_CurrentFunction = 0;
 
+			u64 m_ScopeIDCounter = 0;
+			u64 m_CurrentCTXScope = 1;
+
+			std::unordered_map<u64, ContextScope> m_Scopes;
+
+			u64 GetScopeID() {
+				u64 scope_id = m_ScopeIDCounter;
+				m_ScopeIDCounter++;
+				return scope_id;
+			}
+
+			const ContextScope* CurrentContext() const {
+				return &m_Scopes.at(m_CurrentCTXScope);
+			}
+
+			ContextScope* CurrentContext() {
+				return &m_Scopes.at(m_CurrentCTXScope);
+			}
+
+			u64 CurrentContextID() const {
+				return m_CurrentCTXScope;
+			}
+
+			void PushContextGlobal() {
+				ContextScope ctx_scope;
+				ctx_scope.ID = GetScopeID();
+				ctx_scope.Parent = 0;
+				ctx_scope.Type = ContextScopeType::GLOB;
+
+				m_Scopes[ctx_scope.ID] = ctx_scope;
+				m_CurrentCTXScope = ctx_scope.ID;
+			}
+
+			void PushContext(ContextScopeType scope_type) {
+				ContextScope ctx_scope;
+				ctx_scope.ID = GetScopeID();
+				ctx_scope.Parent = CurrentContext()->ID;
+				ctx_scope.Type = scope_type;
+
+				m_Scopes[ctx_scope.ID] = ctx_scope;
+
+				CurrentContext()->Children.push_back(ctx_scope.ID);
+
+				m_CurrentCTXScope = ctx_scope.ID;
+			}
+
+			void PopContext() {
+				GS_CORE_ASSERT(m_CurrentCTXScope != 1, "Cannot Pop Global Context");
+				m_CurrentCTXScope = CurrentContext()->Parent;
+			}
+
 			std::unordered_map<u64, std::unordered_map<u64, IRSSA*>> m_SSAs;
 
 			std::unordered_map<u64, std::unordered_map<std::string, u64>> m_VariableSSAs;
@@ -386,6 +447,23 @@ namespace Glass
 				}
 
 				return (u64)-1;
+			}
+
+			u64 GetVariableRecursive(u64 ctx_id, const std::string& name) {
+				auto it = m_Variables.find(ctx_id);
+
+				if (it != m_Variables.end()) {
+					auto itt = it->second.find(name);
+					if (itt != it->second.end()) {
+						return itt->second;
+					}
+				}
+
+				if (CurrentContext()->Parent == 0) {
+					return (u64)-1;
+				}
+
+				return GetVariableRecursive(CurrentContext()->Parent, name);
 			}
 
 			u64 GetVariable(const std::string& name) const {
@@ -593,6 +671,8 @@ namespace Glass
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
+
+		std::vector<IRInstruction*> ScopeCodeGen(const ScopeNode* scope);
 
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);

@@ -59,19 +59,22 @@ namespace Glass
 
 		template<typename T>
 		T* Allocate(const T& d) {
-			//Buggy!
-				// 			if ((m_Size + sizeof(T)) > m_Capacity) {
-				// 				GS_CORE_ASSERT(0, "Out Of Memory");
-				// 			}
-				// 
-				// 			memcpy(m_Data + m_Size, &d, sizeof(d));
-				// 
-				// 			T* result = (T*)(m_Data + m_Size);
-				// 			m_Size += sizeof(T);
-				// 
-				// 			return result;
 
-			return new T(d);
+			if ((m_Size + sizeof(T)) > m_Capacity) {
+				GS_CORE_ASSERT(0, "Out Of Memory");
+			}
+
+			void* dst = (void*)(m_Data + m_Size);
+
+			new (dst) T(d);
+
+			T* result = (T*)(m_Data + m_Size);
+
+			m_Size += sizeof(T);
+
+			return result;
+
+			//return new T(d);
 		}
 
 	private:

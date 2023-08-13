@@ -1,0 +1,28 @@
+struct string
+{
+	u8* data;
+	u64 count;
+};
+
+fn make_string(u8* str) : string {
+	string new;
+	new.count = strlen(str);
+	new.data = str;
+	return new;
+}
+
+fn copy_string(string other) : string {
+	string new;
+
+	new.count = other.count;
+	new.data = malloc(other.count + 1);
+
+	i32 i = 0;
+
+	while i != other.count {
+		new.data[i] = other.data[i];
+		i = i + 1;
+	}
+
+	return new;
+}
