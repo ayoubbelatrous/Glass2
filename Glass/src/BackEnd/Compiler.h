@@ -932,7 +932,7 @@ namespace Glass
 		u64 m_TypeIDCounter = 99;
 		u64 m_StructIDCounter = 99;
 		u64 m_EnumIDCounter = 0;
-		u64 m_GlobalCounter = 0;
+		u64 m_GlobalCounter = 512000;
 
 		std::vector<CompilerMessage> m_Messages;
 		u64 m_CurrentFile = 0;

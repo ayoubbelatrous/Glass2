@@ -1143,17 +1143,17 @@ namespace Glass
 			return nullptr;
 		}
 
-		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(identifier->Symbol.Symbol));
-
-		if (metadata == nullptr)
-		{
-			PushMessage(CompilerMessage{ PrintTokenLocation(identifier->GetLocation()), MessageType::Error });
-			PushMessage(CompilerMessage{ fmt::format("variable '{}' is not defined", identifier->Symbol.Symbol), MessageType::Warning });
-			return nullptr;
-		}
-
 		if (symbol_type == SymbolType::Variable)
 		{
+			const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(identifier->Symbol.Symbol));
+
+			if (metadata == nullptr)
+			{
+				PushMessage(CompilerMessage{ PrintTokenLocation(identifier->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("variable '{}' is not defined", identifier->Symbol.Symbol), MessageType::Warning });
+				return nullptr;
+			}
+
 			u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
 
 			IRSSA* ssa = GetSSA(ID);
@@ -1175,6 +1175,8 @@ namespace Glass
 			IRGlobalAddress* glob_address = IR(IRGlobalAddress(glob_id));
 
 			ssa->Value = glob_address;
+
+			const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(glob_id);
 
 			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
@@ -1674,6 +1676,10 @@ namespace Glass
 
 					IRSSAValue* expr = nullptr;
 
+					// 					if (call->Function.Symbol == "nk_begin") {
+					// 						__debugbreak();
+					// 					}
+
 					expr = GetExpressionByValue(call->Arguments[i]);
 
 					if (expr == nullptr)
@@ -1692,16 +1698,7 @@ namespace Glass
 
 					IRSSA* arg_ssa = m_Metadata.GetSSA(arg_SSAID);
 
-					Glass::Type type;
-
-					if (arg_ssa->SSAType == RegType::VarAddress)
-					{
-						type = m_Metadata.GetVariableMetadata(arg_ssa->ID)->Tipe;
-					}
-					else
-					{
-						type.ID = arg_ssa->Type;
-					}
+					const Glass::Type& type = m_Metadata.GetExprType(expr->SSA);
 
 					if (decl_arg->Tipe.ID != IR_any && !decl_arg->Variadic)
 					{
@@ -2462,6 +2459,7 @@ namespace Glass
 				IRSSA* ssa = CreateIRSSA();
 
 				load.Type = expr_type.ID;
+				load.ReferencePointer = expr_type.Pointer;
 
 				ssa->Type = expr_type.ID;
 				ssa->Value = IR(load);

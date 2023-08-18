@@ -114,16 +114,19 @@ fn _Rect(f32 x, f32 y, f32 w, f32 h) : nk_rect{
 
 #foreign fn nk_layout_row_dynamic(nk_context* ctx, f32 height, i32 cols) : void {}
 
-#foreign fn nk_label(nk_context* ctx, u8* text, i32 align) : void {}
+#foreign fn nk_label(nk_context* ctx, u8* text, Align_Flags align) : void {}
 
-i32 global;
+nk_context* nk_ctx;
+
+fn Begin(u8* title, i32 flags) : bool {
+    nk_begin(nk_ctx, title, _Rect(5, 5, 300, 200), flags);
+}
+
+fn End() {
+    nk_end(nk_ctx);
+}
 
 fn main() {
-
-    global = 30;
-
-    print("Hello World: %",global);
-
     InitWindow(500, 700, "Hello Window");
 
     SetTargetFPS(240);
@@ -131,6 +134,8 @@ fn main() {
     font := LoadFontEx("fonts/CascadiaMono.ttf",18, 0, 0);
 
     ctx := InitNuklearEx(font, 18);
+
+    nk_ctx = ctx;
 
     while WindowShouldClose() == 0 {
 
@@ -143,11 +148,11 @@ fn main() {
             | Panel_Flags.NK_WINDOW_CLOSABLE
             | Panel_Flags.NK_WINDOW_MINIMIZABLE;
 
-        if nk_begin(ctx, "Demo", _Rect(30,30,100,200), window_flags) {
+        if Begin("Demo", window_flags) {
             nk_layout_row_dynamic(ctx, 0, 2);
                 nk_label(ctx, "Hello", Align_Flags.NK_TEXT_ALIGN_LEFT);
         }
-        nk_end(ctx);
+        End();
 
         BeginDrawing();
         ClearBackground(_Color(0.5, 0.5, 0.5, 1));
