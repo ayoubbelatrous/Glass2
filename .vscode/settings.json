@@ -22,7 +22,11 @@
 		"windows.h": "c",
 		"cstdio": "c",
 		"winapifamily.h": "c",
-		"winpackagefamily.h": "c"
+		"winpackagefamily.h": "c",
+		"gl.h": "c",
+		"glinit.h": "c",
+		"raygui.h": "c",
+		"raylib.h": "c"
 	},
 	"cmake.configureOnOpen": false
 }

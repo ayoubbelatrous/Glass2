@@ -32,6 +32,7 @@ namespace Glass
 	enum class SymbolType {
 		None = 0,
 		Variable,
+		GlobVariable,
 		Function,
 		Type,
 		Enum,
@@ -103,6 +104,7 @@ namespace Glass
 		Token Name;
 		Type Tipe;
 		bool IsArg = false;
+		bool Global = false;
 
 		IRSSA* DataSSA = nullptr;
 		IRSSA* AddressSSA = nullptr;
@@ -296,14 +298,13 @@ namespace Glass
 			u64 m_CurrentFunction = 0;
 
 			u64 m_ScopeIDCounter = 0;
-			u64 m_CurrentCTXScope = 1;
+			u64 m_CurrentCTXScope = 0;
 
 			std::unordered_map<u64, ContextScope> m_Scopes;
 
 			u64 GetScopeID() {
-				u64 scope_id = m_ScopeIDCounter;
 				m_ScopeIDCounter++;
-				return scope_id;
+				return m_ScopeIDCounter;
 			}
 
 			const ContextScope* CurrentContext() const {
@@ -312,6 +313,10 @@ namespace Glass
 
 			ContextScope* CurrentContext() {
 				return &m_Scopes.at(m_CurrentCTXScope);
+			}
+
+			const ContextScope* GetContext(u64 id) const {
+				return &m_Scopes.at(id);
 			}
 
 			u64 CurrentContextID() const {
@@ -347,6 +352,8 @@ namespace Glass
 			}
 
 			std::unordered_map<u64, std::unordered_map<u64, IRSSA*>> m_SSAs;
+
+			std::unordered_map<std::string, u64> m_GlobalVariables;
 
 			std::unordered_map<u64, std::unordered_map<std::string, u64>> m_VariableSSAs;
 			std::unordered_map<u64, std::unordered_map<std::string, u64>> m_Variables;
@@ -439,17 +446,42 @@ namespace Glass
 				}
 			}
 
-			u64 GetVariableSSA(const std::string& name) const {
-				if (m_VariableSSAs.find(m_CurrentFunction) != m_VariableSSAs.end()) {
-					if (m_VariableSSAs.at(m_CurrentFunction).find(name) != m_VariableSSAs.at(m_CurrentFunction).end()) {
-						return m_VariableSSAs.at(m_CurrentFunction).at(name);
+			u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
+				m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
+				return m_VariableSSAs[CurrentContextID()][name] = ssa->ID;
+			}
+
+			u64 GetVariableSSARecursive(u64 ctx_id, const std::string& name) const {
+
+				if (ctx_id == 1) {
+					return (u64)-1;
+				}
+
+				if (m_VariableSSAs.find(ctx_id) != m_VariableSSAs.end()) {
+					if (m_VariableSSAs.at(ctx_id).find(name) != m_VariableSSAs.at(ctx_id).end()) {
+						return m_VariableSSAs.at(ctx_id).at(name);
 					}
 				}
 
-				return (u64)-1;
+				u64 parent_ctx = GetContext(ctx_id)->Parent;
+
+				if (parent_ctx == 1) {
+					return (u64)-1;
+				}
+
+				return GetVariableSSARecursive(parent_ctx, name);
 			}
 
-			u64 GetVariableRecursive(u64 ctx_id, const std::string& name) {
+			u64 GetVariableSSA(const std::string& name) const {
+				return GetVariableSSARecursive(CurrentContextID(), name);
+			}
+
+			u64 GetVariableRecursive(u64 ctx_id, const std::string& name) const {
+
+				if (ctx_id == 0) {
+					return (u64)-1;
+				}
+
 				auto it = m_Variables.find(ctx_id);
 
 				if (it != m_Variables.end()) {
@@ -459,48 +491,60 @@ namespace Glass
 					}
 				}
 
-				if (CurrentContext()->Parent == 0) {
+				if (GetContext(ctx_id)->Parent == 0) {
 					return (u64)-1;
 				}
 
-				return GetVariableRecursive(CurrentContext()->Parent, name);
+				return GetVariableRecursive(GetContext(ctx_id)->Parent, name);
 			}
 
 			u64 GetVariable(const std::string& name) const {
-				if (m_Variables.find(m_CurrentFunction) != m_Variables.end()) {
-					if (m_Variables.at(m_CurrentFunction).find(name) != m_Variables.at(m_CurrentFunction).end()) {
-						return m_Variables.at(m_CurrentFunction).at(name);
+				return GetVariableRecursive(CurrentContextID(), name);
+			}
+
+			//Var Metadata
+			const VariableMetadata* GetVariableMetadataRecursive(u64 ctx_id, u64 ID) const {
+
+				if (ctx_id == 0) {
+					return nullptr;
+				}
+
+				if (m_VariableMetadata.find(ctx_id) != m_VariableMetadata.end()) {
+					if (m_VariableMetadata.at(ctx_id).find(ID) != m_VariableMetadata.at(ctx_id).end()) {
+						return &m_VariableMetadata.at(ctx_id).at(ID);
 					}
 				}
 
-				return (u64)-1;
+				if (GetContext(ctx_id)->Parent == 0) {
+					return nullptr;
+				}
+
+				return GetVariableMetadataRecursive(GetContext(ctx_id)->Parent, ID);
 			}
 
 			void RegisterVariableMetadata(u64 ID, const VariableMetadata& metadata) {
-				m_VariableMetadata[m_CurrentFunction][ID] = metadata;
-				m_Variables[m_CurrentFunction][metadata.Name.Symbol] = ID;
+				m_VariableMetadata[CurrentContextID()][ID] = metadata;
+				m_Variables[CurrentContextID()][metadata.Name.Symbol] = ID;
 			}
 
 			const VariableMetadata* GetVariableMetadata(u64 ID) const {
-				if (m_VariableMetadata.find(m_CurrentFunction) != m_VariableMetadata.end()) {
-					if (m_VariableMetadata.at(m_CurrentFunction).find(ID) != m_VariableMetadata.at(m_CurrentFunction).end()) {
-						return &m_VariableMetadata.at(m_CurrentFunction).at(ID);
-					}
-				}
-				return nullptr;
-			}
-
-			u64 UpdateVariableSSA(const std::string& name, IRSSA* ssa) {
-				return m_VariableSSAs.at(m_CurrentFunction).at(name) = ssa->ID;
-			}
-
-			u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
-				m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
-				return m_VariableSSAs[m_CurrentFunction][name] = ssa->ID;
+				return GetVariableMetadataRecursive(CurrentContextID(), ID);
 			}
 
 			void RegisterSSA(IRSSA* ssa) {
 				m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
+			}
+
+			void RegisterGlobalVariable(u64 glob_id, const std::string& name) {
+				m_GlobalVariables[name] = glob_id;
+			}
+
+			u64 GetGlobalVariable(const std::string& name) {
+				auto it = m_GlobalVariables.find(name);
+				if (it != m_GlobalVariables.end()) {
+					return it->second;
+				}
+				return (u64)-1;
 			}
 
 			void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false) {
@@ -581,6 +625,10 @@ namespace Glass
 					return SymbolType::Function;
 				}
 
+				if (GetGlobalVariable(symbol) != (u64)-1) {
+					return SymbolType::GlobVariable;
+				}
+
 				if (GetVariableMetadata(GetVariableSSA(symbol)) != nullptr) {
 					return SymbolType::Variable;
 				}
@@ -652,6 +700,7 @@ namespace Glass
 		IRInstruction* FunctionCodeGen(FunctionNode* functionNode);
 
 		IRInstruction* VariableCodeGen(const VariableNode* variableNode);
+		IRInstruction* GlobalVariableCodeGen(const VariableNode* variableNode);
 
 		IRInstruction* ReturnCodeGen(const ReturnNode* returnNode);
 		IRInstruction* StructCodeGen(const StructNode* structNode);
@@ -671,6 +720,8 @@ namespace Glass
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
+
+		IRInstruction* FunctionRefCodegen(const Identifier* func);
 
 		std::vector<IRInstruction*> ScopeCodeGen(const ScopeNode* scope);
 
@@ -808,10 +859,6 @@ namespace Glass
 			return m_Metadata.GetVariableSSA(name);
 		}
 
-		u64 UpdateVariableSSA(const std::string& name, IRSSA* ssa) {
-			return m_Metadata.UpdateVariableSSA(name, ssa);
-		}
-
 		u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
 			return m_Metadata.RegisterVariable(ssa, name);
 		}
@@ -864,6 +911,15 @@ namespace Glass
 			return m_FunctionIDCounter;
 		}
 
+		bool ContextGlobal() {
+			return m_Metadata.CurrentContextID() == 1;
+		}
+
+		u64 GetGlobalID() {
+			m_GlobalCounter++;
+			return m_GlobalCounter;
+		}
+
 	private:
 
 		MetaData m_Metadata;
@@ -876,6 +932,7 @@ namespace Glass
 		u64 m_TypeIDCounter = 99;
 		u64 m_StructIDCounter = 99;
 		u64 m_EnumIDCounter = 0;
+		u64 m_GlobalCounter = 0;
 
 		std::vector<CompilerMessage> m_Messages;
 		u64 m_CurrentFile = 0;

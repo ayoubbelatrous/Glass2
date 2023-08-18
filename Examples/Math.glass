@@ -152,6 +152,11 @@ fn add_vec4_float(vec4 lhs, float rhs) : vec4
 #operator+ add_vec4_float;
 #operator+ add_vec4_f32;
 
+fn Vec2(f32 x, f32 y) : vec2 {
+	vec2 res; res.x = x; res.y = y;
+	return res;
+}
+
 fn Vec3(f32 x, f32 y, f32 z) : vec3 {
 	vec3 res; res.x = x; res.y = y; res.z = z;
 	return res;

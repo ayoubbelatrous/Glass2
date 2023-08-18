@@ -136,49 +136,6 @@ typedef struct Any
 			}
 		}
 
-		for (const auto& [ID, metadata] : m_Metadata->m_Enums) {
-			forward_declaration += fmt::format("typedef u64 {0};", metadata.Name.Symbol);
-		}
-
-		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
-			if (metadata.Foreign) {
-
-				const std::string& func_name = metadata.Name;
-				std::string return_type = m_Metadata->GetType(metadata.ReturnType.ID);
-
-				for (u64 i = 0; i < metadata.ReturnType.Pointer; i++) {
-					return_type.push_back('*');
-				}
-
-				std::string arguments;
-
-				u64 i = 0;
-				for (const ArgumentMetadata& arg_metadata : metadata.Arguments) {
-
-					std::string type = m_Metadata->GetType(arg_metadata.Tipe.ID);
-
-					for (u64 i = 0; i < arg_metadata.Tipe.Pointer; i++) {
-						type.push_back('*');
-					}
-
-					arguments += fmt::format("{} {}", type, arg_metadata.Name);
-
-					if (i == metadata.Arguments.size() - 1) {
-					}
-					else {
-						arguments += ", ";
-					}
-					i++;
-				}
-
-				if (metadata.Variadic) {
-					arguments.append(",...");
-				}
-
-				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
-			}
-		}
-
 		for (IRInstruction* inst : m_Program->Instructions) {
 			if (inst->GetType() == IRNodeType::Function) {
 				IRFunction* IRF = (IRFunction*)inst;
@@ -227,6 +184,49 @@ typedef struct Any
 			}
 		}
 
+		for (const auto& [ID, metadata] : m_Metadata->m_Enums) {
+			forward_declaration += fmt::format("typedef u64 {0};", metadata.Name.Symbol);
+		}
+
+		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
+			if (metadata.Foreign) {
+
+				const std::string& func_name = metadata.Name;
+				std::string return_type = m_Metadata->GetType(metadata.ReturnType.ID);
+
+				for (u64 i = 0; i < metadata.ReturnType.Pointer; i++) {
+					return_type.push_back('*');
+				}
+
+				std::string arguments;
+
+				u64 i = 0;
+				for (const ArgumentMetadata& arg_metadata : metadata.Arguments) {
+
+					std::string type = m_Metadata->GetType(arg_metadata.Tipe.ID);
+
+					for (u64 i = 0; i < arg_metadata.Tipe.Pointer; i++) {
+						type.push_back('*');
+					}
+
+					arguments += fmt::format("{} {}", type, arg_metadata.Name);
+
+					if (i == metadata.Arguments.size() - 1) {
+					}
+					else {
+						arguments += ", ";
+					}
+					i++;
+				}
+
+				if (metadata.Variadic) {
+					arguments.append(",...");
+				}
+
+				forward_declaration += fmt::format("{} {} ({});\n", return_type, func_name, arguments);
+			}
+		}
+
 		for (IRInstruction* inst : m_Program->Instructions) {
 
 			IRNodeType Type = inst->GetType();
@@ -247,6 +247,9 @@ typedef struct Any
 				}
 
 				code += fmt::format("const char* __data{} = \"{}\";\n", data->ID, bytes);
+			}
+			if (Type == IRNodeType::GlobDecl) {
+				code += IRCodeGen(inst) + ";";
 			}
 		}
 
@@ -598,6 +601,32 @@ typedef struct Any
 			data_str += "};";
 
 			return data_str;
+		}
+		break;
+		case IRNodeType::FuncPtr:
+		{
+			IRFuncPtr* func_ptr = (IRFuncPtr*)inst;
+			return fmt::format("&{}", m_Metadata->GetFunctionMetadata(func_ptr->FunctionID)->Name);
+		}
+		break;
+		case IRNodeType::GlobAddress:
+		{
+			IRGlobalAddress* address_of_global = (IRGlobalAddress*)inst;
+			return fmt::format("(u64)&__glob{}", address_of_global->GlobID);
+		}
+		break;
+		case IRNodeType::GlobDecl:
+		{
+			IRGlobalDecl* global_decl = (IRGlobalDecl*)inst;
+
+			std::string type = m_Metadata->GetType(global_decl->Type);
+
+			for (u64 i = 0; i < global_decl->Pointer; i++)
+			{
+				type.push_back('*');
+			}
+
+			return fmt::format("{} __glob{}", type, global_decl->GlobID);
 		}
 		break;
 		}

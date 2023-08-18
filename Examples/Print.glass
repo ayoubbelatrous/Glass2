@@ -1,3 +1,27 @@
+fn ansi_red() {
+	printf("\e[1;31m");
+}
+
+fn ansi_yellow() {
+	printf("\e[1;33m");
+}
+
+fn ansi_green() {
+	printf("\e[1;32m");
+}
+
+fn ansi_green_u() {
+	printf("\e[1;32m");
+}
+
+fn ansi_c_u() {
+	printf("\e[1;36m");
+}
+
+fn ansi_clear() {
+	printf("\e[0m");
+}
+
 fn print_any(Any any) : i32
 {
 	if any.type == int {
@@ -66,4 +90,62 @@ fn print(Any... args) {
 
 		fmt_i = fmt_i + 1;
 	}
+}
+
+fn log_error(Any... args) {
+	Any fmt_any = args[0];
+	u8* fmt  = fmt_any.data;
+
+	i32 arg_i = 1;
+	i32 fmt_i = 0;
+
+	i32 fmt_count = strlen(fmt);
+
+	ansi_red();
+
+	while fmt_i != fmt_count {
+		u8 c = fmt[fmt_i];
+
+		if c == "%"[0] {
+			print_any(args[arg_i]);
+			arg_i = arg_i + 1;
+		}
+
+		if c != "%"[0] {
+			putchar(c);
+		}
+
+		fmt_i = fmt_i + 1;
+	}
+
+	ansi_clear();
+}
+
+fn log_warn(Any... args) {
+	Any fmt_any = args[0];
+	u8* fmt  = fmt_any.data;
+
+	i32 arg_i = 1;
+	i32 fmt_i = 0;
+
+	i32 fmt_count = strlen(fmt);
+
+	ansi_yellow();
+
+	while fmt_i != fmt_count {
+		u8 c = fmt[fmt_i];
+
+		if c == "%"[0] {
+			print_any(args[arg_i]);
+			arg_i = arg_i + 1;
+		}
+
+		if c != "%"[0] {
+			putchar(c);
+		}
+
+		fmt_i = fmt_i + 1;
+	}
+
+	ansi_clear();
 }

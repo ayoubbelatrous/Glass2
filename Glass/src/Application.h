@@ -28,6 +28,8 @@ namespace Glass
 		bool Verbose = true;
 		bool DumpIR = false;
 
+		bool Run = false;
+
 		std::vector<std::string> CIncludes;
 		std::vector<std::string> CLibs;
 	};

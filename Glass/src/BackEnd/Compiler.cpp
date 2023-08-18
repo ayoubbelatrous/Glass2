@@ -704,6 +704,10 @@ namespace Glass
 
 	IRInstruction* Compiler::VariableCodeGen(const VariableNode* variableNode)
 	{
+		if (ContextGlobal()) {
+			return GlobalVariableCodeGen(variableNode);
+		}
+
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
 
 		if (metadata != nullptr)
@@ -791,6 +795,7 @@ namespace Glass
 			variableNode->Symbol,
 			Type,
 			false,
+			false,
 			StorageSSA,
 			IRssa };
 
@@ -812,6 +817,82 @@ namespace Glass
 		{
 			return nullptr;
 		}
+	}
+
+	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode)
+	{
+		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
+
+		if (metadata != nullptr)
+		{
+			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("variable '{}' is already defined", variableNode->Symbol.Symbol), MessageType::Warning });
+			PushMessage(CompilerMessage{ fmt::format("Defined At!", variableNode->Symbol.Symbol), MessageType::Info });
+			PushMessage(CompilerMessage{ "\t" + PrintTokenLocation(metadata->Name), MessageType::Info });
+			return nullptr;
+		}
+
+		u64 glob_id = GetGlobalID();
+
+		Glass::Type Type;
+
+		if (variableNode->Assignment != nullptr)
+		{
+			MSG_LOC(variableNode->Assignment);
+			FMT_WARN("assignment for global variables is not supported yet");
+			return nullptr;
+		}
+
+		IRSSA* StorageSSA = CreateIRSSA();
+
+		Type.ID = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
+		Type.Pointer = variableNode->Type->Pointer;
+		Type.Array = variableNode->Type->Array;
+
+		if (variableNode->Type->Array)
+		{
+			StorageSSA->Type = IR_array;
+		}
+		else
+		{
+			StorageSSA->Type = Type.ID;
+
+			if (StorageSSA->Type == NULL_ID) {
+				PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
+				return nullptr;
+			}
+		}
+		if (!variableNode->Type->Array)
+		{
+			for (u64 i = 0; i < variableNode->Type->Pointer; i++)
+			{
+				StorageSSA->Pointer++;
+			}
+		}
+
+		StorageSSA->Value = nullptr;
+
+		VariableMetadata var_metadata = {
+			variableNode->Symbol,
+			Type,
+			false,
+			true,
+			StorageSSA,
+			nullptr };
+
+		m_Metadata.RegisterGlobalVariable(glob_id, variableNode->Symbol.Symbol);
+		m_Metadata.RegisterVariableMetadata(glob_id, var_metadata);
+
+		//m_Metadata.RegExprType(IRssa->ID, var_metadata.Tipe);
+
+		IRGlobalDecl* global = IR(IRGlobalDecl());
+		global->GlobID = glob_id;
+		global->Type = var_metadata.Tipe.ID;
+		global->Pointer = var_metadata.Tipe.Pointer;
+		global->Array = var_metadata.Tipe.Array;
+
+		return global;
 	}
 
 	IRInstruction* Compiler::ReturnCodeGen(const ReturnNode* returnNode)
@@ -1050,6 +1131,18 @@ namespace Glass
 
 	IRInstruction* Compiler::IdentifierCodeGen(const Identifier* identifier)
 	{
+		SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
+
+		if (symbol_type == SymbolType::Function) {
+			return FunctionRefCodegen(identifier);
+		}
+
+		if (symbol_type == SymbolType::None) {
+			MSG_LOC(identifier);
+			FMT_WARN("undefined name: '{}'", identifier->Symbol.Symbol);
+			return nullptr;
+		}
+
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(identifier->Symbol.Symbol));
 
 		if (metadata == nullptr)
@@ -1059,17 +1152,36 @@ namespace Glass
 			return nullptr;
 		}
 
-		u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
+		if (symbol_type == SymbolType::Variable)
+		{
+			u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
 
-		IRSSA* ssa = GetSSA(ID);
+			IRSSA* ssa = GetSSA(ID);
 
-		IRSSAValue ssa_val;
+			IRSSAValue ssa_val;
 
-		ssa_val.SSA = GetVariableSSA(identifier->Symbol.Symbol);
+			ssa_val.SSA = GetVariableSSA(identifier->Symbol.Symbol);
 
-		m_Metadata.RegExprType(ssa_val.SSA, metadata->Tipe);
+			m_Metadata.RegExprType(ssa_val.SSA, metadata->Tipe);
 
-		return (IRInstruction*)IR(ssa_val);
+			return (IRInstruction*)IR(ssa_val);
+		}
+		else if (symbol_type == SymbolType::GlobVariable) {
+
+			u64 glob_id = m_Metadata.GetGlobalVariable(identifier->Symbol.Symbol);
+
+			auto ssa = CreateIRSSA();
+			ssa->Type = IR_u64;
+			IRGlobalAddress* glob_address = IR(IRGlobalAddress(glob_id));
+
+			ssa->Value = glob_address;
+
+			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
+
+			return IR(IRSSAValue(ssa->ID));
+		}
+
+		return nullptr;
 	}
 
 	IRInstruction* Compiler::NumericLiteralCodeGen(const NumericLiteral* numericLiteral)
@@ -1377,22 +1489,51 @@ namespace Glass
 
 		if (left->GetType() == NodeType::Identifier)
 		{
-			IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+			Identifier* identifier_left = (Identifier*)binaryExpr->Left;
 
-			u64 var_ssa_id = GetVariableSSA(((Identifier*)left)->Symbol.Symbol);
-			IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
+			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier_left->Symbol.Symbol);
 
-			const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
-
-			IRStore* store = IR(IRStore());
+			if (symbol_type == SymbolType::GlobVariable)
 			{
-				store->Data = right_val;
-				store->AddressSSA = var_ssa_id;
-				store->Type = metadata->DataSSA->Type;
-				store->Pointer = metadata->DataSSA->Pointer;
+				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+
+				u64 glob_id = m_Metadata.GetGlobalVariable(identifier_left->Symbol.Symbol);
+
+				auto ssa = CreateIRSSA();
+				ssa->Type = IR_u64;
+				ssa->Value = IR(IRGlobalAddress(glob_id));
+
+				const Glass::Type& type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
+
+				IRStore* store = IR(IRStore());
+				{
+					store->Data = right_val;
+					store->AddressSSA = ssa->ID;
+					store->Type = type.ID;
+					store->Pointer = type.Pointer;
+				}
+
+				return store;
 			}
 
-			return store;
+			if (symbol_type == SymbolType::Variable) {
+				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+
+				u64 var_ssa_id = GetVariableSSA(identifier_left->Symbol.Symbol);
+				IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
+
+				const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
+
+				IRStore* store = IR(IRStore());
+				{
+					store->Data = right_val;
+					store->AddressSSA = var_ssa_id;
+					store->Type = metadata->DataSSA->Type;
+					store->Pointer = metadata->DataSSA->Pointer;
+				}
+
+				return store;
+			}
 		}
 		if (left->GetType() == NodeType::MemberAccess)
 		{
@@ -1823,6 +1964,20 @@ namespace Glass
 		return result;
 	}
 
+	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)
+	{
+		u64 func_id = m_Metadata.GetFunctionMetadata(func->Symbol.Symbol);
+
+		GS_CORE_ASSERT(func_id != NULL_ID, "Function must exist at this point");
+
+		auto ssa = CreateIRSSA();
+		ssa->Value = IR(IRFuncPtr(func_id));
+		ssa->Type = IR_void;
+		ssa->Pointer = 1;
+
+		return IR(IRSSAValue(ssa->ID));
+	}
+
 	std::vector<IRInstruction*> Compiler::ScopeCodeGen(const ScopeNode* scope)
 	{
 		m_Metadata.PushContext(ContextScopeType::FUNC);
@@ -2241,9 +2396,14 @@ namespace Glass
 		{
 			Identifier* identifier = (Identifier*)expr;
 
-			if (m_Metadata.GetSymbolType(identifier->Symbol.Symbol) == SymbolType::Type)
-			{
+			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
 
+			if (symbol_type == SymbolType::Function) {
+				return (IRSSAValue*)ExpressionCodeGen(expr);
+			}
+
+			if (symbol_type == SymbolType::Type)
+			{
 				u64 type_id = m_Metadata.GetType(identifier->Symbol.Symbol);
 
 				NumericLiteral Node;
@@ -2252,7 +2412,7 @@ namespace Glass
 
 				return (IRSSAValue*)ExpressionCodeGen(AST(Node));
 			}
-			else
+			else if (symbol_type == SymbolType::Variable)
 			{
 				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
 
@@ -2290,6 +2450,26 @@ namespace Glass
 				{
 					return ir_address;
 				}
+			}
+			else {
+
+				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
+				const Glass::Type& expr_type = m_Metadata.GetExprType(ir_address->SSA);
+
+				IRLoad load;
+				load.SSAddress = ir_address->SSA;
+
+				IRSSA* ssa = CreateIRSSA();
+
+				load.Type = expr_type.ID;
+
+				ssa->Type = expr_type.ID;
+				ssa->Value = IR(load);
+				ssa->Pointer = expr_type.Pointer;
+
+				m_Metadata.RegExprType(ssa->ID, expr_type);
+
+				return IR(IRSSAValue(ssa->ID));
 			}
 		}
 		break;

@@ -171,19 +171,12 @@ namespace Glass
 				int cc_result = system(compiler_cmd.c_str());
 				auto clang_end = std::chrono::high_resolution_clock::now();
 
-				if (cc_result != 0) {
-					GS_CORE_ERROR("Error: During Execution of Command");
-				}
-				else {
-					GS_CORE_WARN("CodeGen Done: {}", compiler_cmd);
-				}
-
 				auto lexer_time = std::chrono::duration_cast<std::chrono::microseconds>(m_LexerEnd - m_LexerStart).count() / 1000.0f;
 				auto parser_time = std::chrono::duration_cast<std::chrono::microseconds>(m_ParserEnd - m_ParserStart).count() / 1000.0f;
 				auto compiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_CompilerEnd - m_CompilerStart).count() / 1000.0f;
 				auto transpiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_TranspilerEnd - m_TranspilerStart).count() / 1000.0f;
 
-				if (true) {
+				if (false) {
 					GS_CORE_WARN("Timings: ");
 					GS_CORE_WARN("CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - clang_start).count() / 1000.0f);
 					GS_CORE_WARN("Total: {}", lexer_time + parser_time + compiler_time + transpiler_time);
@@ -192,6 +185,24 @@ namespace Glass
 					GS_CORE_WARN("Parser: {}", parser_time);
 					GS_CORE_WARN("Compiler: {}", compiler_time);
 					GS_CORE_WARN("Transpiler: {}", transpiler_time);
+				}
+
+				if (cc_result != 0) {
+					GS_CORE_ERROR("Error: During Execution of Command");
+				}
+				else {
+					GS_CORE_WARN("CodeGen Done: {}", compiler_cmd);
+					if (m_Options.Run) {
+
+						fs_path output_path = fs_path(input).replace_extension(".exe");
+
+						GS_CORE_INFO("Running: {}", output_path);
+						int run_result = system(output_path.string().c_str());
+
+						if (run_result != 0) {
+							GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
+						}
+					}
 				}
 			}
 		}
@@ -263,6 +274,11 @@ namespace Glass
 
 				if (arg == "-cL") {
 					modeCLibs = true;
+				}
+
+				if (arg == "-run") {
+					options.Run = true;
+					modal = false;
 				}
 
 				continue;

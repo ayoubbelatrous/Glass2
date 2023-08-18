@@ -104,6 +104,11 @@ namespace Glass
 		BitOr,
 		ForeignFunction,
 		ArrayAllocate,
+		FuncPtr,
+
+		GlobAddress,
+		GlobDecl,
+
 		TranslationUnit,
 	};
 
@@ -906,6 +911,58 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::DeRef;
+		}
+	};
+
+	struct IRFuncPtr : public IRInstruction {
+		u64 ID = 0;
+		u64 FunctionID = 0;
+
+		IRFuncPtr(u64 functionID)
+			:FunctionID(functionID) {}
+
+		virtual std::string ToString() const override
+		{
+			return "&func()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::FuncPtr;
+		}
+	};
+
+	struct IRGlobalAddress : public IRInstruction {
+		u64 ID = 0;
+		u64 GlobID = 0;
+
+		IRGlobalAddress(u64 glob_id)
+			:GlobID(glob_id) {}
+
+		virtual std::string ToString() const override
+		{
+			return "global &var";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::GlobAddress;
+		}
+	};
+
+	struct IRGlobalDecl : public IRInstruction {
+		u64 ID = 0;
+		u64 GlobID = 0;
+
+		u64 Type = 0;
+		u64 Pointer = false;
+		bool Array = false;
+
+		virtual std::string ToString() const override
+		{
+			return "global var;";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::GlobDecl;
 		}
 	};
 
