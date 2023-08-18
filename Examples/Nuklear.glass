@@ -1,0 +1,103 @@
+#foreign struct nk_context {i32 null0;};
+
+struct nk_rect
+{
+    f32 x;
+    f32 y;
+
+    f32 width;
+    f32 height;
+};
+
+fn _Rect(f32 x, f32 y, f32 w, f32 h) : nk_rect{
+    nk_rect rect;
+
+    rect.x = x;
+    rect.y = y;
+
+    rect.width = w;
+    rect.height = h;
+
+    return rect;
+};
+
+enum #flags Panel_Flags {
+    NK_WINDOW_BORDER            ;
+    NK_WINDOW_MOVABLE           ;
+    NK_WINDOW_SCALABLE          ;
+    NK_WINDOW_CLOSABLE          ;
+    NK_WINDOW_MINIMIZABLE       ;
+    NK_WINDOW_NO_SCROLLBAR      ;
+    NK_WINDOW_TITLE             ;
+    NK_WINDOW_SCROLL_AUTO_HIDE  ;
+    NK_WINDOW_BACKGROUND        ;
+    NK_WINDOW_SCALE_LEFT        ;
+    NK_WINDOW_NO_INPUT          ;
+};
+
+enum #flags Align_Flags {
+    NK_TEXT_ALIGN_LEFT    ;
+    NK_TEXT_ALIGN_CENTERED;
+    NK_TEXT_ALIGN_RIGHT   ;
+    NK_TEXT_ALIGN_TOP     ;
+    NK_TEXT_ALIGN_MIDDLE  ;
+    NK_TEXT_ALIGN_BOTTOM  ;
+};
+
+
+#foreign fn InitNuklear(f32 font_size) : nk_context* {}
+#foreign fn InitNuklearEx(Font font ,f32 font_size) : nk_context* {}
+#foreign fn DrawNuklear(nk_context* ctx) : void {}
+#foreign fn UpdateNuklear(nk_context* ctx) : void {}
+
+#foreign fn nk_begin(nk_context* ctx, u8* title, nk_rect rect, i32 flags) : bool {}
+#foreign fn nk_end(nk_context* ctx) : void {}
+#foreign fn nk_layout_row_dynamic(nk_context* ctx, f32 height, i32 cols) : void {}
+#foreign fn nk_label(nk_context* ctx, u8* text, Align_Flags align) : void {}
+#foreign fn nk_button_label(nk_context* ctx, u8* text) : bool {}
+
+nk_context* NkGlobalCTX;
+
+fn Begin(u8* title, i32 flags) : bool {
+    nk_begin(NkGlobalCTX, title, _Rect(5, 5, 300, 200), flags);
+}
+
+fn RowDynamic(f32 height, i32 cols) {
+    nk_layout_row_dynamic(NkGlobalCTX ,height, cols);
+}
+
+fn Label(u8* text) {
+    nk_label(NkGlobalCTX, text, Align_Flags.NK_TEXT_ALIGN_LEFT);
+}
+
+fn Button(u8* text) : bool {
+    return nk_button_label(NkGlobalCTX, text);
+}
+
+fn End() {
+    nk_end(NkGlobalCTX);
+}
+
+i32 DefaultPanelFlags;
+
+fn InitNuklearFlags() {
+    DefaultPanelFlags =
+          Panel_Flags.NK_WINDOW_MOVABLE
+        | Panel_Flags.NK_WINDOW_TITLE
+        | Panel_Flags.NK_WINDOW_SCALABLE
+        | Panel_Flags.NK_WINDOW_CLOSABLE
+        | Panel_Flags.NK_WINDOW_MINIMIZABLE;
+}
+
+fn NuklearStart(Font font, f32 font_size) {
+    NkGlobalCTX = InitNuklearEx(font, font_size);
+    InitNuklearFlags();
+}
+
+fn NuklearUpdate() {
+    UpdateNuklear(NkGlobalCTX);
+}
+
+fn NuklearDraw() {
+    DrawNuklear(NkGlobalCTX);
+}

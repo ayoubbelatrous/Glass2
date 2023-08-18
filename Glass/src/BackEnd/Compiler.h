@@ -720,6 +720,7 @@ namespace Glass
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
+		IRInstruction* SizeOfCodeGen(const SizeOfNode* size_of);
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
 

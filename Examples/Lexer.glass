@@ -1,0 +1,39 @@
+enum Token_Type {
+	IDEN;
+
+	PLUS;
+	MULT;
+	DIVI;
+	SUBT;
+};
+
+struct Token {
+	string name;
+	Token_Type type;
+
+	u32 line;
+	u32 column;
+};
+
+struct TokenList {
+    Token* tokens;
+    u32 Count;
+};
+
+struct Lexer {
+    string source;
+    u32 line;
+};
+
+fn Lexer_Make(string source) : Lexer {
+    Lexer lexer;
+    lexer.source = source;
+    lexer.line = 0;
+    return lexer;
+}
+
+fn TokenList_Add(TokenList* list, Token token) {
+}
+
+fn Lexer_Lex(Lexer* lexer) : TokenList {
+}

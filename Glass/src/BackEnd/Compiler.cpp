@@ -362,6 +362,7 @@ namespace Glass
 		case NodeType::MemberAccess:
 		case NodeType::ArrayAccess:
 		case NodeType::Cast:
+		case NodeType::SizeOf:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -1123,6 +1124,9 @@ namespace Glass
 			break;
 		case NodeType::Cast:
 			return CastCodeGen((CastNode*)expression);
+			break;
+		case NodeType::SizeOf:
+			return SizeOfCodeGen((SizeOfNode*)expression);
 			break;
 		}
 
@@ -1961,6 +1965,66 @@ namespace Glass
 		return result;
 	}
 
+	IRInstruction* Compiler::SizeOfCodeGen(const SizeOfNode* size_of)
+	{
+		u64 size = 0;
+
+		if (size_of->Expr->GetType() == NodeType::Identifier) {
+
+			Identifier* identifier = (Identifier*)size_of->Expr;
+
+			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
+
+			if (symbol_type == SymbolType::None) {
+				MSG_LOC(identifier);
+				FMT_WARN("undefined name '{}' inside sizeof", identifier->Symbol.Symbol);
+				return nullptr;
+			}
+
+			if (symbol_type == SymbolType::Type) {
+				size = m_Metadata.GetTypeSize(m_Metadata.GetType(identifier->Symbol.Symbol));
+			}
+			else {
+				IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
+
+				const Glass::Type& expr_type = m_Metadata.GetExprType(expr_value->SSA);
+
+				if (expr_type.Pointer) {
+					size = 8;
+				}
+				else if (expr_type.Array) {
+					size = 16;
+				}
+				else {
+					size = m_Metadata.GetTypeSize(expr_type.ID);
+				}
+			}
+		}
+		else {
+
+			IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
+
+			const Glass::Type& expr_type = m_Metadata.GetExprType(expr_value->SSA);
+
+			if (expr_type.Pointer) {
+				size = 8;
+			}
+			else if (expr_type.Array) {
+				size = 16;
+			}
+			else {
+				size = m_Metadata.GetTypeSize(expr_type.ID);
+			}
+		}
+
+		//@Gross
+		NumericLiteral SizeNode;
+		SizeNode.Val.Int = size;
+		SizeNode.type = NumericLiteral::Type::Int;
+
+		return NumericLiteralCodeGen(AST(SizeNode));
+	}
+
 	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)
 	{
 		u64 func_id = m_Metadata.GetFunctionMetadata(func->Symbol.Symbol);
@@ -2481,6 +2545,9 @@ namespace Glass
 	{
 		IRSSAValue* expr_result = GetExpressionByValue(expr);
 
+		if (expr_result == nullptr)
+			return nullptr;
+
 		const Glass::Type& expr_type = m_Metadata.GetExprType(expr_result->SSA);
 
 		if (expr_type.ID == IR_any)
@@ -2611,11 +2678,21 @@ namespace Glass
 				auto a = arguments[i];
 				if (element_type != IR_any)
 				{
-					array_data_ids.push_back(GetExpressionByValue(a)->SSA);
+					auto expr = GetExpressionByValue(a);
+
+					if (expr == nullptr)
+						return nullptr;
+
+					array_data_ids.push_back(expr->SSA);
 				}
 				else
 				{
-					array_data_ids.push_back(PassAsAny(a)->SSA);
+					auto expr = PassAsAny(a);
+
+					if (expr == nullptr)
+						return nullptr;
+
+					array_data_ids.push_back(expr->SSA);
 				}
 			}
 

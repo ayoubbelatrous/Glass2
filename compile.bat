@@ -1,2 +1,2 @@
 clear
-.\Glass\bin\Debug\Glass.exe .\Examples\C.glass .\Examples\Print.glass .\Examples\Math.glass .\Examples\Main.glass -cL raylib.dll ray_nuklear.dll -run
+.\Glass\bin\Release\Glass.exe .\Examples\C.glass .\Examples\String.glass .\Examples\Print.glass .\Examples\Math.glass .\Examples\Raylib.glass .\Examples\Nuklear.glass .\Examples\Lexer.glass .\Examples\Main.glass -cL raylib.dll ray_nuklear.dll -run

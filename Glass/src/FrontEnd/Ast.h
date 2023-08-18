@@ -33,6 +33,7 @@ namespace Glass
 		Operator,
 		Cast,
 		ArrayAccess,
+		SizeOf,
 		Enum,
 	};
 
@@ -783,6 +784,26 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Name;
+		}
+	};
+
+	class SizeOfNode : public Expression
+	{
+	public:
+
+		Expression* Expr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::SizeOf;
+		}
+
+		virtual std::string ToString() const {
+			return "SizeOf";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Expr->GetLocation();
 		}
 	};
 }

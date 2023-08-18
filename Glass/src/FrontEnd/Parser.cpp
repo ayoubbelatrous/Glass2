@@ -754,6 +754,32 @@ namespace Glass
 		return AST(Node);
 	}
 
+	Expression* Parser::ParseSizeOfExpr()
+	{
+		SizeOfNode Node;
+		Consume();
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' after sizeof, Instead Got:");
+		}
+
+		Consume();
+
+		Node.Expr = ParseExpression();
+
+		if (Node.Expr == nullptr) {
+			Abort("Expected something after 'sizeof(', Instead Got:");
+		}
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected ')' after sizeof(..., Instead Got:");
+		}
+
+		Consume();
+
+		return AST(Node);
+	}
+
 	Expression* Parser::ParseMemberExpr()
 	{
 		Expression* left = ParseCallExpr();
@@ -857,6 +883,9 @@ namespace Glass
 		{
 			if (At().Symbol == "cast") {
 				return ParseCastExpr();
+			}
+			else if (At().Symbol == "sizeof") {
+				return ParseSizeOfExpr();
 			}
 			else {
 				Identifier identifier;
