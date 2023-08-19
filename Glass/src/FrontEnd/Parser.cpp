@@ -822,15 +822,32 @@ namespace Glass
 					return ParseTypeOfExpr();
 				}
 
+				if (ExpectedToken(TokenType::OpenParen)) {
+					Abort("Expected '(' after function call name, Instead Got: ");
+				}
+
 				Consume();
 
 				std::vector<Expression*> arguments;
 
 				while (At().Type != TokenType::CloseParen) {
-					arguments.push_back(ParseExpression());
+
+					auto expr = ParseExpression();
+
+					if (expr) {
+						arguments.push_back(expr);
+					}
+					else {
+						Abort("Expected an argument in function call, Instead Got: ");
+					}
+
 					if (At().Type == TokenType::Comma) {
 						Consume();
 					}
+				}
+
+				if (ExpectedToken(TokenType::CloseParen)) {
+					Abort("Expected ')' on function call, Instead Got: ");
 				}
 
 				Consume();

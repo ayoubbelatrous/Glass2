@@ -1,0 +1,202 @@
+enum AstNode_Type
+{
+	ModFi;
+
+	Ident;
+	BExpr;
+
+	FDecl;
+
+	TExpr;
+
+	PDecl;
+};
+
+enum AstNode_Kind
+{
+	Stmt;
+	Expr;
+};
+
+enum Operator_Type
+{
+	MULT;
+	DIVI;
+	ADDI;
+	SUBT;
+
+	ASSI;
+};
+
+struct AstNode {
+	AstNode_Type type;
+	AstNode_Kind kind;
+};
+
+struct StmtList {
+	u64* statements;
+	u32 count;
+};
+
+struct AstNode_ModuleFile {
+	AstNode_Type type;
+	AstNode_Kind kind;
+
+	StmtList stmts;
+};
+
+struct AstNode_Ident {
+	AstNode_Type type;
+	AstNode_Kind kind;
+
+	Token symbol;
+};
+
+struct AstNode_BExpr {
+	AstNode_Type type;
+	AstNode_Kind kind;
+
+	AstNode* lhs;
+	AstNode* rhs;
+
+	Operator_Type operator;
+};
+
+enum TypeExpr_Kind {
+	Simple;
+	Function;
+};
+
+struct AstNode_TypeExpr {
+	AstNode_Type type		;
+	AstNode_Kind kind		;
+
+	TypeExpr_Kind type_kind	;
+
+	Token type_name			;
+	u32 pointer				;
+	u32 array   		   	;
+	u32 array_pointer		;
+};
+
+struct AstNode_FuncDecl {
+	AstNode_Type type			;
+	AstNode_Kind kind			;
+
+
+	Token symbol				;
+	StmtList arguments			;
+	AstNode_TypeExpr* return_type;
+};
+
+struct AstNode_ParmDecl {
+	AstNode_Type type			;
+	AstNode_Kind kind			;
+
+	Token symbol				;
+	AstNode_TypeExpr* type_expr ;
+};
+
+fn StmtList_Make() : StmtList {
+	StmtList l;
+	l.statements = 0;
+	l.count = 0;
+	return l;
+};
+
+fn StmtList_Add(StmtList* list, AstNode* node) {
+
+	list.count = list.count + 1;
+
+	u8* new_data = malloc(sizeof(u64) * list.count);
+
+	if list.statements {
+		memcpy(new_data, cast(u8*) list.statements, sizeof(u64) * list.count);
+	}
+
+	free(cast(u64) list.statements);
+
+	list.statements = new_data;
+	loc := list.count - 1;
+
+	u64 node_ptr = node;
+	list.statements[loc] = node_ptr;
+}
+
+fn StmtList_Get(StmtList* l, u32 i) : AstNode* {
+	u64 ptr = l.statements[i];
+	AstNode* node = ptr;
+
+	assert(i < l.count ," :: StmtList_Get() :: Index Out of Range");
+
+	return node;
+}
+
+fn AstNode_Type_ToString(AstNode_Type t) : string {
+
+	if t == AstNode_Type.FDecl {
+		return string_make("Function Declaration");
+	}
+
+	if t == AstNode_Type.Ident {
+		return string_make("Identifier");
+	}
+
+	if t == AstNode_Type.PDecl {
+		return string_make("Parameter Declaration");
+	}
+
+	assert(0, " :: AstNode_Type_ToString() :: Un-Reachable");
+}
+
+fn AstNode_Kind_ToString(AstNode_Kind t) : string {
+
+	if t == AstNode_Kind.Stmt {
+		return string_make("Statement");
+	}
+
+	if t == AstNode_Kind.Expr {
+		return string_make("Expression");
+	}
+
+	assert(0, " :: AstNode_Kind_ToString() :: Un-Reachable");
+}
+
+fn StmtList_Print(StmtList* l) {
+
+	i32 i = 0;
+
+	printf("StmtList :: {\n");
+
+	while i < l.count {
+		AstNode* node = StmtList_Get(l, i);
+
+		type := node.type;
+		kind := node.kind;
+
+		str_type := AstNode_Type_ToString(type);
+		str_kind := AstNode_Kind_ToString(kind);
+
+		if type == AstNode_Type.Ident {
+			AstNode_Ident* identifier = node;
+			print("Node: {type: %, kind: %, symbol: %} \n", str_type.data, str_kind.data, identifier.symbol.name.data);
+		}
+
+		if type == AstNode_Type.FDecl {
+			AstNode_FuncDecl* function_declaration = node;
+			print("Node: {type: %, kind: %, symbol: %} \n", str_type.data, str_kind.data, function_declaration.symbol.name.data);
+			printf("Arguments :: ");
+			StmtList_Print(&function_declaration.arguments);
+		}
+
+		if type == AstNode_Type.PDecl {
+			AstNode_ParmDecl* parm_decl = node;
+			print("Node: {type: %, kind: %, symbol: %} \n", str_type.data, str_kind.data, parm_decl.symbol.name.data);
+		}
+
+		i = i + 1;
+	}
+
+	printf("}\n");
+	printf("\n");
+}

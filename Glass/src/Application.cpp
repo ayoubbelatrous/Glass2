@@ -176,7 +176,7 @@ namespace Glass
 				auto compiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_CompilerEnd - m_CompilerStart).count() / 1000.0f;
 				auto transpiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_TranspilerEnd - m_TranspilerStart).count() / 1000.0f;
 
-				if (false) {
+				if (0) {
 					GS_CORE_WARN("Timings: ");
 					GS_CORE_WARN("CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - clang_start).count() / 1000.0f);
 					GS_CORE_WARN("Total: {}", lexer_time + parser_time + compiler_time + transpiler_time);
@@ -204,6 +204,8 @@ namespace Glass
 						}
 					}
 				}
+
+				GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
 			}
 		}
 	}

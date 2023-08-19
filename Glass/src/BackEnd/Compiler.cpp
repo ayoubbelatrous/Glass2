@@ -926,6 +926,12 @@ namespace Glass
 			member_metadata.Tipe.Pointer = member->Type->Pointer;
 			member_metadata.Tipe.Array = member->Type->Array;
 
+			if (member_metadata.Tipe.ID == (u64)-1) {
+				MSG_LOC(member);
+				FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member->Symbol.Symbol, member->Type->Symbol.Symbol);
+				return nullptr;
+			}
+
 			struct_metadata.Members.push_back(member_metadata);
 		}
 

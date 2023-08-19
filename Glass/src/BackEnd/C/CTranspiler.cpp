@@ -136,6 +136,10 @@ typedef struct Any
 			}
 		}
 
+		for (const auto& [ID, metadata] : m_Metadata->m_Enums) {
+			forward_declaration += fmt::format("typedef u64 {0};", metadata.Name.Symbol);
+		}
+
 		for (IRInstruction* inst : m_Program->Instructions) {
 			if (inst->GetType() == IRNodeType::Function) {
 				IRFunction* IRF = (IRFunction*)inst;
@@ -182,10 +186,6 @@ typedef struct Any
 
 				forward_declaration += fmt::format("typedef struct {0} {0};", metadata->Name.Symbol);
 			}
-		}
-
-		for (const auto& [ID, metadata] : m_Metadata->m_Enums) {
-			forward_declaration += fmt::format("typedef u64 {0};", metadata.Name.Symbol);
 		}
 
 		for (const auto& [ID, metadata] : m_Metadata->m_Functions) {
@@ -384,6 +384,8 @@ typedef struct Any
 		case IRNodeType::DIV:
 		case IRNodeType::Equal:
 		case IRNodeType::NotEqual:
+		case IRNodeType::GreaterThan:
+		case IRNodeType::LesserThan:
 		case IRNodeType::BitAnd:
 		case IRNodeType::BitOr:
 			return OpCodeGen(inst) + ";";
@@ -835,6 +837,20 @@ typedef struct Any
 			IRNOTEQ* neq = (IRNOTEQ*)op;
 
 			code = fmt::format("__tmp{} != __tmp{}", neq->SSA_A->SSA, neq->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::GreaterThan:
+		{
+			IRGreater* greater = (IRGreater*)op;
+
+			code = fmt::format("__tmp{} > __tmp{}", greater->SSA_A->SSA, greater->SSA_B->SSA);
+		}
+		break;
+		case IRNodeType::LesserThan:
+		{
+			IRLesser* lesser = (IRLesser*)op;
+
+			code = fmt::format("__tmp{} < __tmp{}", lesser->SSA_A->SSA, lesser->SSA_B->SSA);
 		}
 		break;
 		case IRNodeType::BitAnd:

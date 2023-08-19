@@ -1,11 +1,83 @@
 enum Token_Type {
 	IDEN;
+	NUME;
 
-	PLUS;
 	MULT;
 	DIVI;
+	ADDI;
 	SUBT;
+
+	COLO;
+	SEMI;
+	COMM;
+
+	OPAR;
+	CPAR;
+
+	OCUR;
+	CCUR;
+
+	ENOF;
 };
+
+fn TokenType_ToString(Token_Type t) : string {
+	if t == Token_Type.IDEN {
+		return string_make("Identifer");
+	}
+
+	if t == Token_Type.MULT {
+		return string_make("Multiplication");
+	}
+
+	if t == Token_Type.DIVI {
+		return string_make("Divition");
+	}
+
+	if t == Token_Type.ADDI {
+		return string_make("Addition");
+	}
+
+	if t == Token_Type.SUBT {
+		return string_make("Subtraction");
+	}
+
+	if t == Token_Type.OPAR {
+		return string_make("Open Parentheses");
+	}
+
+	if t == Token_Type.CPAR {
+		return string_make("Close Parentheses");
+	}
+
+	if t == Token_Type.OCUR {
+		return string_make("Open Curly Brace");
+	}
+
+	if t == Token_Type.CCUR {
+		return string_make("Close Curly Brace");
+	}
+
+	if t == Token_Type.SEMI {
+		return string_make("Semi Colon");
+	}
+
+	if t == Token_Type.COLO {
+		return string_make("Colon");
+	}
+
+	if t == Token_Type.COMM {
+		return string_make("Comma");
+	}
+
+	if t == Token_Type.ENOF {
+		return string_make("End Of File");
+	}
+
+	u64 as_int = t;
+
+	log_error("Was: %\n", as_int);
+	assert(0 ,":: TokenType_ToString() :: Unreachable");
+}
 
 struct Token {
 	string name;
@@ -15,25 +87,204 @@ struct Token {
 	u32 column;
 };
 
+fn Token_Make(string name, Token_Type type, u32 line, u32 column) : Token {
+	Token token;
+
+	token.name = name;
+	token.type = type;
+	token.line = line;
+	token.column = column;
+
+	return token;
+}
+
 struct TokenList {
-    Token* tokens;
-    u32 Count;
+	Token* tokens;
+	u32 count;
 };
 
-struct Lexer {
-    string source;
-    u32 line;
-};
+fn TokenList_Make() : TokenList {
+	TokenList list;
 
-fn Lexer_Make(string source) : Lexer {
-    Lexer lexer;
-    lexer.source = source;
-    lexer.line = 0;
-    return lexer;
+	list.tokens = 0;
+	list.count = 0;
+
+	return list;
 }
 
 fn TokenList_Add(TokenList* list, Token token) {
+	list.count = list.count + 1;
+
+	u8* new_data = malloc(sizeof(Token) * list.count);
+
+	if list.tokens {
+		memcpy(new_data, cast(u8*) list.tokens, sizeof(Token) * list.count);
+	}
+
+	free(cast(u64) list.tokens);
+
+	list.tokens = new_data;
+
+	loc := list.count - 1;
+	list.tokens[loc] = token;
+}
+
+fn TokenList_Print(TokenList list) {
+
+	u32 i = 0;
+
+	Token* token_list = list.tokens;
+
+	while i < list.count {
+		tk := token_list[i];
+
+		u32 type = tk.type;
+		type_string := TokenType_ToString(tk.type);
+
+		print("Token: {name: %, type: %, line:%:%} \n", tk.name.data, type_string.data, tk.line, tk.column);
+
+		i = i + 1;
+	}
+}
+
+struct Lexer {
+	string source;
+	u32 line;
+};
+
+fn Lexer_Make(string source) : Lexer {
+	Lexer lexer;
+
+	lexer.source = source;
+	lexer.line = 0;
+
+	return lexer;
+}
+
+fn GetSingleCharTokenType(u8 char) : Token_Type {
+
+	if isalpha(char) {
+		return Token_Type.IDEN;
+	}
+
+	if char == "*"[0] {
+		return Token_Type.MULT;
+	}
+
+	if char == "/"[0] {
+		return Token_Type.MULT;
+	}
+
+	if char == "+"[0] {
+		return Token_Type.ADDI;
+	}
+
+	if char == "-"[0] {
+		return Token_Type.SUBT;
+	}
+
+	if char == "("[0] {
+		return Token_Type.OPAR;
+	}
+
+	if char == ")"[0] {
+		return Token_Type.CPAR;
+	}
+
+	if char == "{"[0] {
+		return Token_Type.OCUR;
+	}
+
+	if char == "}"[0] {
+		return Token_Type.CCUR;
+	}
+
+	if char == ";"[0] {
+		return Token_Type.SEMI;
+	}
+
+	if char == ":"[0] {
+		return Token_Type.COLO;
+	}
+
+	if char == ","[0] {
+		return Token_Type.COMM;
+	}
+
+	printf("Was: %c \n", char);
+	assert(0, " :: GetSingleCharTokenType() Unreachable");
+}
+
+fn DeduceTokenType(string view) : Token_Type {
+	u8* char = view.data[0];
+	return GetSingleCharTokenType(char);
 }
 
 fn Lexer_Lex(Lexer* lexer) : TokenList {
+
+	tk_list := TokenList_Make();
+
+	i32 length = lexer.source.count;
+	source := lexer.source;
+
+	i32 i = 0;
+	i32 s = 0;
+
+	i32 line = 	 0;
+	i32 column = 0;
+
+	empty_tk_name := string_make("Operator");
+
+	while i < length {
+		char := lexer.source.data[i];
+
+		bool is_space = isspace(char);
+
+		bool buffer_empty = i == s;
+
+
+		bool is_new_line = char == "\n"[0];
+
+		if is_new_line {
+			line = line + 1;
+			column = 0;
+		}
+
+		if is_space {
+
+			if 0 == buffer_empty {
+
+				TokenList_Add(&tk_list, Token_Make(string_copy_range(source, s, i), Token_Type.IDEN, line, column));
+			}
+
+			s = i + 1;
+		}
+
+		if is_space == 0 {
+			tk_type := GetSingleCharTokenType(char);
+
+			if tk_type != Token_Type.IDEN {
+
+				if 0 == buffer_empty {
+					TokenList_Add(&tk_list, Token_Make(string_copy_range(source, s, i), Token_Type.IDEN, line, column));
+				}
+
+				TokenList_Add(&tk_list, Token_Make(empty_tk_name, tk_type, line, column));
+
+				s = i + 1;
+			}
+		}
+
+		column = column + 1;
+
+		i = i + 1;
+	}
+
+	if s != i {
+		TokenList_Add(&tk_list, Token_Make(string_copy_range(source, s, i), Token_Type.IDEN, line, column));
+	}
+
+	TokenList_Add(&tk_list, Token_Make(string_make("ENOF"), Token_Type.ENOF, line, column));
+
+	return tk_list;
 }

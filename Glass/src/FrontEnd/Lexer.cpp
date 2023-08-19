@@ -199,21 +199,18 @@ namespace Glass
 
 		auto createStringLiteral = [&]()
 		{
-			if (!accumulator.empty())
-			{
-				u64 begin = 0;
+			u64 begin = 0;
 
-				begin = location - bol;
+			begin = location - bol;
 
-				tokens.emplace_back(Token{ TokenType::StringLiteral,
-					accumulator,
-					line,
-					begin,
-					accumulator.size() }
-				);
+			tokens.emplace_back(Token{ TokenType::StringLiteral,
+				accumulator,
+				line,
+				begin,
+				accumulator.size() }
+			);
 
-				accumulator.clear();
-			}
+			accumulator.clear();
 		};
 
 		auto createEOFToken = [&]()
@@ -231,16 +228,53 @@ namespace Glass
 		bool string_collection_mode = false;
 		bool double_char_operator_mode = false;
 
+		bool comment_mode = false;
+		bool previous_slash = false;
+
 		for (char c : m_Source)
 		{
 			location++;
 
+			if (!comment_mode) {
+				if (!previous_slash) {
+					if (c == '/') {
+						previous_slash = true;
+
+						if (location < m_Source.size()) {
+
+							char next = m_Source.at(location);
+
+							if (next == '/') {
+								continue;
+							}
+						}
+					}
+				}
+				else {
+					if (c == '/') {
+						comment_mode = true;
+						previous_slash = false;
+						continue;
+					}
+					else {
+						previous_slash = false;
+					}
+				}
+			}
+
+			if (comment_mode) {
+				if (c == '\n') {
+					line++;
+					comment_mode = false;
+				}
+
+				continue;
+			}
+
 			if (string_collection_mode) {
 				if (c == '"') {
-					if (!accumulator.empty()) {
-						createStringLiteral();
-						string_collection_mode = false;
-					}
+					createStringLiteral();
+					string_collection_mode = false;
 				}
 				else
 				{
@@ -318,6 +352,8 @@ namespace Glass
 		}
 
 		createEOFToken();
+
+		g_LinesProcessed += line;
 
 		return tokens;
 	}

@@ -2,6 +2,8 @@
 
 #include "FrontEnd/Token.h"
 
+inline u64 g_LinesProcessed = 0;
+
 namespace Glass
 {
 	class Lexer

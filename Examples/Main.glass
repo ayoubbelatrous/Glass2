@@ -1,3 +1,4 @@
+//sqdfsdfsdfsdf
 fn update_gui()
 {
 	NuklearUpdate();
@@ -5,7 +6,7 @@ fn update_gui()
 	if Begin("Demo", DefaultPanelFlags) {
 		RowDynamic(0, 1);
 
-		Label("Hello");
+		Label("");
 
 		RowDynamic(0, 2);
 
@@ -27,20 +28,45 @@ fn draw() {
 	EndDrawing();
 }
 
-fn main() {
+fn lex() {
 
-	i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
-	SetConfigFlags(config_flags);
-	InitWindow(1280, 720, "Hello Window");
+	source := string_make("fn main(int a, int b, int b) : i { a + b; }");
 
-	SetTargetFPS(240);
+	lexer := Lexer_Make(source);
 
-	Font font = LoadFontEx("fonts/CascadiaMono.ttf",25, 0, 0);
+	token_list := Lexer_Lex(&lexer);
 
-	NuklearStart(font, 25);
+	print("Tokens ::\n");
+	TokenList_Print(token_list);
+	print("\n");
 
-	while WindowShouldClose() == 0 {
-		update_gui();
-		draw();
+	parser := Parser_Make(token_list);
+
+	AstNode_ModuleFile* module = Parser_Parse(&parser);
+
+	StmtList_Print(&module.stmts);
+}
+
+fn main() : i32 {
+
+
+	if 1
+	{
+		i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
+		SetConfigFlags(config_flags);
+
+		InitWindow(1280, 720, "Hello Window");
+
+		SetTargetFPS(1000);
+
+		Font font = LoadFontEx("fonts/CascadiaMono.ttf",20, 0, 0);
+
+		NuklearStart(font, 20);
+
+		while WindowShouldClose() == 0 {
+			update_gui();
+			draw();
+		}
 	}
+
 }

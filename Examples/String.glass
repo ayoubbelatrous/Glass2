@@ -4,14 +4,14 @@ struct string
 	u64 count;
 };
 
-fn make_string(u8* str) : string {
+fn string_make(u8* str) : string {
 	string new;
 	new.count = strlen(str);
 	new.data = str;
 	return new;
 }
 
-fn copy_string(string other) : string {
+fn string_copy(string other) : string {
 	string new;
 
 	new.count = other.count;
@@ -25,4 +25,58 @@ fn copy_string(string other) : string {
 	}
 
 	return new;
+}
+
+fn string_copy_range(string other, i32 start, i32 end) : string {
+	string new;
+
+	new.count = (end - start);
+	new.data = malloc(new.count);
+
+	i32 i = start;
+
+	while i < end {
+		loc := i - start;
+		new.data[loc] = other.data[i];
+		i = i + 1;
+	}
+
+	end_loc := end - start;
+	new.data[end_loc] = "\0"[0];
+
+	return new;
+}
+
+fn string_view(string other, i32 start, i32 end) : string {
+	string view;
+
+	assert(start <= other.count," string_view() :: start is larger than the other string count");
+	assert(end <= other.count," string_view() :: end is larger than the other string count");
+
+	assert(start <= end," string_view() :: start is larger than end");
+	assert(end >= start," string_view() :: end is lesser than start");
+
+	view.data = other.data + start;
+	view.count = end - start;
+
+	return view;
+}
+
+fn string_eq(string a, string b) : bool {
+
+	if a.data == b.data {
+		if a.count != b.count {
+			return 0;
+		}
+
+		if a.count == b.count {
+			return 1;
+		}
+	}
+
+	if a.count == b.count {
+		return strncmp(a.data, b.data, a.count) == 0;
+	}
+
+	assert(0, ":: string_eq pure non string view comparisons Un-Implemented");
 }
