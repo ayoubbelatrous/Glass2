@@ -53,7 +53,7 @@ fn main() : i32 {
 
 	g_appdata.window_title = string_make("Editor");
 
-	string title = get_application_data(g_appdata).window_title;
+	log_warn("title: %\n", typeof(int).name);
 
 	InitWindow(1280, 720, "Hello Window");
 

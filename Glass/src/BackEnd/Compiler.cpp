@@ -1831,7 +1831,7 @@ namespace Glass
 			if (memberAccess->Object->GetType() == NodeType::Identifier) {
 				reference_access = obj_expr_type.Pointer;
 			}
-			else {
+			else if (memberAccess->Object->GetType() != NodeType::MemberAccess) {
 				//Handle temporaries that are not pointers
 				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
 				if (obj_expr_type.Pointer == 0) {
