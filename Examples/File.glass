@@ -1,0 +1,78 @@
+enum #flags File_Open_Mode {
+	Read ;
+	Write;
+};
+
+enum File_Seek_Mode
+{
+	SET;
+	CUR;
+	END;
+};
+
+fn open_file(string path, File_Open_Mode mode) : u64* {
+
+	u8* open_mode = malloc(3);
+
+	u8 null = "\0"[0];
+
+	open_mode[0] = null;
+	open_mode[1] = null;
+	open_mode[2] = null;
+
+	u8 i = 0;
+
+	if mode | File_Open_Mode.Read {
+		open_mode[i] = "r"[0];
+		i = i + 1;
+	}
+
+	if mode | File_Open_Mode.Write {
+		open_mode[i] = "w"[0];
+		i = i + 1;
+	}
+
+	print("Open File Mode: %\n", open_mode);
+
+	assert(path.data[path.count] == null, " :: open_file() :: string is not null terminated");
+
+	file := fopen(path.data, open_mode);
+
+	free(open_mode);
+
+	return file;
+}
+
+fn close_file(u64* file) {
+	fclose(file);
+}
+
+fn get_file_size(u64* file) : u64 {
+	assert(file," :: get_file_size() :: file is set null");
+
+	fseek(file, 0, cast(i32) File_Seek_Mode.END);
+    file_size := ftell(file);
+    fseek(file, 0, cast(i32) File_Seek_Mode.SET);
+
+	return file_size;
+}
+
+//this gets freed by the user
+fn read_entire_file(u64* file) : string {
+
+	assert(file," :: read_entire_file() :: file is set null");
+
+	file_size := get_file_size(file);
+
+	u8* buffer = malloc(file_size + 1);
+
+	fread(buffer, 1, file_size, file);
+
+    buffer[file_size] = '\0';
+
+	string res;
+	res.data = buffer;
+	res.count = file_size;
+
+	return res;
+}

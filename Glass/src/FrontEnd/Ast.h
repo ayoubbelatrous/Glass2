@@ -771,7 +771,7 @@ namespace Glass
 		Token Name;
 		std::vector <Identifier*> Members;
 
-		bool Flags;
+		bool Flags = false;
 
 		virtual NodeType GetType() const override
 		{

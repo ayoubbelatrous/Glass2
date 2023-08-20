@@ -1552,6 +1552,10 @@ namespace Glass
 			IRSSAValue* member_access = (IRSSAValue*)ExpressionCodeGen(left);
 			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
 
+			if (!member_access || !right_ssa) {
+				return nullptr;
+			}
+
 			IRStore* store = IR(IRStore());
 			{
 				store->Data = right_ssa;
@@ -1788,6 +1792,7 @@ namespace Glass
 		return IR(ir_call);
 	}
 
+
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
 	{
 		if (memberAccess->Object->GetType() == NodeType::Identifier) {
@@ -1804,110 +1809,57 @@ namespace Glass
 		u64 object_ssa_id = 0;
 		bool reference_access = false;
 
-		const MemberMetadata* member_metadata = nullptr;
+		Glass::Type result_type;
+
+		IRSSAValue* obj_ssa_value = (IRSSAValue*)ExpressionCodeGen(memberAccess->Object);
+
+		if (!obj_ssa_value)
+			return nullptr;
+
 		const StructMetadata* struct_metadata = nullptr;
 
-		Glass::Type type;
-
 		{
-			switch (memberAccess->Object->GetType())
-			{
-			case NodeType::Identifier:
-			{
-				Identifier* object = (Identifier*)memberAccess->Object;
+			object_ssa_id = obj_ssa_value->SSA;
 
-				{
-					SymbolType symbol_type = m_Metadata.GetSymbolType(object->Symbol.Symbol);
-					if (symbol_type == SymbolType::None)
-					{
-						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("unknown symbol '{}'", object->ToString()), MessageType::Warning });
-						return nullptr;
-					}
+			const Glass::Type& obj_expr_type = m_Metadata.GetExprType(obj_ssa_value->SSA);
 
-					if (symbol_type == SymbolType::Type)
-					{
-						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a type, cannot have members", object->ToString()), MessageType::Warning });
-						return nullptr;
-					}
+			reference_access = obj_expr_type.Pointer;
 
-					if (symbol_type == SymbolType::Function)
-					{
-						PushMessage(CompilerMessage{ PrintTokenLocation(object->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("symbol '{}' is a function, cannot have members", object->ToString()), MessageType::Warning });
-						return nullptr;
-					}
-				}
+			struct_id = m_Metadata.GetStructIDFromType(obj_expr_type.ID);
 
-				u64 var_ssa = m_Metadata.GetVariableSSA(object->Symbol.Symbol);
-
-				const auto var_metadata = m_Metadata.GetVariableMetadata(var_ssa);
-
-				if (!var_metadata->Tipe.Array)
-				{
-					struct_id = m_Metadata.GetStructIDFromType(var_metadata->Tipe.ID);
-				}
-
-				if (var_metadata->Tipe.Array)
-				{
-					struct_id = m_Metadata.GetStructIDFromType(IR_array);
-				}
-
-				struct_metadata = m_Metadata.GetStructMetadata(struct_id);
-				object_ssa_id = var_ssa;
-
-				if (var_metadata->Tipe.Pointer)
-				{
-					reference_access = true;
-				}
+			if (struct_id == NULL_ID) {
+				MSG_LOC(memberAccess->Member);
+				FMT_WARN("The type '{}' is not a struct and does not support members", PrintType(obj_expr_type));
+				return nullptr;
 			}
-			break;
-			case NodeType::MemberAccess:
-			{
-				auto object_code = (IRSSAValue*)ExpressionCodeGen(memberAccess->Object);
 
-				const Glass::Type& obj_type = m_Metadata.GetExprType(object_code->SSA);
-				if (!obj_type.Array)
-				{
-					struct_id = m_Metadata.GetStructIDFromType(obj_type.ID);
-					struct_metadata = m_Metadata.GetStructMetadata(struct_id);
-				}
-				else
-				{
-					struct_id = m_Metadata.GetStructIDFromType(IR_array);
-					struct_metadata = m_Metadata.GetStructMetadata(struct_id);
-				}
-
-				object_ssa_id = object_code->SSA;
-			}
-			break;
-			}
+			struct_metadata = m_Metadata.GetStructMetadata(struct_id);
+			GS_CORE_ASSERT(struct_metadata, "'struct_metadata' Must Not Be Null");
 		}
 
 		{
-			switch (memberAccess->Member->GetType())
-			{
-			case NodeType::Identifier:
-			{
-				Identifier* member = (Identifier*)memberAccess->Member;
-				member_id = struct_metadata->FindMember(member->Symbol.Symbol);
-				member_metadata = &struct_metadata->Members[member_id];
+			auto member_node_type = memberAccess->Member->GetType();
 
-				type = member_metadata->Tipe;
-			}
-			break;
-			case NodeType::MemberAccess:
-			{
-				MemberAccess* member = (MemberAccess*)memberAccess->Member;
-				member_id = struct_metadata->FindMember(((Identifier*)member->Object)->Symbol.Symbol);
-				member_metadata = &struct_metadata->Members[member_id];
 
-				type = member_metadata->Tipe;
+			GS_CORE_ASSERT(
+				member_node_type == NodeType::Identifier,
+				"'MemberAccess.Member' Must Be an Identifier");
+
+			Identifier* as_identifier = (Identifier*)memberAccess->Member;
+
+			member_id = struct_metadata->FindMember(as_identifier->Symbol.Symbol);
+
+			if (member_id == NULL_ID) {
+
+				MSG_LOC(memberAccess->Member);
+				FMT_WARN("'{}' is not defined as a member from type '{}'",
+					as_identifier->Symbol.Symbol, struct_metadata->Name.Symbol);
+				return nullptr;
 			}
-			break;
-			}
+
+			result_type = struct_metadata->Members[member_id].Tipe;
 		}
+
 
 		IRMemberAccess ir_mem_access;
 
@@ -1923,14 +1875,11 @@ namespace Glass
 			address_ssa->Type = IR_u64;
 
 			address_ssa->Reference = true;
-			address_ssa->ReferenceType = member_metadata->Tipe.ID;
+			address_ssa->ReferenceType = result_type.ID;
 
-			IRSSAValue address_ssa_val;
-			address_ssa_val.SSA = address_ssa->ID;
+			m_Metadata.RegExprType(address_ssa->ID, result_type);
 
-			m_Metadata.RegExprType(address_ssa->ID, type);
-
-			return IR(address_ssa_val);
+			return IR(IRSSAValue(address_ssa->ID));
 		}
 	}
 
@@ -2521,6 +2470,10 @@ namespace Glass
 			else {
 
 				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
+
+				if (!ir_address)
+					return nullptr;
+
 				const Glass::Type& expr_type = m_Metadata.GetExprType(ir_address->SSA);
 
 				IRLoad load;

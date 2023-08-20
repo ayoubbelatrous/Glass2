@@ -6,7 +6,7 @@ fn update_gui()
 	if Begin("Demo", DefaultPanelFlags) {
 		RowDynamic(0, 1);
 
-		Label("");
+		Label("Hello");
 
 		RowDynamic(0, 2);
 
@@ -18,55 +18,79 @@ fn update_gui()
 	End();
 };
 
+struct Application_Data {
+	Font default_font;
+};
+
+struct FileEditor_Data {
+	string path;
+	string buffer;
+
+	vec2 scroll;
+};
+
+Application_Data g_appdata;
+FileEditor_Data g_fe_data;
+
 fn draw() {
 	BeginDrawing();
 	ClearBackground(_Color(0.5, 0.5, 0.5, 1));
 
 	NuklearDraw();
-	DrawFPS(5,5);
 
 	EndDrawing();
 }
 
-fn lex() {
-
-	source := string_make("fn main(int a, int b, int b) : i { a + b; }");
-
-	lexer := Lexer_Make(source);
-
-	token_list := Lexer_Lex(&lexer);
-
-	print("Tokens ::\n");
-	TokenList_Print(token_list);
-	print("\n");
-
-	parser := Parser_Make(token_list);
-
-	AstNode_ModuleFile* module = Parser_Parse(&parser);
-
-	StmtList_Print(&module.stmts);
-}
+struct complex{
+	string name;
+};
 
 fn main() : i32 {
 
+	complex cpx;
 
-	if 1
-	{
-		i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
-		SetConfigFlags(config_flags);
+	cpx.name.data = "Hello World";
 
-		InitWindow(1280, 720, "Hello Window");
+	print("Complex: %", cpx.name.data);
 
-		SetTargetFPS(1000);
+	i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
+	SetConfigFlags(config_flags);
 
-		Font font = LoadFontEx("fonts/CascadiaMono.ttf",20, 0, 0);
+	InitWindow(1280, 720, "Hello Window");
 
-		NuklearStart(font, 20);
+	font := LoadFontEx("fonts/CascadiaMono.ttf",20, 0, 0);
 
-		while WindowShouldClose() == 0 {
-			update_gui();
-			draw();
-		}
+	Application_Data app_data;
+	app_data.default_font = font;
+
+	g_appdata = app_data;
+
+	SetTargetFPS(1000);
+
+	NuklearStart(font, 20);
+
+	while WindowShouldClose() == 0 {
+		//update_gui();
+		draw();
 	}
-
 }
+
+
+//fn lex() {
+//
+//	source := string_make("fn main(int a, int b, int b) : i { a + b; }");
+//
+//	lexer := Lexer_Make(source);
+//
+//	token_list := Lexer_Lex(&lexer);
+//
+//	print("Tokens ::\n");
+//	TokenList_Print(token_list);
+//	print("\n");
+//
+//	parser := Parser_Make(token_list);
+//
+//	AstNode_ModuleFile* module = Parser_Parse(&parser);
+//
+//	StmtList_Print(&module.stmts);
+//}
