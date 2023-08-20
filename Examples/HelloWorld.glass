@@ -1,8 +1,22 @@
-//Helo
-//World
 
-#foreign fn printf!(u8* format) : i32 {}
+struct data {
+	int item;
+};
 
-fn main(){
-    printf();
+data g_data;
+
+fn get_data() : data* {
+	return &g_data;
+}
+
+data* g_data_ptr;
+
+fn main() : i32 {
+	g_data.item = 69;
+
+	g_data_ptr = &g_data;
+
+	printf("data: %i\n", get_data().item);
+
+	return 0;
 }

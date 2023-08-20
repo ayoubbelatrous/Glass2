@@ -20,6 +20,7 @@ fn update_gui()
 
 struct Application_Data {
 	Font default_font;
+	string window_title;
 };
 
 struct FileEditor_Data {
@@ -41,29 +42,24 @@ fn draw() {
 	EndDrawing();
 }
 
-struct complex{
-	string name;
-};
+fn get_application_data(Application_Data appdata) : Application_Data* {
+	return &appdata;
+}
 
 fn main() : i32 {
 
-	complex cpx;
-
-	cpx.name.data = "Hello World";
-
-	print("Complex: %", cpx.name.data);
-
 	i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
 	SetConfigFlags(config_flags);
+
+	g_appdata.window_title = string_make("Editor");
+
+	string title = get_application_data(g_appdata).window_title;
 
 	InitWindow(1280, 720, "Hello Window");
 
 	font := LoadFontEx("fonts/CascadiaMono.ttf",20, 0, 0);
 
-	Application_Data app_data;
-	app_data.default_font = font;
-
-	g_appdata = app_data;
+	g_appdata.default_font = font;
 
 	SetTargetFPS(1000);
 

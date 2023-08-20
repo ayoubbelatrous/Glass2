@@ -32,6 +32,11 @@ namespace Glass
 	inline static bool is_valid_numeric_literal(const std::string_view& token)
 	{
 		u64 counter = 0;
+
+		if (token.size() == 0) {
+			return false;
+		}
+
 		for (char c : token) {
 
 			if (counter == 0) {
@@ -297,8 +302,6 @@ namespace Glass
 				if (!accumulator.empty()) {
 					createToken();
 				}
-
-				//accumulator = '\n';
 			}
 
 			if (std::isalnum(c) || c == '_') {

@@ -726,6 +726,10 @@ namespace Glass
 		if (variableNode->Assignment != nullptr)
 		{
 			value = GetExpressionByValue(variableNode->Assignment);
+
+			if (!value) {
+				return nullptr;
+			}
 		}
 
 		IRSSA* StorageSSA = CreateIRSSA();
@@ -1823,8 +1827,22 @@ namespace Glass
 
 			const Glass::Type& obj_expr_type = m_Metadata.GetExprType(obj_ssa_value->SSA);
 
-			reference_access = obj_expr_type.Pointer;
+			//@Note this is here because variables are unique in the sense that they always are a pointer or a double pointer as int
+			if (memberAccess->Object->GetType() == NodeType::Identifier) {
+				reference_access = obj_expr_type.Pointer;
+			}
+			else {
+				//Handle temporaries that are not pointers
+				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
+				if (obj_expr_type.Pointer == 0) {
+					auto temporary_reference = CreateIRSSA();
+					temporary_reference->Type = obj_expr_type.ID;
+					temporary_reference->Pointer = 1;
+					temporary_reference->Value = IR(IRAddressOf(obj_ssa_value));
 
+					object_ssa_id = temporary_reference->ID;
+				}
+			}
 			struct_id = m_Metadata.GetStructIDFromType(obj_expr_type.ID);
 
 			if (struct_id == NULL_ID) {
