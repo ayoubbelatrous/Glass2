@@ -113,6 +113,11 @@ namespace Glass
 			return m_IRAllocator.Allocate<T>(d);
 		}
 
+		template<typename T>
+		static T* AllocateTypeNode(const T& d) {
+			return m_TypeAllocator.Allocate<T>(d);
+		}
+
 	private:
 
 		static std::vector<CompilerFile> GenerateCompilationFiles(const std::vector<fs_path>& files);
@@ -132,10 +137,12 @@ namespace Glass
 
 		static LinearAllocator m_AstAllocator;
 		static LinearAllocator m_IRAllocator;
+		static LinearAllocator m_TypeAllocator;
 
 		std::map<u64, CompilerFile> m_Sources;
 	};
 
 #define IR(x) Application::AllocateIRNode(x)
 #define AST(x) Application::AllocateAstNode(x)
+#define TYPE(x) Application::AllocateTypeNode(x)
 }

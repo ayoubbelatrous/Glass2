@@ -32,8 +32,6 @@ fn open_file(string path, File_Open_Mode mode) : u64* {
 		i = i + 1;
 	}
 
-	print("Open File Mode: %\n", open_mode);
-
 	assert(path.data[path.count] == null, " :: open_file() :: string is not null terminated");
 
 	file := fopen(path.data, open_mode);

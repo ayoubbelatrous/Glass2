@@ -240,7 +240,7 @@ namespace Glass
 		{
 			location++;
 
-			if (!comment_mode) {
+			if (!comment_mode && !string_collection_mode) {
 				if (!previous_slash) {
 					if (c == '/') {
 						previous_slash = true;

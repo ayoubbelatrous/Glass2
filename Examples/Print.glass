@@ -67,6 +67,26 @@ fn print_any(Any any) : i32
 	}
 }
 
+fn print_signed_int(i64 integer) {
+	printf("%i", integer);
+}
+
+fn print_unsigned_int(u64 integer) {
+	printf("%zu", integer);
+}
+
+fn print_float(f64 floating) {
+	printf("%f", floating);
+}
+
+fn print_bool(bool boolean) {
+	printf("%b", boolean);
+}
+
+fn print_c_string(u8* str) {
+	printf("%s", str);
+}
+
 fn print(Any... args) {
 	Any fmt_any = args[0];
 	u8* fmt  = fmt_any.data;

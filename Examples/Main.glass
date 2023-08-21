@@ -1,92 +1,12 @@
-//sqdfsdfsdfsdf
-fn update_gui()
+struct Entity
 {
-	NuklearUpdate();
-
-	if Begin("Demo", DefaultPanelFlags) {
-		RowDynamic(0, 1);
-
-		Label("Hello");
-
-		RowDynamic(0, 2);
-
-		if Button("Press Me!") {
-			log_warn("You Pressed Me!\n");
-		}
-	}
-
-	End();
+	i32[..] Components;
 };
 
-struct Application_Data {
-	Font default_font;
-	string window_title;
-};
+fn dummy(i32 data) {
 
-struct FileEditor_Data {
-	string path;
-	string buffer;
-
-	vec2 scroll;
-};
-
-Application_Data g_appdata;
-FileEditor_Data g_fe_data;
-
-fn draw() {
-	BeginDrawing();
-	ClearBackground(_Color(0.5, 0.5, 0.5, 1));
-
-	NuklearDraw();
-
-	EndDrawing();
-}
-
-fn get_application_data(Application_Data appdata) : Application_Data* {
-	return &appdata;
 }
 
 fn main() : i32 {
-
-	i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
-	SetConfigFlags(config_flags);
-
-	g_appdata.window_title = string_make("Editor");
-
-	log_warn("title: %\n", typeof(int).name);
-
-	InitWindow(1280, 720, "Hello Window");
-
-	font := LoadFontEx("fonts/CascadiaMono.ttf",20, 0, 0);
-
-	g_appdata.default_font = font;
-
-	SetTargetFPS(1000);
-
-	NuklearStart(font, 20);
-
-	while WindowShouldClose() == 0 {
-		//update_gui();
-		draw();
-	}
+	return 0;
 }
-
-
-//fn lex() {
-//
-//	source := string_make("fn main(int a, int b, int b) : i { a + b; }");
-//
-//	lexer := Lexer_Make(source);
-//
-//	token_list := Lexer_Lex(&lexer);
-//
-//	print("Tokens ::\n");
-//	TokenList_Print(token_list);
-//	print("\n");
-//
-//	parser := Parser_Make(token_list);
-//
-//	AstNode_ModuleFile* module = Parser_Parse(&parser);
-//
-//	StmtList_Print(&module.stmts);
-//}

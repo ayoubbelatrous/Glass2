@@ -361,4 +361,5 @@ namespace Glass
 
 	LinearAllocator Application::m_AstAllocator = LinearAllocator(allocator_buffer_size);
 	LinearAllocator Application::m_IRAllocator = LinearAllocator(allocator_buffer_size);
+	LinearAllocator Application::m_TypeAllocator = LinearAllocator(allocator_buffer_size);
 }

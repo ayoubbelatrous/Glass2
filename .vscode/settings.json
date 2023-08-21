@@ -28,5 +28,6 @@
 		"raygui.h": "c",
 		"raylib.h": "c"
 	},
-	"cmake.configureOnOpen": false
+	"cmake.configureOnOpen": false,
+	"cmake.sourceDirectory": "F:/dev/Glass2/Glass/vendor/spdlog/bench"
 }

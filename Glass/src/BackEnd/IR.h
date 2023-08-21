@@ -28,6 +28,8 @@ namespace Glass
 
 		IR_array,
 
+		IR_typeinfo_flags,
+
 		IR_typeinfo_member,
 		IR_typeinfo_struct,
 
@@ -59,6 +61,8 @@ namespace Glass
 		IR_any,
 
 		IR_array,
+
+		IR_typeinfo_flags,
 
 		IR_typeinfo_member,
 		IR_typeinfo_struct,
@@ -524,7 +528,8 @@ namespace Glass
 		u64 ID = 0;
 		u64 TypeID = 0;
 
-		bool Pointer = false;
+		u64 Pointer = 0;
+		u64 Array = 0;
 
 		virtual std::string ToString() const override {
 			return 	"member " + std::to_string(TypeID) + ", ";
@@ -674,6 +679,7 @@ namespace Glass
 		bool pointer = false;
 		std::string name;
 		u64 size;
+		u64 flags = 0;
 	};
 
 	struct TypeInfoMember
@@ -682,6 +688,7 @@ namespace Glass
 		bool pointer = false;
 		std::string name;
 		u64 size;
+		u64 flags = 0;
 
 		std::string member_name;
 	};
@@ -692,6 +699,7 @@ namespace Glass
 		bool pointer = false;
 		std::string name;
 		u64 size;
+		u64 flags = 0;
 
 		std::vector<TypeInfoMember> members;
 	};

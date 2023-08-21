@@ -2,6 +2,9 @@
 
 #include "BackEnd/C/CTranspiler.h"
 
+//#define DBG_COMMENT(x) x
+#define DBG_COMMENT(x)
+
 namespace Glass
 {
 	CTranspiler::CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const Compiler::MetaData* metadata)
@@ -57,13 +60,17 @@ typedef struct Array
 			)";
 		header += "\n";
 
+		header += "typedef u64 TypeInfo_Flags;\n";
+		header += "\n";
+
 		header += R"(
 typedef struct TypeInfo
 {	
-	u64 id;
-	bool pointer;
-	const char* name;
-	u64 size;
+	const u64 id;
+	const bool pointer;
+	const char* const name;
+	const u64 size;
+	const TypeInfo_Flags flags;
 } TypeInfo;
 			)";
 		header += "\n";
@@ -71,12 +78,13 @@ typedef struct TypeInfo
 		header += R"(
 typedef struct TypeInfo_Struct
 {	
-	u64 id;
+	const u64 id;
 	bool pointer;
-	const char* name;
-	u64 size;
+	const char* const name;
+	const u64 size;
+	const TypeInfo_Flags flags;
 	
-	Array members;
+	const Array members;
 } TypeInfo_Struct;
 			)";
 
@@ -85,12 +93,13 @@ typedef struct TypeInfo_Struct
 		header += R"(
 typedef struct TypeInfo_Member
 {
-	u64 id;
+	const u64 id;
 	bool pointer;
-	const char* name;
-	u64 size;
+	const char* const name;
+	const u64 size;
+	const TypeInfo_Flags flags;
 
-	const char* member_name;
+	const char* const member_name;
 } TypeInfo_Member;
 			)";
 
@@ -279,6 +288,8 @@ typedef struct Any
 							var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
 							var_type_table += fmt::format(".name=\"{}\",", type.name);
 							var_type_table += fmt::format(".size={},", type.size);
+
+							var_type_table += fmt::format(".flags={},", type.flags);
 							var_type_table += "},";
 
 							i++;
@@ -313,6 +324,7 @@ typedef struct Any
 							var_struct_type_table += fmt::format(".pointer={},", (u64)type.pointer);
 							var_struct_type_table += fmt::format(".name=\"{}\",", type.name);
 							var_struct_type_table += fmt::format(".size={},", type.size);
+							var_struct_type_table += fmt::format(".flags={},", type.flags);
 
 							std::string member_type_info_name = fmt::format("__struct_{}_members", id);
 
@@ -325,6 +337,8 @@ typedef struct Any
 								type_info_struct_member_data += fmt::format(".pointer={},", (u64)member.pointer);
 								type_info_struct_member_data += fmt::format(".name=\"{}\",", m_Metadata->GetType(member.id));
 								type_info_struct_member_data += fmt::format(".size={},", m_Metadata->GetTypeSize(member.id));
+								type_info_struct_member_data += fmt::format(".flags={},", member.flags);
+
 								type_info_struct_member_data += fmt::format(".member_name=\"{}\",", member.member_name);
 
 								type_info_struct_member_data += "},";
@@ -425,8 +439,12 @@ typedef struct Any
 				ptr += "*";
 			}
 
-			//return fmt::format("*(({0}{1}*)__tmp{2}) = ({0}{1}){3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
-			return fmt::format("*(({0}{1}*)__tmp{2}) = {3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
+
+			std::string code;
+			DBG_COMMENT(code += "// Store\n");
+
+			code += fmt::format("*(({0}{1}*)__tmp{2}) = {3};", m_Metadata->GetType(store->Type), ptr, store->AddressSSA, IRCodeGen(store->Data));
+			return code;
 		}
 		break;
 		case IRNodeType::Load:
@@ -439,8 +457,10 @@ typedef struct Any
 			{
 				ptr += "*";
 			}
-
-			return fmt::format("*({} {}*)__tmp{}", m_Metadata->GetType(load->Type), ptr, load->SSAddress);
+			std::string code;
+			DBG_COMMENT(code += "// Load\n");
+			code += fmt::format("*({} {}*)__tmp{}", m_Metadata->GetType(load->Type), ptr, load->SSAddress);
+			return code;
 		}
 		break;
 		case IRNodeType::DataValue:
@@ -465,7 +485,10 @@ typedef struct Any
 				ptr = "*";
 			}
 
-			return fmt::format("((u64)&({1}({0} {1}*)__tmp{2})->{3})", type, ptr, ssa, member);
+			std::string code;
+			DBG_COMMENT(code += "// MemberAccess\n");
+			code += fmt::format("((u64)&({1}({0} {1}*)__tmp{2})->{3})", type, ptr, ssa, member);
+			return code;
 		}
 		break;
 		case IRNodeType::If:
@@ -769,7 +792,14 @@ typedef struct Any
 		code += "{\n";
 
 		for (const MemberMetadata& member : metadata->Members) {
-			std::string member_type = m_Metadata->GetType(member.Tipe.ID);
+			std::string member_type;
+
+			if (member.Tipe.Array) {
+				member_type = m_Metadata->GetType(IR_array);
+			}
+			else {
+				member_type = m_Metadata->GetType(member.Tipe.ID);
+			}
 
 			for (u64 i = 0; i < member.Tipe.Pointer; i++)
 			{

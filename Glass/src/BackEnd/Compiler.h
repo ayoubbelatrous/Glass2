@@ -9,9 +9,25 @@ namespace Glass
 
 	using TypeFlags = u64;
 
+	enum TypeInfoFlag {
+		TI_BASE_TYPE = BIT(0),
+		TI_NUMERIC_TYPE = BIT(1),
+		TI_UNSIGNED_TYPE = BIT(2),
+		TI_FLOATING_TYPE = BIT(3),
+		TI_STRUCT = BIT(4),
+		TI_STRUCT_MEMBER = BIT(5),
+		TI_ENUM = BIT(6),
+		TI_FUNCTION = BIT(7),
+	};
+
 	enum TypeFlag {
 		FLAG_BASE_TYPE = BIT(0),
 		FLAG_NUMERIC_TYPE = BIT(1),
+		FLAG_UNSIGNED_TYPE = BIT(2),
+		FLAG_FLOATING_TYPE = BIT(3),
+		FLAG_STRUCT_TYPE = BIT(4),
+		FLAG_ENUM_TYPE = BIT(5),
+		FLAG_FUNCTION_TYPE = BIT(6),
 	};
 
 	enum class ContextScopeType {
@@ -87,7 +103,7 @@ namespace Glass
 
 	struct Type
 	{
-		u64 ID;
+		u64 ID = 0;
 		bool Array = false;
 		u64 Pointer = 0;
 
@@ -95,7 +111,7 @@ namespace Glass
 	};
 
 	struct FunctionType {
-		std::vector <Type*> Arguments;
+		std::vector <Type> Arguments;
 		Type ReturnType;
 	};
 

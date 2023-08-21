@@ -1,0 +1,130 @@
+fn update_gui()
+{
+	NuklearUpdate();
+
+	if Begin("Demo", DefaultPanelFlags) {
+		RowDynamic(0, 1);
+
+		Label("Hello");
+
+		RowDynamic(0, 2);
+
+		if Button("Press Me!") {
+			log_warn("You Pressed Me!\n");
+		}
+	}
+
+	End();
+};
+
+struct Application_Data {
+	Font default_font;
+	string window_title;
+};
+
+
+struct string_u32 {
+	u32* data;
+	u64 count;
+};
+
+struct TextEditor_Data {
+	string path;
+	string_u32 buffer;
+
+	vec2 editor_position;
+	f32 scroll_speed;
+
+	u32 cursor_posittion;
+};
+
+Application_Data g_appdata;
+TextEditor_Data g_te_data;
+
+fn string_to_string_u32(string str) : string_u32 {
+
+	string_u32 u32_string;
+
+	u32_string.data = malloc(sizeof(int) * (str.count + 1)); // including the null terminator
+
+	u32_string.count = str.count;
+
+	memset(u32_string.data, 0, u32_string.count + 1);
+
+	i32 i = 0;
+
+	while i < str.count {
+		u32_string.data[i] = str.data[i];
+		i = i + 1;
+	}
+
+	return u32_string;
+}
+
+fn draw_editor() : i32 {
+
+	g_te_data.editor_position.x = 20;
+
+	vec2* pos = &g_te_data.editor_position;
+
+	scroll := GetMouseWheelMove();
+
+	pos.y = pos.y + scroll * g_te_data.scroll_speed;
+
+	g_te_data.cursor_posittion = 1;
+
+	DrawTextCodepoints(
+		g_appdata.default_font,
+		g_te_data.buffer.data,
+		g_te_data.buffer.count,
+		*pos,
+		25,
+		1,
+		_Color(0.95,0.95,0.95,0.95)
+	);
+}
+
+fn draw() {
+	BeginDrawing();
+		ClearBackground(_Color(0.0, 0.0, 0.0, 1));
+
+	draw_editor();
+
+	NuklearDraw();
+
+	EndDrawing();
+}
+
+fn main() : i32 {
+
+	g_te_data.editor_position = Vec2(0,0);
+	g_te_data.scroll_speed = 70;
+
+	u64* file = open_file(string_make("./Examples/Editor.glass"), File_Open_Mode.Read);
+	assert(file ,"editor failed to open file");
+
+	file_buffer := read_entire_file(file);
+
+	g_te_data.buffer = string_to_string_u32(file_buffer);
+
+	free(file_buffer.data);
+
+	close_file(file);
+
+	i32 config_flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
+	SetConfigFlags(config_flags);
+
+	InitWindow(1280, 720, "A Window Title");
+
+	font := LoadFontEx("fonts/JetBrainsMono[wght].ttf",50, 0, 0);
+	g_appdata.default_font = font;
+
+	SetTargetFPS(1000);
+
+	NuklearStart(g_appdata.default_font, 20);
+
+	while WindowShouldClose() == 0 {
+		//update_gui();
+		draw();
+	}
+}

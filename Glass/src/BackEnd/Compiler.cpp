@@ -67,22 +67,94 @@ namespace Glass
 			m_Metadata.GetTypeFlags(IR_i32) |= FLAG_NUMERIC_TYPE;
 			m_Metadata.GetTypeFlags(IR_i64) |= FLAG_NUMERIC_TYPE;
 
-			m_Metadata.GetTypeFlags(IR_u8) |= FLAG_NUMERIC_TYPE;
-			m_Metadata.GetTypeFlags(IR_u16) |= FLAG_NUMERIC_TYPE;
-			m_Metadata.GetTypeFlags(IR_u32) |= FLAG_NUMERIC_TYPE;
-			m_Metadata.GetTypeFlags(IR_u64) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_u8) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
+			m_Metadata.GetTypeFlags(IR_u16) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
+			m_Metadata.GetTypeFlags(IR_u32) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
+			m_Metadata.GetTypeFlags(IR_u64) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
 
-			m_Metadata.GetTypeFlags(IR_float) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_float) |= FLAG_NUMERIC_TYPE | FLAG_FLOATING_TYPE;
 
-			m_Metadata.GetTypeFlags(IR_f32) |= FLAG_NUMERIC_TYPE;
-			m_Metadata.GetTypeFlags(IR_f64) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_f32) |= FLAG_NUMERIC_TYPE | FLAG_FLOATING_TYPE;
+			m_Metadata.GetTypeFlags(IR_f64) |= FLAG_NUMERIC_TYPE | FLAG_FLOATING_TYPE;
 
-			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE;
+			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
 		}
 
 		{
-			StructMetadata any_info_Metadata;
-			any_info_Metadata.Name.Symbol = "Any";
+
+			EnumMetadata type_flags_metadata;
+			type_flags_metadata.Name.Symbol = "TypeInfo_Flags";
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "BASE_TYPE";
+				member.Value = TI_BASE_TYPE;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "NUMERIC_TYPE";
+				member.Value = TI_NUMERIC_TYPE;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "UNSIGNED_TYPE";
+				member.Value = TI_UNSIGNED_TYPE;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "FLOATING_TYPE";
+				member.Value = TI_FLOATING_TYPE;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "STRUCT";
+				member.Value = TI_STRUCT;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "STRUCT_MEMBER";
+				member.Value = TI_STRUCT_MEMBER;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "ENUM_TYPE";
+				member.Value = TI_ENUM;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			{
+				EnumMemberMetadata member;
+				member.Name = "FUNCTION";
+				member.Value = TI_FUNCTION;
+
+				type_flags_metadata.InsertMember(member.Name, member);
+			}
+
+			m_Metadata.RegisterEnum(GetEnumID(), IR_typeinfo_flags, type_flags_metadata);
+		}
+
+		{
+			StructMetadata any_Metadata;
+			any_Metadata.Name.Symbol = "Any";
 
 			// type
 			{
@@ -91,7 +163,7 @@ namespace Glass
 				type_member_metadata.Tipe.ID = IR_u64; //@TODO: Change to Type when we add first class types
 				type_member_metadata.Tipe.Pointer = 0;
 
-				any_info_Metadata.Members.push_back(type_member_metadata);
+				any_Metadata.Members.push_back(type_member_metadata);
 			}
 
 			// data
@@ -101,10 +173,10 @@ namespace Glass
 				data_member_metadata.Tipe.ID = IR_u64;
 				data_member_metadata.Tipe.Pointer = 0;
 
-				any_info_Metadata.Members.push_back(data_member_metadata);
+				any_Metadata.Members.push_back(data_member_metadata);
 			}
 
-			m_Metadata.RegisterStruct(GetStructID(), IR_any, any_info_Metadata);
+			m_Metadata.RegisterStruct(GetStructID(), IR_any, any_Metadata);
 		}
 
 		{
@@ -163,6 +235,16 @@ namespace Glass
 			{
 				MemberMetadata size_member_metadata;
 				size_member_metadata.Name.Symbol = "size";
+				size_member_metadata.Tipe.ID = IR_u64;
+				size_member_metadata.Tipe.Pointer = 0;
+
+				type_info_member_Metadata.Members.push_back(size_member_metadata);
+			}
+
+			// size
+			{
+				MemberMetadata size_member_metadata;
+				size_member_metadata.Name.Symbol = "flags";
 				size_member_metadata.Tipe.ID = IR_u64;
 				size_member_metadata.Tipe.Pointer = 0;
 
@@ -264,6 +346,16 @@ namespace Glass
 				size_member_metadata.Tipe.Pointer = 0;
 
 				type_info_Metadata.Members.push_back(size_member_metadata);
+			}
+
+			// flags
+			{
+				MemberMetadata flags_member_metadata;
+				flags_member_metadata.Name.Symbol = "flags";
+				flags_member_metadata.Tipe.ID = IR_typeinfo_flags;
+				flags_member_metadata.Tipe.Pointer = 0;
+
+				type_info_Metadata.Members.push_back(flags_member_metadata);
 			}
 
 			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo, type_info_Metadata);
@@ -904,8 +996,6 @@ namespace Glass
 	{
 		IRReturn ret;
 
-		ret.Type = (u64)IRType::IR_i32;
-
 		auto expr = (IRSSAValue*)GetExpressionByValue(returnNode->Expr);
 
 		ret.Value = expr;
@@ -953,12 +1043,12 @@ namespace Glass
 
 		for (MemberMetadata& member : struct_metadata.Members)
 		{
-
 			IRStructMember ir_member;
 
 			ir_member.ID = member_id_counter;
 			ir_member.TypeID = member.Tipe.ID;
 			ir_member.Pointer = member.Tipe.Pointer;
+			ir_member.Array = member.Tipe.Array;
 
 			ir_struct.Members.push_back(IR(ir_member));
 
@@ -1556,6 +1646,8 @@ namespace Glass
 			IRSSAValue* member_access = (IRSSAValue*)ExpressionCodeGen(left);
 			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
 
+			const Glass::Type& member_access_expr_type = m_Metadata.GetExprType(member_access->SSA);
+
 			if (!member_access || !right_ssa) {
 				return nullptr;
 			}
@@ -1564,8 +1656,8 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = member_access->SSA;
-				store->Type = m_Metadata.GetSSA(member_access->SSA)->ReferenceType;
-				store->Pointer = m_Metadata.GetExprType(member_access->SSA).Pointer;
+				store->Type = member_access_expr_type.ID;
+				store->Pointer = member_access_expr_type.Pointer;
 			}
 
 			return store;
@@ -1689,17 +1781,11 @@ namespace Glass
 
 				IRInstruction* arg = nullptr;
 
+				IRSSAValue* expr = nullptr;
+				expr = GetExpressionByValue(call->Arguments[i]);
+
 				if (decl_arg != nullptr)
 				{
-
-					IRSSAValue* expr = nullptr;
-
-					// 					if (call->Function.Symbol == "nk_begin") {
-					// 						__debugbreak();
-					// 					}
-
-					expr = GetExpressionByValue(call->Arguments[i]);
-
 					if (expr == nullptr)
 						return nullptr;
 
@@ -1743,11 +1829,11 @@ namespace Glass
 						{
 							if (decl_arg->Tipe.Pointer)
 							{
-								arg = GetExpressionByValue(call->Arguments[i]);
+								arg = expr;
 							}
 							else
 							{
-								arg = IR(IRSSAValue(arg_SSAID));
+								arg = expr;
 							}
 						}
 						else
@@ -1762,7 +1848,7 @@ namespace Glass
 				}
 				else
 				{
-					arg = GetExpressionByValue(call->Arguments[i]);
+					arg = expr;
 				}
 
 				ir_call.Arguments.push_back(arg);
@@ -1843,7 +1929,12 @@ namespace Glass
 					object_ssa_id = temporary_reference->ID;
 				}
 			}
+
 			struct_id = m_Metadata.GetStructIDFromType(obj_expr_type.ID);
+
+			if (obj_expr_type.Array) {
+				struct_id = m_Metadata.GetStructIDFromType(IR_array);
+			}
 
 			if (struct_id == NULL_ID) {
 				MSG_LOC(memberAccess->Member);
@@ -2222,13 +2313,21 @@ namespace Glass
 				type_info_struct->name = m_Metadata.GetType(type_id);
 				type_info_struct->pointer = pointer;
 				type_info_struct->size = type_size;
+				type_info_struct->flags |= TI_STRUCT;
 
 				for (const MemberMetadata& member : struct_metadata->Members)
 				{
 
 					TypeInfoMember member_type_info;
 					member_type_info.id = member.Tipe.ID;
+					member_type_info.name = m_Metadata.GetType(member.Tipe.ID);
+
 					member_type_info.member_name = member.Name.Symbol;
+					member_type_info.pointer = m_Metadata.GetTypeSize(member.Tipe.Pointer);
+					member_type_info.size = m_Metadata.GetTypeSize(member.Tipe.ID);
+
+					member_type_info.flags |= TI_STRUCT_MEMBER;
+
 					type_info_struct->members.push_back(member_type_info);
 				}
 
@@ -2244,6 +2343,7 @@ namespace Glass
 				type_info_basic->name = m_Metadata.GetType(type_id);
 				type_info_basic->pointer = pointer;
 				type_info_basic->size = type_size;
+				type_info_basic->flags = 0;
 
 				type_info_type = TypeInfoType::Base;
 				type_info = type_info_basic;
@@ -2371,16 +2471,19 @@ namespace Glass
 			if (ir_address == nullptr)
 				return nullptr;
 
+			const Glass::Type& expr_type = m_Metadata.GetExprType(ir_address->SSA);
+
+			if (expr_type.Array) {
+				return ir_address;
+			}
+
 			IRSSA* value_ssa = CreateIRSSA();
 
 			IRLoad load;
-
-			const Glass::Type& expr_type = m_Metadata.GetExprType(ir_address->SSA);
-
 			load.SSAddress = ir_address->SSA;
 			load.Type = expr_type.ID;
 
-			if (expr_type.Pointer == 1 || expr_type.Array)
+			if (expr_type.Pointer)
 			{
 				load.ReferencePointer = true;
 			}
@@ -2390,13 +2493,9 @@ namespace Glass
 			value_ssa->Pointer =
 				m_Metadata.GetExprType(ir_address->SSA).Pointer == 1 || m_Metadata.GetExprType(ir_address->SSA).Array;
 
-			IRSSAValue* ssa_value = IR(IRSSAValue());
+			m_Metadata.RegExprType(value_ssa->ID, m_Metadata.GetExprType(ir_address->SSA));
 
-			ssa_value->SSA = value_ssa->ID;
-
-			m_Metadata.RegExprType(ssa_value->SSA, m_Metadata.GetExprType(ir_address->SSA));
-
-			return ssa_value;
+			return IR(IRSSAValue(value_ssa->ID));
 		}
 		break;
 		case NodeType::ArrayAccess:
