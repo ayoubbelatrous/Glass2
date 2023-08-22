@@ -455,6 +455,7 @@ namespace Glass
 		case NodeType::ArrayAccess:
 		case NodeType::Cast:
 		case NodeType::SizeOf:
+		case NodeType::DeReference:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -1668,8 +1669,18 @@ namespace Glass
 			}
 			return store;
 		}
-		else
+		if (left->GetType() == NodeType::DeReference)
 		{
+			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
+			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+
+			IRStore* store = IR(IRStore());
+			{
+				store->Data = right_ssa;
+				store->AddressSSA = left_ssa->SSA;
+				store->Type = m_Metadata.GetExprType(right_ssa->SSA).ID;
+			}
+			return store;
 		}
 		return nullptr;
 	}
@@ -1855,7 +1866,11 @@ namespace Glass
 			}
 		}
 
-		if (metadata->ReturnType.ID != (u64)IRType::IR_void)
+		bool has_return = metadata->ReturnType.Pointer;
+
+		has_return |= metadata->ReturnType.ID == IR_void;
+
+		if (has_return)
 		{
 			auto ir_ssa = CreateIRSSA();
 
@@ -1863,9 +1878,7 @@ namespace Glass
 			ir_ssa->Value = IR(ir_call);
 			ir_ssa->Pointer = metadata->ReturnType.Pointer;
 
-			IRSSAValue* ir_ssa_val = IR(IRSSAValue());
-
-			ir_ssa_val->SSA = ir_ssa->ID;
+			IRSSAValue* ir_ssa_val = IR(IRSSAValue(ir_ssa->ID));
 
 			m_Metadata.RegExprType(ir_ssa_val->SSA, metadata->ReturnType);
 
@@ -2394,7 +2407,7 @@ namespace Glass
 
 		new_ssa->Type = m_Metadata.GetType(cast->Type->Symbol.Symbol);
 		new_ssa->Pointer = cast->Type->Pointer;
-		new_ssa->Value = IR(IRSSAValue(expr_value->SSA));
+		new_ssa->Value = IR(IRPointerCast(new_ssa->Type, new_ssa->Pointer, expr_value->SSA));
 
 		Glass::Type new_type;
 		new_type.ID = new_ssa->Type;
@@ -2425,43 +2438,23 @@ namespace Glass
 		return IR(IRSSAValue(ir_ssa->ID));
 	}
 
+	//@DeDef
+	//Its located here mainly for type checking
+	//the llvm backend nor the c backend need any changes to the value of the pointer
+	//because we use store and load everything is referred to by address
+	//we just have to select either to load or to store by AssignmentCodeGen or GetExpressionByValue
+
 	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{
 		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(deRefNode->What);
 		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
 
-		auto ir_load_ssa = CreateIRSSA();
-
-		IRLoad* ir_load = IR(IRLoad());
-
-		{
-			ir_load->SSAddress = expr_value->SSA;
-			ir_load->Type = exprType.ID;
-			ir_load->ReferencePointer = true;
-		}
-
-		ir_load_ssa->Value = ir_load;
-		ir_load_ssa->Type = ir_load->Type;
-		ir_load_ssa->Pointer = 1;
-
-		IRDeRef* ssa_value = IR(IRDeRef(ir_load_ssa->ID));
-
-		IRSSA* ir_ssa = CreateIRSSA();
-		ir_ssa->Type = exprType.ID;
-		//@TODO: fix member access return non pointer type where it shoudlnt
-		if (exprType.Pointer)
-		{
-			ir_ssa->Pointer = exprType.Pointer - 1;
-		}
-
-		ir_ssa->Value = ssa_value;
-
 		Glass::Type expr_type = exprType;
-		expr_type.Pointer;
+		expr_type.Pointer--;
 
-		m_Metadata.RegExprType(ir_ssa->ID, expr_type);
+		m_Metadata.RegExprType(expr_value->SSA, expr_type);
 
-		return IR(IRSSAValue(ir_ssa->ID));
+		return expr_value;
 	}
 
 	IRSSAValue* Compiler::GetExpressionByValue(const Expression* expr)
@@ -2624,6 +2617,25 @@ namespace Glass
 
 				return IR(IRSSAValue(ssa->ID));
 			}
+		}
+		break;
+		case NodeType::DeReference:
+		{
+			auto ir_address = (IRSSAValue*)ExpressionCodeGen(expr);
+			const Glass::Type& expr_type = m_Metadata.GetExprType(ir_address->SSA);
+
+			IRLoad* ir_load = IR(IRLoad());
+			ir_load->Type = expr_type.ID;
+			ir_load->ReferencePointer = expr_type.Pointer;
+			ir_load->SSAddress = ir_address->SSA;
+
+			auto load_ssa = CreateIRSSA();
+
+			load_ssa->Type = expr_type.ID;
+			load_ssa->Pointer = expr_type.Pointer;
+			load_ssa->Value = ir_load;
+
+			return IR(IRSSAValue(load_ssa->ID));
 		}
 		break;
 		default:

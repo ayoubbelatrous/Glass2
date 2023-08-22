@@ -1,5 +1,6 @@
 #foreign fn printf!(u8* format) : i32 {};
-#foreign fn malloc(i32 size) : i32* {};
+#foreign fn malloc(i32 size) : void* {};
+#foreign fn free(void* ptr) : void {};
 
 struct Transform {
 	i32 component;
@@ -10,10 +11,11 @@ struct Entity {
 };
 
 fn main() : i32 {
-	i32* array = malloc(10);
-	array[0] = 30;
+	i32* variable = cast(i32*) malloc(sizeof(i32));
 
-	printf("Hello World, %i\n", sizeof(i32));
+	*variable = 30;
 
-	return array[0];
+	printf("ptr: %p", variable);
+
+	return *variable;
 }

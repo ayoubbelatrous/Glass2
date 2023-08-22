@@ -227,6 +227,8 @@ namespace Glass
 
 		case IRNodeType::SizeOf: return SizeOfCodeGen((IRSizeOF*)instruction);
 
+		case IRNodeType::PointerCast: return PointerCastCodeGen((IRPointerCast*)instruction);
+
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
 		case IRNodeType::MUL:
@@ -450,6 +452,11 @@ namespace Glass
 		// we do not account for padding
 		//I dont know how to handle sizeof in llvm depending on platform and arch the size will certainly change
 		return llvm::ConstantInt::get(GetLLVMType(IR_i64), m_Metadata->GetTypeSize(size_of->Type));
+	}
+
+	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
+	{
+		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMTypeFull(ptr_cast->Type, ptr_cast->Pointer));
 	}
 
 	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Function* function, llvm::StringRef var_name)

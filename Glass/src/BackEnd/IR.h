@@ -117,6 +117,8 @@ namespace Glass
 		GlobAddress,
 		GlobDecl,
 
+		PointerCast,
+
 		TranslationUnit,
 	};
 
@@ -1030,19 +1032,25 @@ namespace Glass
 		}
 	};
 
-	// 	struct IRForeignFunction : public IRInstruction {
-	// 		u64 ID;
-	// 
-	// 		std::string Name;
-	// 		std::vector<std::tuple<std::string, Glass::Type>> Arguments;
-	// 		Glass::Type ReturnType;
-	// 
-	// 		virtual std::string ToString() const override {
-	// 			return "foreign fn";
-	// 		}
-	// 
-	// 		virtual IRNodeType GetType() const {
-	// 			return IRNodeType::ForeignFunction;
-	// 		}
-	// 	};
+
+	struct IRPointerCast : public IRInstruction {
+		u64 ID = 0;
+
+		u64 Type = 0;
+		u64 Pointer = 0;
+
+		u64 PointerSSA = 0;
+
+		IRPointerCast(u64 type, u64 pointer, u64 pointer_ssa)
+			:Type(type), Pointer(pointer), PointerSSA(pointer_ssa)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"(ptrcast) ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::PointerCast;
+		}
+	};
 }
