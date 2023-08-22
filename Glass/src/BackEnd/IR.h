@@ -96,6 +96,7 @@ namespace Glass
 		Struct,
 		StructMember,
 		MemberAccess,
+		ArrayAccess,
 		If,
 		While,
 		SizeOf,
@@ -605,6 +606,24 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::MemberAccess;
+		}
+	};
+
+	struct IRArrayAccess : public IRInstruction {
+		u64 ID = 0;
+
+		u64 ArrayAddress;
+		u64 ElementSSA;
+		u64 Type;
+
+		bool ReferenceAccess = false;
+
+		virtual std::string ToString() const override {
+			return 	" [] -> ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::ArrayAccess;
 		}
 	};
 

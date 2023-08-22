@@ -1,20 +1,19 @@
 #foreign fn printf!(u8* format) : i32 {};
+#foreign fn malloc(i32 size) : i32* {};
 
 struct Transform {
 	i32 component;
 };
 
 struct Entity {
-	Transform ts;
+	Transform* ts;
 };
 
 fn main() : i32 {
-	Entity entity;
-	entity.ts.component = 30;
+	i32* array = malloc(10);
+	array[0] = 30;
 
-	i32 comp = entity.ts.component;
+	printf("Hello World, %i\n", sizeof(i32));
 
-	printf("Hello World, %i\n", comp);
-
-	return 0;
+	return array[0];
 }

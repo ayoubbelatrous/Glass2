@@ -957,6 +957,8 @@ namespace Glass
 
 	private:
 
+		bool UseArrayAccessInstruction = true;
+
 		MetaData m_Metadata;
 
 		std::vector<CompilerFile*> m_Files;

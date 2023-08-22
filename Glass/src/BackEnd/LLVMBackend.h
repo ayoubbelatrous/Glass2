@@ -36,11 +36,15 @@ namespace Glass {
 		llvm::Value* StoreCodeGen(const IRStore* store);
 
 		llvm::Value* MemberAccessCodeGen(const IRMemberAccess* member_access);
+		llvm::Value* ArrayAccessCodeGen(const IRArrayAccess* array_access);
 
 		llvm::Value* CallCodeGen(const IRFunctionCall* call);
 
 		llvm::Value* DataValueCodeGen(const IRDataValue* data_value);
 		llvm::Value* DataCodeGen(const IRData* data);
+
+		llvm::Value* SizeOfCodeGen(const IRSizeOF* size_of);
+
 
 		static llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Function* TheFunction, llvm::StringRef VarName);
 

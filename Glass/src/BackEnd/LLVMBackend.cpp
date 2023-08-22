@@ -219,9 +219,13 @@ namespace Glass
 
 		case IRNodeType::Load: return LoadCodeGen((IRLoad*)instruction);
 		case IRNodeType::Store: return StoreCodeGen((IRStore*)instruction);
+
 		case IRNodeType::MemberAccess: return MemberAccessCodeGen((IRMemberAccess*)instruction);
+		case IRNodeType::ArrayAccess: return ArrayAccessCodeGen((IRArrayAccess*)instruction);
 
 		case IRNodeType::Call: return CallCodeGen((IRFunctionCall*)instruction);
+
+		case IRNodeType::SizeOf: return SizeOfCodeGen((IRSizeOF*)instruction);
 
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
@@ -397,6 +401,11 @@ namespace Glass
 		return m_LLVMBuilder->CreateStructGEP(llvm_Struct_Type, llvm_Object, (unsigned)member_access->MemberID);
 	}
 
+	llvm::Value* LLVMBackend::ArrayAccessCodeGen(const IRArrayAccess* array_access)
+	{
+		return m_LLVMBuilder->CreateGEP(GetLLVMType(array_access->Type), GetName(array_access->ArrayAddress), GetName(array_access->ElementSSA));
+	}
+
 	llvm::Value* LLVMBackend::CallCodeGen(const IRFunctionCall* call)
 	{
 		llvm::Function* llvm_Func = GetLLVMFunction(call->FuncID);
@@ -433,6 +442,14 @@ namespace Glass
 		InsertLLVMData(data->ID, m_LLVMBuilder->CreateGlobalStringPtr(string_data, "", 0, m_LLVMModule));
 
 		return nullptr;
+	}
+
+	llvm::Value* LLVMBackend::SizeOfCodeGen(const IRSizeOF* size_of)
+	{
+		// we are using our calculated size for types
+		// we do not account for padding
+		//I dont know how to handle sizeof in llvm depending on platform and arch the size will certainly change
+		return llvm::ConstantInt::get(GetLLVMType(IR_i64), m_Metadata->GetTypeSize(size_of->Type));
 	}
 
 	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Function* function, llvm::StringRef var_name)

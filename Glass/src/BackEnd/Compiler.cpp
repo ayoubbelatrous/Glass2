@@ -2137,6 +2137,36 @@ namespace Glass
 		auto object = (IRSSAValue*)GetExpressionByValue(arrayAccess->Object);
 		auto index = (IRSSAValue*)GetExpressionByValue(arrayAccess->Index);
 
+		auto obj_expr_type = m_Metadata.GetExprType(object->SSA);
+
+		if (!obj_expr_type.Pointer && !obj_expr_type.Array)
+		{
+			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator", MessageType::Warning });
+		}
+
+		if (UseArrayAccessInstruction) {
+
+			//@Todo add support for non pointer arrays
+
+			IRSSA* array_access_ssa = CreateIRSSA();
+
+			IRArrayAccess* ir_array_Access = IR(IRArrayAccess());
+
+			ir_array_Access->ArrayAddress = object->SSA;
+			ir_array_Access->ElementSSA = index->SSA;
+			ir_array_Access->Type = obj_expr_type.ID;
+
+
+			array_access_ssa->Type = obj_expr_type.ID;
+			array_access_ssa->Value = ir_array_Access;
+
+			obj_expr_type.Pointer--;
+			m_Metadata.RegExprType(array_access_ssa->ID, obj_expr_type);
+
+			return IR(IRSSAValue(array_access_ssa->ID));
+		}
+
 		auto obj_ssa = m_Metadata.GetSSA(object->SSA);
 		auto index_ssa = m_Metadata.GetSSA(index->SSA);
 
@@ -2145,15 +2175,7 @@ namespace Glass
 
 		obj_address_ssa = obj_ssa->ID;
 
-		auto& obj_expr_type = m_Metadata.GetExprType(obj_address_ssa);
-
 		type = obj_expr_type.ID;
-
-		if (!obj_expr_type.Pointer && !obj_expr_type.Array)
-		{
-			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
-			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator", MessageType::Warning });
-		}
 
 		u64 base_address_ssa = 0;
 
