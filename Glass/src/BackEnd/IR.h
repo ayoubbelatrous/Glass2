@@ -74,6 +74,9 @@ namespace Glass
 	{
 		ConstValue,
 		SSA,
+
+		Alloca,
+
 		ADD,
 		SUB,
 		MUL,
@@ -177,6 +180,20 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::ARGValue;
+		}
+	};
+
+	struct IRBinOp : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+		u64 Type;
+
+		virtual std::string ToString() const override {
+			return "";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::ADD;
 		}
 	};
 
@@ -326,8 +343,27 @@ namespace Glass
 		}
 	};
 
-	struct IRReturn : public IRInstruction {
+	struct IRAlloca : public IRInstruction {
+		u64 ID = 0;
+
 		u64 Type;
+		u32 Pointer = 0;
+
+		IRAlloca(u64 type, u32 pointer)
+			:Type(type), Pointer(pointer)
+		{}
+
+		virtual std::string ToString() const override {
+			return "Alloca()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Alloca;
+		}
+	};
+
+	struct IRReturn : public IRInstruction {
+		u64 Type = 0;
 		IRInstruction* Value = nullptr;
 
 		virtual std::string ToString() const override {
@@ -468,8 +504,9 @@ namespace Glass
 		u64 Pointer = 0;
 		u64 AddressSSA = 0;
 		IRInstruction* Data = nullptr;
+
 		virtual std::string ToString() const override {
-			return 	fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
+			return fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
 		}
 
 		virtual IRNodeType GetType() const {

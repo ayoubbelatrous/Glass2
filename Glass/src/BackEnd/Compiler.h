@@ -139,6 +139,8 @@ namespace Glass
 
 		bool Foreign = false;
 
+		u64 TypeID = 0;
+
 		u64 FindMember(const std::string& name) const {
 			u64 id_counter = 0;
 			for (const MemberMetadata& member : Members) {
@@ -153,12 +155,26 @@ namespace Glass
 
 	struct ArgumentMetadata
 	{
+		ArgumentMetadata() = default;
+
+		ArgumentMetadata(
+			std::string name,
+			Type type,
+			u64 ssa_id = 0,
+			bool variadic = false,
+			bool polyMorphic = false,
+			u64 PolyMorhID = 0)
+			:Name(name), SSAID(ssa_id), Variadic(variadic), PolyMorphic(polyMorphic), PolyMorhID(PolyMorhID)
+		{}
+
 		std::string Name;
 		Type Tipe;
 		bool Variadic = false;
 
 		bool PolyMorphic = false;
 		u64 PolyMorhID = 0;
+
+		u64 SSAID = 0; // where this value ptr to stack is located could be a double pointer or more its always a pointer
 	};
 
 	struct PolyMorphicType
@@ -599,8 +615,10 @@ namespace Glass
 				return size;
 			}
 
-			void RegisterStruct(u64 ID, u64 TypeID, const StructMetadata& metadata)
+			void RegisterStruct(u64 ID, u64 TypeID, StructMetadata metadata)
 			{
+				metadata.TypeID = TypeID;
+
 				m_StructNames[metadata.Name.Symbol] = ID;
 				m_StructMetadata[ID] = metadata;
 				m_TypeToStruct[TypeID] = ID;

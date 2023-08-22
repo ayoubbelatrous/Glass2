@@ -118,6 +118,8 @@ namespace Glass
 			return m_TypeAllocator.Allocate<T>(d);
 		}
 
+		static bool UseAlloca;
+
 	private:
 
 		static std::vector<CompilerFile> GenerateCompilationFiles(const std::vector<fs_path>& files);

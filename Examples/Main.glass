@@ -1,3 +1,20 @@
+#foreign fn printf!(u8* format) : i32 {};
+
+struct Transform {
+	i32 component;
+};
+
+struct Entity {
+	Transform ts;
+};
+
 fn main() : i32 {
+	Entity entity;
+	entity.ts.component = 30;
+
+	i32 comp = entity.ts.component;
+
+	printf("Hello World, %i\n", comp);
+
 	return 0;
 }

@@ -9,6 +9,8 @@
 #include "BackEnd/Compiler.h"
 #include "BackEnd/C/CTranspiler.h"
 
+#include "BackEnd/LLVMBackend.h"
+
 namespace Glass
 {
 	Application::Application(const CommandLineArgs& CmdLineArgs)
@@ -126,7 +128,21 @@ namespace Glass
 			GS_CORE_INFO("IR Generation Done");
 		}
 
-		if (compilation_successful)
+		bool llvm = true;
+
+		if (llvm) {
+			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
+
+			llvm_backend.Compile();
+
+			int run_result = system("a.exe");
+
+			if (run_result != 0) {
+				GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
+			}
+		}
+
+		if (!llvm)
 		{
 			m_TranspilerStart = std::chrono::high_resolution_clock::now();
 			CTranspiler transpiler(code, m_Options.CIncludes, &compiler.GetMetadata());
@@ -283,6 +299,10 @@ namespace Glass
 					modal = false;
 				}
 
+				if (arg == "-ir") {
+					options.DumpIR = true;
+				}
+
 				continue;
 			}
 
@@ -307,10 +327,6 @@ namespace Glass
 				}
 			}
 			else {
-				if (arg == "--ir") {
-					options.DumpIR = true;
-					continue;
-				}
 
 				if (!FindStringIC(arg, "-")) {
 					if (std::filesystem::exists(arg)) {
@@ -329,6 +345,8 @@ namespace Glass
 
 		return options;
 	}
+
+	bool Application::UseAlloca = true;
 
 	std::vector<CompilerFile> Application::GenerateCompilationFiles(const std::vector<fs_path>& files)
 	{

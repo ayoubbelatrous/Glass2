@@ -755,6 +755,7 @@ namespace Glass
 			arg_metadata.Tipe.Pointer = arg_ssa->Pointer;
 			arg_metadata.Tipe.ID = var_metadata.Tipe.ID;
 			arg_metadata.Variadic = var->Type->Variadic;
+			arg_metadata.SSAID = arg_address_ssa->ID;
 
 			args_metadata.push_back(arg_metadata);
 		}
@@ -765,6 +766,9 @@ namespace Glass
 		{
 			IRInstruction* code = StatementCodeGen(stmt);
 
+			if (!code)
+				continue;
+
 			auto SSAs = PoPIRSSA();
 
 			for (auto ssa : SSAs)
@@ -772,8 +776,12 @@ namespace Glass
 				IRF->Instructions.push_back(ssa);
 			}
 
-			if (code != nullptr) {
-				IRF->Instructions.push_back(code);
+			if (code->GetType() != IRNodeType::SSAValue) {
+				//We Discard function scope level r values
+
+				if (code != nullptr) {
+					IRF->Instructions.push_back(code);
+				}
 			}
 
 			if (stmt->GetType() == NodeType::Scope) {
@@ -813,7 +821,11 @@ namespace Glass
 		}
 
 		IRSSAValue* value = nullptr;
+
 		Glass::Type Type;
+
+		u64 allocation_type = 0;
+		u64 allocation_pointer = 0;
 
 		if (variableNode->Assignment != nullptr)
 		{
@@ -824,18 +836,14 @@ namespace Glass
 			}
 		}
 
-		IRSSA* StorageSSA = CreateIRSSA();
 
 		if (variableNode->Type == nullptr) {
 			const Glass::Type& assignment_type = m_Metadata.GetExprType(value->SSA);
 			Type = assignment_type;
 
-			StorageSSA->Type = Type.ID;
-			StorageSSA->Pointer = Type.Pointer;
-
 			if (Type.Array)
 			{
-				StorageSSA->Type = IR_array;
+				allocation_type = IR_array;
 			}
 		}
 		else {
@@ -846,13 +854,13 @@ namespace Glass
 
 			if (variableNode->Type->Array)
 			{
-				StorageSSA->Type = IR_array;
+				allocation_type = IR_array;
 			}
 			else
 			{
-				StorageSSA->Type = Type.ID;
+				allocation_type = Type.ID;
 
-				if (StorageSSA->Type == NULL_ID) {
+				if (allocation_type == NULL_ID) {
 					PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
 					PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
 					return nullptr;
@@ -862,58 +870,43 @@ namespace Glass
 			{
 				for (u64 i = 0; i < variableNode->Type->Pointer; i++)
 				{
-					StorageSSA->Pointer++;
+					allocation_pointer++;
 				}
 			}
 		}
 
-		StorageSSA->Value = nullptr;
+		IRSSA* variable_address_ssa = CreateIRSSA();
+		variable_address_ssa->Type = Type.ID;
+		variable_address_ssa->Pointer = 1;
 
-		IRSSA* IRssa = CreateIRSSA();
-		IRssa->Type = (u64)IRType::IR_u64;
+		variable_address_ssa->Value = IR(IRAlloca((u32)allocation_type, (u32)allocation_pointer));
 
-		IRSSAValue StorageSSAVal;
-		IRAddressOf address_of;
-
-		{
-			StorageSSAVal.SSA = StorageSSA->ID;
-			address_of.SSA = IR(StorageSSAVal);
-		}
-
-		IRssa->Value = IR(address_of);
-
-		IRssa->PointerReference = StorageSSA->Pointer;
-		IRssa->ReferenceType = StorageSSA->Type;
-		IRssa->SSAType = RegType::VarAddress;
-
-		RegisterVariable(IRssa, variableNode->Symbol.Symbol);
+		RegisterVariable(variable_address_ssa, variableNode->Symbol.Symbol);
 
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
 			Type,
 			false,
 			false,
-			StorageSSA,
-			IRssa };
+			nullptr,
+			variable_address_ssa };
 
-		m_Metadata.RegisterVariableMetadata(IRssa->ID, var_metadata);
+		m_Metadata.RegisterVariableMetadata(variable_address_ssa->ID, var_metadata);
+		m_Metadata.RegExprType(variable_address_ssa->ID, var_metadata.Tipe);
 
-		m_Metadata.RegExprType(IRssa->ID, var_metadata.Tipe);
-
-		if (value != nullptr)
+		if (value)
 		{
-			IRStore store;
-			store.AddressSSA = IRssa->ID;
-			store.Data = value;
-			store.Type = StorageSSA->Type;
-			store.Pointer = StorageSSA->Pointer;
+			IRStore* assignment_store = IR(IRStore());
 
-			return IR(store);
+			assignment_store->AddressSSA = variable_address_ssa->ID;
+			assignment_store->Data = value;
+			assignment_store->Pointer = Type.Pointer;
+			assignment_store->Type = Type.ID;
+
+			return assignment_store;
 		}
-		else
-		{
-			return nullptr;
-		}
+
+		return nullptr;
 	}
 
 	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode)
@@ -1634,8 +1627,8 @@ namespace Glass
 				{
 					store->Data = right_val;
 					store->AddressSSA = var_ssa_id;
-					store->Type = metadata->DataSSA->Type;
-					store->Pointer = metadata->DataSSA->Pointer;
+					store->Type = metadata->Tipe.ID;
+					store->Pointer = metadata->Tipe.Pointer;
 				}
 
 				return store;
@@ -1870,13 +1863,13 @@ namespace Glass
 			ir_ssa->Value = IR(ir_call);
 			ir_ssa->Pointer = metadata->ReturnType.Pointer;
 
-			IRSSAValue* ir_sss_val = IR(IRSSAValue());
+			IRSSAValue* ir_ssa_val = IR(IRSSAValue());
 
-			ir_sss_val->SSA = ir_ssa->ID;
+			ir_ssa_val->SSA = ir_ssa->ID;
 
-			m_Metadata.RegExprType(ir_sss_val->SSA, metadata->ReturnType);
+			m_Metadata.RegExprType(ir_ssa_val->SSA, metadata->ReturnType);
 
-			return ir_sss_val;
+			return ir_ssa_val;
 		}
 
 		return IR(ir_call);
