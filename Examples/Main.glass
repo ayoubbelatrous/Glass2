@@ -2,20 +2,20 @@
 #foreign fn malloc(i32 size) : void* {};
 #foreign fn free(void* ptr) : void {};
 
-struct Transform {
-	i32 component;
-};
-
-struct Entity {
-	Transform* ts;
+struct vec3 {
+	f32 x;
+	f32 y;
+	f32 z;
 };
 
 fn main() : i32 {
-	i32* variable = cast(i32*) malloc(sizeof(i32));
 
-	*variable = 30;
+	bool variable_a = 1;
+	bool variable_b = 0-1;
 
-	printf("ptr: %p", variable);
+	if variable_a {
+		printf("Hello World\n\n\n");
+	}
 
-	return *variable;
+	return 0;
 }

@@ -30,6 +30,8 @@ namespace Glass
 		InsertLLVMType(IR_f32, llvm::Type::getFloatTy(*m_LLVMContext));
 		InsertLLVMType(IR_f64, llvm::Type::getDoubleTy(*m_LLVMContext));
 
+		InsertLLVMType(IR_bool, llvm::Type::getInt8Ty(*m_LLVMContext));
+
 		InsertLLVMType(IR_void, llvm::Type::getVoidTy(*m_LLVMContext));
 	}
 
@@ -229,6 +231,8 @@ namespace Glass
 
 		case IRNodeType::PointerCast: return PointerCastCodeGen((IRPointerCast*)instruction);
 
+		case IRNodeType::If: return IfCodeGen((IRIf*)instruction);
+
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
 		case IRNodeType::MUL:
@@ -320,21 +324,34 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::ConstValueCodeGen(const IRCONSTValue* constant)
 	{
-		if (constant->Type == IR_float) {
-			float data = 0;
-			memcpy(&data, &constant->Data, sizeof(float));
+		if (m_Metadata->GetTypeFlags(constant->Type) & FLAG_FLOATING_TYPE) {
 
-			llvm::Type* floatType = llvm::Type::getFloatTy(*m_LLVMContext);
+			double data = 0;
+			memcpy(&data, &constant->Data, sizeof(double));
+
+			llvm::Type* floatType = nullptr;
+
+			if (constant->Type == IR_float || constant->Type == IR_f32) {
+				floatType = llvm::Type::getFloatTy(*m_LLVMContext);
+			}
+			else if (constant->Type == IR_f64) {
+				floatType = llvm::Type::getDoubleTy(*m_LLVMContext);
+			}
 
 			return llvm::ConstantFP::get(floatType, data);
 		}
+
+		i64 data = 0;
+
+		memcpy(&data, &constant->Data, sizeof(i64));
+
+		bool is_unsigned = m_Metadata->GetTypeFlags(constant->Type) & FLAG_UNSIGNED_TYPE;
+
+		if (is_unsigned) {
+			return llvm::ConstantInt::get(GetLLVMType(constant->Type), data, false);
+		}
 		else {
-			i64 data = 0;
-
-			llvm::Type* intType = llvm::Type::getInt32Ty(*m_LLVMContext);
-
-			memcpy(&data, &constant->Data, sizeof(i64));
-			return llvm::ConstantInt::get(intType, data);
+			return llvm::ConstantInt::getSigned(GetLLVMType(constant->Type), data);
 		}
 	}
 
@@ -437,9 +454,32 @@ namespace Glass
 
 		string_data.reserve(data->Data.size());
 
-		for (char c : data->Data) {
+		u64 i = 0;
+		while (i < data->Data.size()) {
+			char c = data->Data[i];
+
+			if (c == '\\') {
+				if (data->Data[i + 1] == 'n') {
+
+					string_data.push_back('\x0A');
+
+					i += 2;
+					continue;
+				}
+			}
+
 			string_data.push_back(c);
+
+			i++;
 		}
+
+		// 		}
+		// 
+		// 		size_t position = string_data.find("\\n");
+		// 		while (position != std::string::npos) {
+		// 			string_data.replace(position, 2, "\x0A");
+		// 			position = string_data.find("\\n", position + 2); // Skip over the added "\0A"
+		// 		}
 
 		InsertLLVMData(data->ID, m_LLVMBuilder->CreateGlobalStringPtr(string_data, "", 0, m_LLVMModule));
 
@@ -457,6 +497,31 @@ namespace Glass
 	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
 	{
 		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMTypeFull(ptr_cast->Type, ptr_cast->Pointer));
+	}
+
+	llvm::Value* LLVMBackend::IfCodeGen(const IRIf* _if)
+	{
+		llvm::Function* function = m_LLVMBuilder->GetInsertBlock()->getParent();
+
+		llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*m_LLVMContext, "then", function);
+		llvm::BasicBlock* contBlock = llvm::BasicBlock::Create(*m_LLVMContext, "cont", function);
+
+
+		llvm::Value* condition =
+			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_if->SSA),
+				llvm::ConstantInt::get(GetLLVMType(IR_bool), 0));
+
+		m_LLVMBuilder->CreateCondBr(condition, thenBlock, contBlock);
+		m_LLVMBuilder->SetInsertPoint(thenBlock);
+
+		for (auto inst : _if->Instructions) {
+			CodeGen(inst);
+		}
+
+		m_LLVMBuilder->CreateBr(contBlock);
+		m_LLVMBuilder->SetInsertPoint(contBlock);
+
+		return nullptr;
 	}
 
 	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Function* function, llvm::StringRef var_name)

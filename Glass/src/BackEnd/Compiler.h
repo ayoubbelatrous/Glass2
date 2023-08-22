@@ -424,6 +424,10 @@ namespace Glass
 				return (u64)-1;
 			}
 
+			const TypeFlags& GetTypeFlags(u64 id) const {
+				return m_TypeFlags.at(id);
+			}
+
 			TypeFlags& GetTypeFlags(u64 id) {
 				return m_TypeFlags[id];
 			}
@@ -955,7 +959,35 @@ namespace Glass
 			return m_GlobalCounter;
 		}
 
+		void SetLikelyConstantIntegerType(u64 integer_type) {
+			m_ConstantIntegerLikelyType = integer_type;
+		}
+
+		void ResetLikelyConstantIntegerType() {
+			m_ConstantIntegerLikelyType = IR_int;
+		}
+
+		u64 GetLikelyConstantIntegerType() {
+			return m_ConstantIntegerLikelyType;
+		}
+
+		void SetLikelyConstantFloatType(u64 float_type) {
+			m_ConstantFloatLikelyType = float_type;
+		}
+
+		void ResetLikelyConstantFloatType() {
+			m_ConstantFloatLikelyType = IR_float;
+		}
+
+		u64 GetLikelyConstantFloatType() {
+			return m_ConstantFloatLikelyType;
+		}
+
+
 	private:
+
+		u64 m_ConstantIntegerLikelyType = IR_int;
+		u64 m_ConstantFloatLikelyType = IR_float;
 
 		bool UseArrayAccessInstruction = true;
 

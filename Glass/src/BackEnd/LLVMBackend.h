@@ -47,6 +47,8 @@ namespace Glass {
 
 		llvm::Value* PointerCastCodeGen(const IRPointerCast* ptr_cast);
 
+		llvm::Value* IfCodeGen(const IRIf* _if);
+
 		static llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Function* TheFunction, llvm::StringRef VarName);
 
 	private:

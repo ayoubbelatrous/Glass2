@@ -930,11 +930,11 @@ namespace Glass
 			num_lit.Value = std::stoi(num_lit.token.Symbol);
 
 			if (FindStringIC(num_lit.token.Symbol, ".")) {
-				num_lit.Val.Float = std::stof(num_lit.token.Symbol);
+				num_lit.Val.Float = std::stod(num_lit.token.Symbol);
 				num_lit.type = NumericLiteral::Type::Float;
 			}
 			else {
-				num_lit.Val.Int = std::stoi(num_lit.token.Symbol);
+				num_lit.Val.Int = std::stoll(num_lit.token.Symbol);
 				num_lit.type = NumericLiteral::Type::Int;
 			}
 

@@ -828,6 +828,19 @@ namespace Glass
 		u64 allocation_type = 0;
 		u64 allocation_pointer = 0;
 
+		if (variableNode->Type != nullptr) {
+
+			u64 assignment_type_id = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
+			u64 assignment_type_flags = m_Metadata.GetTypeFlags(assignment_type_id);
+
+			if (!(assignment_type_flags & FLAG_FLOATING_TYPE)) {
+				SetLikelyConstantIntegerType(assignment_type_id);
+			}
+			else if (assignment_type_flags & FLAG_FLOATING_TYPE) {
+				SetLikelyConstantFloatType(assignment_type_id);
+			}
+		}
+
 		if (variableNode->Assignment != nullptr)
 		{
 			value = GetExpressionByValue(variableNode->Assignment);
@@ -837,6 +850,10 @@ namespace Glass
 			}
 		}
 
+		if (variableNode->Type != nullptr) {
+			ResetLikelyConstantIntegerType();
+			ResetLikelyConstantFloatType();
+		}
 
 		if (variableNode->Type == nullptr) {
 			const Glass::Type& assignment_type = m_Metadata.GetExprType(value->SSA);
@@ -1294,13 +1311,13 @@ namespace Glass
 
 		if (numericLiteral->type == NumericLiteral::Type::Float)
 		{
-			IRssa->Type = (u64)IRType::IR_float;
-			memcpy(&Value->Data, &numericLiteral->Val.Float, sizeof(float));
+			IRssa->Type = GetLikelyConstantFloatType();
+			memcpy(&Value->Data, &numericLiteral->Val.Float, sizeof(double));
 		}
 		if (numericLiteral->type == NumericLiteral::Type::Int)
 		{
-			IRssa->Type = (u64)IRType::IR_int;
-			memcpy(&Value->Data, &numericLiteral->Val.Int, sizeof(i32));
+			IRssa->Type = GetLikelyConstantIntegerType();
+			memcpy(&Value->Data, &numericLiteral->Val.Int, sizeof(i64));
 		}
 
 		Value->Type = IRssa->Type;

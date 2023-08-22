@@ -133,7 +133,7 @@ namespace Glass
 	struct IRCONSTValue : public IRInstruction {
 		u64 ID = 0;
 		uint8_t Data[16];
-		u64 Type;
+		u64 Type = 0;
 
 		virtual std::string ToString() const override {
 			std::string str;

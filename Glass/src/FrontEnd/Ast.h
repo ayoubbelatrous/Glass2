@@ -251,7 +251,7 @@ namespace Glass
 		union
 		{
 			double Double;
-			float Float;
+			double Float;
 			u64 Int;
 		} Val;
 
