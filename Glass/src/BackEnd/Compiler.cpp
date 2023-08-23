@@ -1885,7 +1885,7 @@ namespace Glass
 
 		bool has_return = metadata->ReturnType.Pointer;
 
-		has_return |= metadata->ReturnType.ID == IR_void;
+		has_return |= metadata->ReturnType.ID != IR_void;
 
 		if (has_return)
 		{

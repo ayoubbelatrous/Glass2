@@ -8,14 +8,22 @@ struct vec3 {
 	f32 z;
 };
 
+fn strlen(u8* string) : i32 {
+
+	u8 c = 1;
+	u8 i = 0;
+
+	while c {
+		c = string[i];
+		i = i + 1;
+	}
+
+	return i;
+}
+
 fn main() : i32 {
 
-	bool variable_a = 1;
-	bool variable_b = 0-1;
-
-	if variable_a {
-		printf("Hello World\n\n\n");
-	}
+	printf("Hello World Langth is: %i", strlen("Hello World"));
 
 	return 0;
 }

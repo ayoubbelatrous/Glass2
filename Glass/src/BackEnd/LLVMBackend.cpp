@@ -94,13 +94,13 @@ namespace Glass
 		pass.run(*m_LLVMModule);
 		dest.flush();
 
-		std::string linker_command = "ld.exe output.o -lmsvcrt  -o a.exe";
+		std::string linker_command = "clang output.o -o a.exe";
 
 		int link_status = system(linker_command.c_str());
 
 		if (link_status) {
 			GS_CORE_WARN("{}", linker_command);
-			GS_CORE_ERROR("ld.exe failed");
+			GS_CORE_ERROR("clang failed");
 		}
 	}
 
@@ -232,6 +232,7 @@ namespace Glass
 		case IRNodeType::PointerCast: return PointerCastCodeGen((IRPointerCast*)instruction);
 
 		case IRNodeType::If: return IfCodeGen((IRIf*)instruction);
+		case IRNodeType::While: return WhileCodeGen((IRWhile*)instruction);
 
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
@@ -473,14 +474,6 @@ namespace Glass
 			i++;
 		}
 
-		// 		}
-		// 
-		// 		size_t position = string_data.find("\\n");
-		// 		while (position != std::string::npos) {
-		// 			string_data.replace(position, 2, "\x0A");
-		// 			position = string_data.find("\\n", position + 2); // Skip over the added "\0A"
-		// 		}
-
 		InsertLLVMData(data->ID, m_LLVMBuilder->CreateGlobalStringPtr(string_data, "", 0, m_LLVMModule));
 
 		return nullptr;
@@ -520,6 +513,41 @@ namespace Glass
 
 		m_LLVMBuilder->CreateBr(contBlock);
 		m_LLVMBuilder->SetInsertPoint(contBlock);
+
+		return nullptr;
+	}
+
+	llvm::Value* LLVMBackend::WhileCodeGen(const IRWhile* _while)
+	{
+		llvm::Function* function = m_LLVMBuilder->GetInsertBlock()->getParent();
+
+		llvm::BasicBlock* loopCondBlock = llvm::BasicBlock::Create(*m_LLVMContext, "loop.cond", function);
+		llvm::BasicBlock* loopBodyBlock = llvm::BasicBlock::Create(*m_LLVMContext, "loop.body", function);
+		llvm::BasicBlock* afterLoopBlock = llvm::BasicBlock::Create(*m_LLVMContext, "after.loop", function);
+
+		// Insert a branch to the loop condition block.
+		m_LLVMBuilder->CreateBr(loopCondBlock);
+		m_LLVMBuilder->SetInsertPoint(loopCondBlock);
+
+		for (auto inst : _while->ConditionBlock) {
+			CodeGen(inst);
+		}
+
+		llvm::Value* condition =
+			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_while->SSA),
+				llvm::ConstantInt::get(GetLLVMType(IR_bool), 0));
+
+		m_LLVMBuilder->CreateCondBr(condition, loopBodyBlock, afterLoopBlock);
+
+		m_LLVMBuilder->SetInsertPoint(loopBodyBlock);
+
+		for (auto inst : _while->Instructions) {
+			CodeGen(inst);
+		}
+
+		m_LLVMBuilder->CreateBr(loopCondBlock);
+
+		m_LLVMBuilder->SetInsertPoint(afterLoopBlock);
 
 		return nullptr;
 	}
