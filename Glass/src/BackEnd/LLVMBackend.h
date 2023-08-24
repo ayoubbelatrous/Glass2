@@ -50,7 +50,10 @@ namespace Glass {
 		llvm::Value* IfCodeGen(const IRIf* _if);
 		llvm::Value* WhileCodeGen(const IRWhile* _while);
 
-		static llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Function* TheFunction, llvm::StringRef VarName);
+		llvm::Value* AnyCodeGen(const IRAny* any);
+		llvm::Value* AnyArrayCodeGen(const IRAnyArray* any_array);
+
+		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type);
 
 	private:
 
@@ -95,22 +98,17 @@ namespace Glass {
 		}
 
 		llvm::Type* GetLLVMTypeFull(const Glass::Type& type) {
-
-			llvm::Type* full_type = GetLLVMType(type.ID);
-
-			if (type.Pointer) {
-				for (size_t i = 0; i < type.Pointer; i++)
-				{
-					full_type = llvm::PointerType::get(full_type, (unsigned)0);
-				}
-			}
-
-			return full_type;
+			return GetLLVMTypeFull(type.ID, type.Pointer);
 		}
 
 		llvm::Type* GetLLVMTypeFull(u64 type, u64 pointer) {
 
 			llvm::Type* full_type = GetLLVMType(type);
+
+
+			if (type == IR_void)
+				full_type = Opaque_Type;
+
 			if (pointer) {
 				for (size_t i = 0; i < pointer; i++)
 				{
@@ -168,5 +166,7 @@ namespace Glass {
 		std::unordered_map<u64, llvm::Function*> m_LLVMFunctions;
 
 		std::unordered_map<u64, llvm::Value*> m_LLVMData;
+
+		llvm::Type* Opaque_Type = nullptr;
 	};
 }

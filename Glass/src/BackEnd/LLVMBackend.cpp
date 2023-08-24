@@ -33,6 +33,8 @@ namespace Glass
 		InsertLLVMType(IR_bool, llvm::Type::getInt8Ty(*m_LLVMContext));
 
 		InsertLLVMType(IR_void, llvm::Type::getVoidTy(*m_LLVMContext));
+
+		Opaque_Type = llvm::StructType::create(*m_LLVMContext, "ptr");
 	}
 
 	void LLVMBackend::Compile()
@@ -57,6 +59,12 @@ namespace Glass
 		for (auto inst : m_Program->Instructions) {
 			CodeGen(inst);
 		}
+
+		// Create a file stream for output
+		std::error_code ELC;
+		llvm::raw_fd_ostream outputFile("output.ll", ELC, llvm::sys::fs::OF_None);
+
+		m_LLVMModule->print(outputFile, nullptr);
 
 		m_LLVMModule->print(llvm::outs(), nullptr, true, true);
 
@@ -139,6 +147,8 @@ namespace Glass
 			InsertLLVMStructType(struct_type.StructID, struct_type);
 		}
 
+		llvm::DataLayout dataLayout(m_LLVMModule);
+
 		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
 
 			u64 id = func_pair.first;
@@ -155,9 +165,20 @@ namespace Glass
 			}
 
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
-
 			our_struct_type.LLVMMembers = llvm_Members_Types;
+
+			GS_CORE_WARN("Struct: {}", struct_metadata.Name.Symbol);
+			const llvm::StructLayout* structLayout = dataLayout.getStructLayout(our_struct_type.LLVMType);
+			u64 i = 0;
+			for (const MemberMetadata& member_metadata : struct_metadata.Members) {
+				u64 elementOffset = structLayout->getElementOffset(i);
+
+				GS_CORE_WARN("Member Offset: {}", elementOffset);
+
+				i = i + 1;
+			}
 		}
+
 	}
 
 	void LLVMBackend::ForeignCodeGen()
@@ -238,7 +259,15 @@ namespace Glass
 		case IRNodeType::SUB:
 		case IRNodeType::MUL:
 		case IRNodeType::DIV:
+		case IRNodeType::Equal:
+		case IRNodeType::NotEqual:
+		case IRNodeType::LesserThan:
+		case IRNodeType::GreaterThan:
 			return OpCodeGen((IRBinOp*)instruction);
+			break;
+
+		case IRNodeType::Any: return AnyCodeGen((IRAny*)instruction);
+		case IRNodeType::AnyArray: return AnyArrayCodeGen((IRAnyArray*)instruction);
 		default:
 			return 0;
 		}
@@ -253,12 +282,16 @@ namespace Glass
 		std::vector<llvm::Type*> Parameters;
 
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
-			Parameters.push_back(GetLLVMTypeFull(arg_metadata.Tipe));
+			if (!arg_metadata.Variadic) {
+				Parameters.push_back(GetLLVMTypeFull(arg_metadata.Tipe));
+			}
+			else {
+				Parameters.push_back(GetLLVMType(IR_array));
+			}
 		}
 
 		llvm::FunctionType* Function_Type =
 			llvm::FunctionType::get(GetLLVMTypeFull(func_metadata->ReturnType), Parameters, false);
-
 
 		llvm::Function* llvm_Func =
 			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Name, m_LLVMModule);
@@ -280,7 +313,14 @@ namespace Glass
 		//Argument Stack Storage
 		u64 argument_id = 0;
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
-			InsertName(arg_metadata.SSAID, m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe)));
+
+			if (!arg_metadata.Variadic) {
+				InsertName(arg_metadata.SSAID, m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe)));
+			}
+			else {
+				InsertName(arg_metadata.SSAID, m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array)));
+			}
+
 			m_LLVMBuilder->CreateStore(GetFunctionArgumentName(m_CurrentFunctionID, argument_id), GetName(arg_metadata.SSAID));
 			argument_id++;
 		}
@@ -360,8 +400,8 @@ namespace Glass
 	{
 		IRNodeType type = op->GetType();
 
-		CodeGen(op->SSA_A);
-		CodeGen(op->SSA_A);
+		//CodeGen(op->SSA_A);
+		//CodeGen(op->SSA_B);
 
 		llvm::Value* lhs = GetName(op->SSA_A->SSA);
 		llvm::Value* rhs = GetName(op->SSA_B->SSA);
@@ -382,6 +422,22 @@ namespace Glass
 		case IRNodeType::DIV:
 			result = m_LLVMBuilder->CreateSDiv(lhs, rhs, "signed div");
 			break;
+
+		case IRNodeType::Equal:
+			result = m_LLVMBuilder->CreateICmpEQ(lhs, rhs, "comp");
+			break;
+
+		case IRNodeType::NotEqual:
+			result = m_LLVMBuilder->CreateICmpNE(lhs, rhs, "comp");
+			break;
+
+		case IRNodeType::LesserThan:
+			result = m_LLVMBuilder->CreateICmpULT(lhs, rhs);
+			break;
+
+		case IRNodeType::GreaterThan:
+			result = m_LLVMBuilder->CreateICmpUGT(lhs, rhs);
+			break;
 		}
 
 		return result;
@@ -390,21 +446,23 @@ namespace Glass
 	llvm::Value* LLVMBackend::AllocaCodeGen(const IRAlloca* alloca)
 	{
 		llvm::AllocaInst* llvm_alloca =
-			m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(alloca->Type, alloca->Pointer), nullptr);
+			CreateEntryBlockAlloca(GetLLVMTypeFull(alloca->Type, alloca->Pointer));
 
 		return llvm_alloca;
 	}
 
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
-		return m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->ReferencePointer), GetName(load->SSAddress));
+		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->ReferencePointer), GetName(load->SSAddress));
+		return ld;
 	}
 
 	llvm::Value* LLVMBackend::StoreCodeGen(const IRStore* store)
 	{
 		u64 data_ssa = 0;
 		data_ssa = ((IRSSAValue*)store->Data)->SSA;
-		return m_LLVMBuilder->CreateStore(GetName(data_ssa), GetName(store->AddressSSA));
+		auto st = m_LLVMBuilder->CreateStore(GetName(data_ssa), GetName(store->AddressSSA));
+		return st;
 	}
 
 	llvm::Value* LLVMBackend::MemberAccessCodeGen(const IRMemberAccess* member_access)
@@ -418,12 +476,21 @@ namespace Glass
 
 		GS_CORE_ASSERT(member_access->MemberID < struct_type.LLVMMembers.size(), "Member Idx out of range");
 
+		if (member_access->ReferenceAccess) {
+			llvm_Object = m_LLVMBuilder->CreateLoad(llvm_Object);
+		}
+
 		return m_LLVMBuilder->CreateStructGEP(llvm_Struct_Type, llvm_Object, (unsigned)member_access->MemberID);
 	}
 
 	llvm::Value* LLVMBackend::ArrayAccessCodeGen(const IRArrayAccess* array_access)
 	{
-		return m_LLVMBuilder->CreateGEP(GetLLVMType(array_access->Type), GetName(array_access->ArrayAddress), GetName(array_access->ElementSSA));
+		return m_LLVMBuilder->CreateGEP(
+			GetLLVMType(array_access->Type),
+			GetName(array_access->ArrayAddress),
+			GetName(array_access->ElementSSA),
+			"array_access"
+		);
 	}
 
 	llvm::Value* LLVMBackend::CallCodeGen(const IRFunctionCall* call)
@@ -499,10 +566,11 @@ namespace Glass
 		llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*m_LLVMContext, "then", function);
 		llvm::BasicBlock* contBlock = llvm::BasicBlock::Create(*m_LLVMContext, "cont", function);
 
+		// 		llvm::Value* condition =
+		// 			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_if->SSA),
+		// 				llvm::ConstantInt::get(GetLLVMType(IR_bool), 0));
 
-		llvm::Value* condition =
-			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_if->SSA),
-				llvm::ConstantInt::get(GetLLVMType(IR_bool), 0));
+		llvm::Value* condition = GetName(_if->SSA);
 
 		m_LLVMBuilder->CreateCondBr(condition, thenBlock, contBlock);
 		m_LLVMBuilder->SetInsertPoint(thenBlock);
@@ -525,7 +593,6 @@ namespace Glass
 		llvm::BasicBlock* loopBodyBlock = llvm::BasicBlock::Create(*m_LLVMContext, "loop.body", function);
 		llvm::BasicBlock* afterLoopBlock = llvm::BasicBlock::Create(*m_LLVMContext, "after.loop", function);
 
-		// Insert a branch to the loop condition block.
 		m_LLVMBuilder->CreateBr(loopCondBlock);
 		m_LLVMBuilder->SetInsertPoint(loopCondBlock);
 
@@ -533,9 +600,7 @@ namespace Glass
 			CodeGen(inst);
 		}
 
-		llvm::Value* condition =
-			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_while->SSA),
-				llvm::ConstantInt::get(GetLLVMType(IR_bool), 0));
+		llvm::Value* condition = GetName(_while->SSA);
 
 		m_LLVMBuilder->CreateCondBr(condition, loopBodyBlock, afterLoopBlock);
 
@@ -552,11 +617,105 @@ namespace Glass
 		return nullptr;
 	}
 
-	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Function* function, llvm::StringRef var_name)
+	llvm::Value* LLVMBackend::AnyCodeGen(const IRAny* any)
 	{
+		llvm::Type* llvm_AnyStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_any)).LLVMType;
+		GS_CORE_ASSERT(llvm_AnyStructTy);
+
+		llvm::Value* any_Data = m_LLVMBuilder->CreateBitCast(GetName(any->DataSSA), GetLLVMTypeFull(IR_void, 1));
+
+		llvm::Value* llvm_Struct = CreateEntryBlockAlloca(llvm_AnyStructTy);
+
+		llvm::Value* llvm_any_type_ptr = m_LLVMBuilder->CreateStructGEP(
+			llvm_AnyStructTy,
+			llvm_Struct,
+			0);
+
+		llvm::Value* llvm_any_data_ptr = m_LLVMBuilder->CreateStructGEP(
+			llvm_AnyStructTy,
+			llvm_Struct,
+			1);
+
+		m_LLVMBuilder->CreateStore(any_Data, llvm_any_data_ptr);
+		m_LLVMBuilder->CreateStore(llvm::ConstantInt::get(GetLLVMType(IR_i64), any->TypeID), llvm_any_type_ptr);
+
+		return llvm_Struct;
+	}
+
+	llvm::Value* LLVMBackend::AnyArrayCodeGen(const IRAnyArray* any_array)
+	{
+		llvm::Type* llvm_AnyStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_any)).LLVMType;
+		GS_CORE_ASSERT(llvm_AnyStructTy);
+
+		llvm::Type* llvm_ArrayStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_array)).LLVMType;
+		GS_CORE_ASSERT(llvm_ArrayStructTy);
+
+		llvm::Type* llvm_AnyArrayType = llvm::ArrayType::get(llvm_AnyStructTy, any_array->Arguments.size());
+
+		llvm::Value* llvm_AnyArray = m_LLVMBuilder->CreateAlloca(
+			llvm_AnyArrayType, nullptr, "any_varargs");
+
+		u64 i = 0;
+		for (auto& arg : any_array->Arguments) {
+
+			llvm::Value* llvm_AnyArrayElemPtr =
+				m_LLVMBuilder->CreateGEP(
+					llvm_AnyArrayType,
+					llvm_AnyArray,
+					llvm::ConstantInt::get(GetLLVMType(IR_u64), i)
+					, "varargs_getelem");
+
+			llvm::Value* elem = m_LLVMBuilder->CreateLoad(llvm_AnyStructTy, AnyCodeGen(&arg));
+
+			llvm::Value* llvm_ArrayElemPtr =
+				m_LLVMBuilder->CreateBitCast(llvm_AnyArrayElemPtr, GetLLVMTypeFull(IR_any, 1));
+
+			m_LLVMBuilder->CreateStore(elem, llvm_ArrayElemPtr);
+
+			i++;
+		}
+
+		llvm::Value* llvm_ArrayStruct = CreateEntryBlockAlloca(llvm_ArrayStructTy);
+
+
+		llvm::Value* llvm_array_count_ptr = m_LLVMBuilder->CreateStructGEP(
+			llvm_ArrayStructTy,
+			llvm_ArrayStruct,
+			0);
+
+		llvm::Value* llvm_array_data_ptr = m_LLVMBuilder->CreateStructGEP(
+			llvm_ArrayStructTy,
+			llvm_ArrayStruct,
+			1);
+
+		llvm::Value* llvm_AnyArrayFirstElemPtr =
+			m_LLVMBuilder->CreateGEP(
+				llvm_AnyArrayType,
+				llvm_AnyArray,
+				llvm::ConstantInt::get(GetLLVMType(IR_u64), 0)
+				, "varargs first");
+
+		llvm::Value* llvm_ArrayStructData =
+			m_LLVMBuilder->CreateBitCast(llvm_AnyArrayFirstElemPtr, GetLLVMTypeFull(IR_void, 1));
+
+		// 		llvm::Value* llvm_ArrayStructData =
+		// 			m_LLVMBuilder->CreateBitCast(llvm_AnyArray, GetLLVMTypeFull(IR_void, 1));
+		// 		//it gave me a pointer to an element to the whole array
+
+		m_LLVMBuilder->CreateStore(llvm_ArrayStructData, llvm_array_data_ptr);
+		m_LLVMBuilder->CreateStore(llvm::ConstantInt::get(GetLLVMType(IR_i64), any_array->Arguments.size()), llvm_array_count_ptr);
+
+		return m_LLVMBuilder->CreateLoad(llvm_ArrayStructTy, llvm_ArrayStruct);
+	}
+
+	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Type* type)
+	{
+		llvm::Function* function = m_LLVMBuilder->GetInsertBlock()->getParent();
+
 		llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
 			function->getEntryBlock().begin());
-		return TmpB.CreateAlloca(llvm::Type::getDoubleTy(*m_LLVMContext), nullptr, var_name);
+		auto alloca = TmpB.CreateAlloca(type);
+		return alloca;
 	}
 
 	llvm::Value* LLVMBackend::ReturnCodeGen(const IRReturn* ret) {

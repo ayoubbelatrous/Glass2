@@ -119,6 +119,9 @@ namespace Glass
 
 		PointerCast,
 
+		Any,
+		AnyArray,
+
 		TranslationUnit,
 	};
 
@@ -642,7 +645,7 @@ namespace Glass
 			str += "{\n";
 
 			for (auto inst : Instructions) {
-				str += inst->ToString() + '\n';
+				//str += inst->ToString() + '\n';
 			}
 
 			str += "}\n";
@@ -1032,7 +1035,6 @@ namespace Glass
 		}
 	};
 
-
 	struct IRPointerCast : public IRInstruction {
 		u64 ID = 0;
 
@@ -1051,6 +1053,45 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::PointerCast;
+		}
+	};
+
+	struct IRAny : public IRInstruction {
+		u64 ID = 0;
+
+		u64 DataSSA;
+		u64 TypeID;
+
+		IRAny(u64 data, u64 type_id)
+			: DataSSA(data), TypeID(type_id)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			return fmt::format("Any ({},{})", DataSSA, TypeID);
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Any;
+		}
+	};
+
+	struct IRAnyArray : public IRInstruction {
+		u64 ID = 0;
+
+		std::vector<IRAny> Arguments;
+
+		IRAnyArray(const std::vector<IRAny>& args)
+			: Arguments(args)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			return fmt::format("Any [{},...]", Arguments.size());
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::AnyArray;
 		}
 	};
 }

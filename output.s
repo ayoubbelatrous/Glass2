@@ -5,7 +5,29 @@
 	.endef
 	.globl	@feat.00
 .set @feat.00, 0
-	.file	"output.ll"
+	.file	"Glass"
+	.def	test;
+	.scl	2;
+	.type	32;
+	.endef
+	.globl	test                            # -- Begin function test
+	.p2align	4, 0x90
+test:                                   # @test
+.seh_proc test
+# %bb.0:                                # %entry
+	subq	$56, %rsp
+	.seh_stackalloc 56
+	.seh_endprologue
+	movq	%rdx, 8(%rsp)
+	movq	%rcx, (%rsp)
+	movq	$0, 16(%rsp)
+	movq	%rcx, 24(%rsp)
+	movq	%rdx, 32(%rsp)
+	xorl	%eax, %eax
+	addq	$56, %rsp
+	retq
+	.seh_endproc
+                                        # -- End function
 	.def	main;
 	.scl	2;
 	.type	32;
@@ -17,59 +39,46 @@ main:                                   # @main
 # %bb.0:                                # %entry
 	pushq	%rbp
 	.seh_pushreg %rbp
-	pushq	%rsi
-	.seh_pushreg %rsi
-	pushq	%rax
-	.seh_stackalloc 8
-	movq	%rsp, %rbp
-	.seh_setframe %rbp, 0
+	subq	$128, %rsp
+	.seh_stackalloc 128
+	leaq	128(%rsp), %rbp
+	.seh_setframe %rbp, 128
 	.seh_endprologue
-	subq	$32, %rsp
 	callq	__main
-	addq	$32, %rsp
-	movb	$10, 7(%rbp)
-	movb	$-1, 6(%rbp)
-	leaq	.L__unnamed_1(%rip), %rsi
-	cmpb	$0, 7(%rbp)
-	je	.LBB0_3
-	.p2align	4, 0x90
-.LBB0_2:                                # %loop.body
-                                        # =>This Inner Loop Header: Depth=1
-	movzbl	7(%rbp), %edx
-	addb	6(%rbp), %dl
-	movb	%dl, 7(%rbp)
-	subq	$32, %rsp
-	movq	%rsi, %rcx
+	movl	$30, -8(%rbp)
+	leaq	.L__unnamed_1(%rip), %rax
+	movq	%rax, -48(%rbp)
+	movq	$7, -56(%rbp)
+	movq	%rax, -32(%rbp)
+	movq	$7, -40(%rbp)
+	leaq	.L__unnamed_2(%rip), %rax
+	movq	%rax, -64(%rbp)
+	movq	$7, -72(%rbp)
+	movq	%rax, (%rbp)
+	movq	$7, -8(%rbp)
+	leaq	-40(%rbp), %rdx
+	movq	%rdx, -80(%rbp)
+	movq	$2, -88(%rbp)
+	movl	$2, %ecx
+	callq	test
+	movq	-8(%rbp), %rdx
+	leaq	.L__unnamed_3(%rip), %rcx
 	callq	printf
-	addq	$32, %rsp
-	cmpb	$0, 7(%rbp)
-	jne	.LBB0_2
-.LBB0_3:                                # %after.loop
-	movl	$16, %eax
-	callq	___chkstk_ms
-	subq	%rax, %rsp
-	movq	%rsp, %rax
-	movb	$10, (%rax)
 	xorl	%eax, %eax
-	testb	%al, %al
-	jne	.LBB0_5
-# %bb.4:                                # %then
-	subq	$32, %rsp
-	leaq	.L__unnamed_2(%rip), %rcx
-	callq	printf
-	addq	$32, %rsp
-.LBB0_5:                                # %cont
-	xorl	%eax, %eax
-	leaq	8(%rbp), %rsp
-	popq	%rsi
+	addq	$128, %rsp
 	popq	%rbp
 	retq
 	.seh_endproc
                                         # -- End function
 	.section	.rdata,"dr"
-.L__unnamed_1:                          # @0
-	.asciz	"Hello World, %i\n"
+.L__unnamed_4:                          # @0
+	.asciz	"t = %s\n"
 
-.L__unnamed_2:                          # @1
-	.asciz	"Other Condition"
+.L__unnamed_1:                          # @1
+	.asciz	"entity"
 
+.L__unnamed_2:                          # @2
+	.asciz	"entity"
+
+.L__unnamed_3:                          # @3
+	.asciz	"Entity.Age = %i\n"

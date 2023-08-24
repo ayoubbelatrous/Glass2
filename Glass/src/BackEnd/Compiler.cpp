@@ -170,8 +170,8 @@ namespace Glass
 			{
 				MemberMetadata data_member_metadata;
 				data_member_metadata.Name.Symbol = "data";
-				data_member_metadata.Tipe.ID = IR_u64;
-				data_member_metadata.Tipe.Pointer = 0;
+				data_member_metadata.Tipe.ID = IR_void;
+				data_member_metadata.Tipe.Pointer = 1;
 
 				any_Metadata.Members.push_back(data_member_metadata);
 			}
@@ -197,7 +197,7 @@ namespace Glass
 			{
 				MemberMetadata data_member_metadata;
 				data_member_metadata.Name.Symbol = "data";
-				data_member_metadata.Tipe.ID = IR_u64;
+				data_member_metadata.Tipe.ID = IR_void;
 				data_member_metadata.Tipe.Pointer = 1;
 
 				array_info_Metadata.Members.push_back(data_member_metadata);
@@ -833,11 +833,14 @@ namespace Glass
 			u64 assignment_type_id = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
 			u64 assignment_type_flags = m_Metadata.GetTypeFlags(assignment_type_id);
 
-			if (!(assignment_type_flags & FLAG_FLOATING_TYPE)) {
-				SetLikelyConstantIntegerType(assignment_type_id);
-			}
-			else if (assignment_type_flags & FLAG_FLOATING_TYPE) {
-				SetLikelyConstantFloatType(assignment_type_id);
+			if (assignment_type_flags & FLAG_NUMERIC_TYPE)
+			{
+				if (!(assignment_type_flags & FLAG_FLOATING_TYPE)) {
+					SetLikelyConstantIntegerType(assignment_type_id);
+				}
+				else if (assignment_type_flags & FLAG_FLOATING_TYPE) {
+					SetLikelyConstantFloatType(assignment_type_id);
+				}
 			}
 		}
 
@@ -1802,28 +1805,26 @@ namespace Glass
 
 				IRInstruction* arg = nullptr;
 
-				IRSSAValue* expr = nullptr;
-				expr = GetExpressionByValue(call->Arguments[i]);
+				IRSSAValue* argument_code = nullptr;
 
 				if (decl_arg != nullptr)
 				{
-					if (expr == nullptr)
-						return nullptr;
-
-					IRNodeType Type = expr->GetType();
-
-					u64 arg_SSAID = 0;
-
-					switch (Type)
-					{
-					case IRNodeType::SSAValue:
-						arg_SSAID = ((IRSSAValue*)expr)->SSA;
-						break;
+					if (!decl_arg->Variadic) {
+						if (decl_arg->Tipe.ID == IR_any) {
+							argument_code = PassAsAny(call->Arguments[i]);
+						}
+						else {
+							argument_code = GetExpressionByValue(call->Arguments[i]);
+						}
+					}
+					else {
+						argument_code = PassAsVariadicArray(i, call->Arguments, decl_arg);
 					}
 
-					IRSSA* arg_ssa = m_Metadata.GetSSA(arg_SSAID);
+					if (argument_code == nullptr)
+						return nullptr;
 
-					const Glass::Type& type = m_Metadata.GetExprType(expr->SSA);
+					const Glass::Type& type = m_Metadata.GetExprType(argument_code->SSA);
 
 					if (decl_arg->Tipe.ID != IR_any && !decl_arg->Variadic)
 					{
@@ -1844,32 +1845,11 @@ namespace Glass
 						}
 					}
 
-					if (!decl_arg->Variadic)
-					{
-						if (decl_arg->Tipe.ID != IR_any)
-						{
-							if (decl_arg->Tipe.Pointer)
-							{
-								arg = expr;
-							}
-							else
-							{
-								arg = expr;
-							}
-						}
-						else
-						{
-							arg = PassAsAny(call->Arguments[i]);
-						}
-					}
-					else
-					{
-						arg = PassAsVariadicArray(i, call->Arguments, decl_arg);
-					}
+					arg = argument_code;
 				}
 				else
 				{
-					arg = expr;
+					arg = GetExpressionByValue(call->Arguments[i]);
 				}
 
 				ir_call.Arguments.push_back(arg);
@@ -2197,92 +2177,7 @@ namespace Glass
 			return IR(IRSSAValue(array_access_ssa->ID));
 		}
 
-		auto obj_ssa = m_Metadata.GetSSA(object->SSA);
-		auto index_ssa = m_Metadata.GetSSA(index->SSA);
-
-		u64 obj_address_ssa = 0;
-		u64 type = 0;
-
-		obj_address_ssa = obj_ssa->ID;
-
-		type = obj_expr_type.ID;
-
-		u64 base_address_ssa = 0;
-
-		// Size Of
-		auto sizeof_ssa = CreateIRSSA();
-
-		sizeof_ssa->Value = IR(IRSizeOF(type));
-		sizeof_ssa->Type = IR_u64;
-
-		// Ptr Mul
-		auto ptr_mul_ssa = CreateIRSSA();
-
-		ptr_mul_ssa->Value = IR(IRMUL(index, IR(IRSSAValue(sizeof_ssa->ID))));
-		ptr_mul_ssa->Type = IR_u64;
-
-		// Ptr As Value
-		if (!obj_expr_type.Array)
-		{
-			auto ptr_as_value = CreateIRSSA();
-
-			ptr_as_value->Value = IR(IRAddressAsValue(obj_address_ssa));
-			ptr_as_value->Type = IR_u64;
-
-			base_address_ssa = ptr_as_value->ID;
-		}
-		else
-		{
-			IRMemberAccess* data_member_access = IR(IRMemberAccess());
-
-			IRSSA* data_member_access_ssa = CreateIRSSA();
-
-			data_member_access->ObjectSSA = obj_address_ssa;
-			data_member_access->MemberID = 1;
-			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
-
-			data_member_access_ssa->Value = data_member_access;
-			data_member_access_ssa->Type = IR_u64;
-
-			auto ir_load_ssa = CreateIRSSA();
-
-			IRLoad* ir_load = IR(IRLoad());
-			ir_load->SSAddress = data_member_access_ssa->ID;
-			ir_load->Type = IR_u64;
-
-			ir_load_ssa->Value = ir_load;
-			ir_load_ssa->Type = IR_u64;
-
-			base_address_ssa = ir_load_ssa->ID;
-		}
-
-		// Ptr Add
-		auto ptr_add_ssa = CreateIRSSA();
-
-		ptr_add_ssa->Value = IR(IRADD(IR(IRSSAValue(ptr_mul_ssa->ID)), IR(IRSSAValue(base_address_ssa))));
-		ptr_add_ssa->Type = IR_u64;
-
-		// Final Address
-		auto address_ssa = CreateIRSSA();
-
-		address_ssa->Value = IR(IRSSAValue(ptr_add_ssa->ID));
-		address_ssa->Type = IR_u64;
-
-		Glass::Type expr_type = obj_expr_type;
-
-		if (obj_expr_type.Array)
-		{
-		}
-		else
-		{
-			expr_type.Pointer--;
-		}
-
-		expr_type.Array = false;
-
-		m_Metadata.RegExprType(address_ssa->ID, expr_type);
-
-		return IR(IRSSAValue(address_ssa->ID));
+		return nullptr;
 	}
 
 	IRInstruction* Compiler::TypeofCodeGen(const TypeOfNode* typeof)
@@ -2663,7 +2558,7 @@ namespace Glass
 
 	IRSSAValue* Compiler::PassAsAny(const Expression* expr)
 	{
-		IRSSAValue* expr_result = GetExpressionByValue(expr);
+		IRSSAValue* expr_result = (IRSSAValue*)ExpressionCodeGen(expr);
 
 		if (expr_result == nullptr)
 			return nullptr;
@@ -2678,195 +2573,57 @@ namespace Glass
 		IRSSA* any_ssa = CreateIRSSA();
 		any_ssa->Type = m_Metadata.GetType("Any");
 
-		// type
-		{
-			IRSSA* ir_address_of = CreateIRSSA();
-
-			IRInstruction* address_of_val = IR(IRSSAValue(any_ssa->ID));
-			ir_address_of->Value = IR(IRAddressOf(address_of_val));
-			ir_address_of->Type = IR_u64;
-
-			IRMemberAccess* type_member_access = IR(IRMemberAccess());
-
-			IRSSA* type_member_access_ssa = CreateIRSSA();
-
-			type_member_access->ObjectSSA = ir_address_of->ID;
-			type_member_access->MemberID = 0;
-			type_member_access->StructID = m_Metadata.GetStructIDFromType(any_ssa->Type);
-
-			type_member_access_ssa->Value = type_member_access;
-			type_member_access_ssa->Type = IR_u64;
-			IRStore* ir_store = IR(IRStore());
-
-			ir_store->AddressSSA = type_member_access_ssa->ID;
-			ir_store->Type = IR_u64;
-
-			NumericLiteral Node;
-			Node.Val.Int = expr_type.ID;
-			Node.type = NumericLiteral::Type::Int;
-
-			ir_store->Data = (IRSSAValue*)ExpressionCodeGen(AST(Node));
-
-			IRSSA* ir_store_ssa = CreateIRSSA();
-			ir_store_ssa->Value = ir_store;
-			ir_store_ssa->Type = IR_u64;
-		}
-
-		// data
-		{
-			IRSSA* ir_address_of = CreateIRSSA();
-
-			IRInstruction* address_of_val = IR(IRSSAValue(any_ssa->ID));
-			ir_address_of->Value = IR(IRAddressOf(address_of_val));
-			ir_address_of->Type = IR_u64;
-
-			IRMemberAccess* type_member_access = IR(IRMemberAccess());
-
-			IRSSA* type_member_access_ssa = CreateIRSSA();
-
-			type_member_access->ObjectSSA = ir_address_of->ID;
-			type_member_access->MemberID = 1;
-			type_member_access->StructID = m_Metadata.GetStructIDFromType(any_ssa->Type);
-
-			type_member_access_ssa->Value = type_member_access;
-			type_member_access_ssa->Type = IR_u64;
-			IRStore* ir_store = IR(IRStore());
-
-			ir_store->AddressSSA = type_member_access_ssa->ID;
-			ir_store->Type = IR_u64;
-
-			if (expr_type.Pointer)
-			{
-				ir_store->Data = IR(IRSSAValue(expr_result->SSA));
-			}
-			else
-			{
-				IRSSA* ir_address_data = CreateIRSSA();
-
-				IRInstruction* address_of_val = IR(IRSSAValue(expr_result->SSA));
-				ir_address_data->Value = IR(IRAddressOf(address_of_val));
-				ir_address_data->Type = IR_u64;
-
-				ir_store->Data = IR(IRSSAValue(ir_address_data->ID));
-			}
-
-			IRSSA* ir_store_ssa = CreateIRSSA();
-			ir_store_ssa->Value = ir_store;
-			ir_store_ssa->Type = IR_u64;
-		}
+		any_ssa->Value = IR(IRAny(expr_result->SSA, expr_type.ID));
 
 		Glass::Type result_type;
 		result_type.ID = any_ssa->Type;
 
 		m_Metadata.RegExprType(any_ssa->ID, result_type);
 
-		return IR(IRSSAValue(any_ssa->ID));
+		auto ir_load_ssa = CreateIRSSA();
+
+		IRLoad* ir_load = IR(IRLoad());
+		ir_load->SSAddress = any_ssa->ID;
+		ir_load->Type = IR_any;
+
+		ir_load_ssa->Value = ir_load;
+		ir_load_ssa->Type = IR_any;
+
+		m_Metadata.RegExprType(ir_load_ssa->ID, expr_type);
+
+		return IR(IRSSAValue(ir_load_ssa->ID));
 	}
 
 	IRSSAValue* Compiler::PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg)
 	{
-		u64 element_type = decl_arg->Tipe.ID;
+		Glass::Type expr_type;
+		expr_type.ID = IR_array;
 
-		IRSSA* array_ssa = CreateIRSSA();
-		array_ssa->Type = IR_array;
+		if (decl_arg->Tipe.ID == IR_any) {
 
-		IRSSA* array_address = CreateIRSSA();
-		array_address->Type = IR_u64;
-		array_address->Value = IR(IRAddressOf(IR(IRSSAValue(array_ssa->ID))));
+			std::vector<IRAny> anys;
+			anys.reserve(arguments.size());
 
-		// data
-		{
-			IRMemberAccess* data_member_access = IR(IRMemberAccess());
+			for (Expression* arg : arguments) {
 
-			IRSSA* data_member_access_ssa = CreateIRSSA();
+				IRSSAValue* arg_ssa_val = (IRSSAValue*)ExpressionCodeGen(arg);
+				const Glass::Type& arg_type = m_Metadata.GetExprType(arg_ssa_val->SSA);
 
-			data_member_access->ObjectSSA = array_address->ID;
-			data_member_access->MemberID = 1;
-			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
-
-			data_member_access_ssa->Value = data_member_access;
-			data_member_access_ssa->Type = IR_u64;
-
-			IRArrayAllocate* array_allocate = IR(IRArrayAllocate());
-
-			array_allocate->Type = element_type;
-
-			std::vector<u64> array_data_ids;
-
-			for (size_t i = start; i < arguments.size(); i++)
-			{
-				auto a = arguments[i];
-				if (element_type != IR_any)
-				{
-					auto expr = GetExpressionByValue(a);
-
-					if (expr == nullptr)
-						return nullptr;
-
-					array_data_ids.push_back(expr->SSA);
-				}
-				else
-				{
-					auto expr = PassAsAny(a);
-
-					if (expr == nullptr)
-						return nullptr;
-
-					array_data_ids.push_back(expr->SSA);
-				}
+				anys.push_back(IRAny(arg_ssa_val->SSA, arg_type.ID));
 			}
 
-			array_allocate->Data = array_data_ids;
+			auto any_array_ir_ssa = CreateIRSSA();
+			any_array_ir_ssa->Type = IR_array;
+			any_array_ir_ssa->Value = IR(IRAnyArray(anys));;
 
-			IRSSA* arguments_data = CreateIRSSA();
-			arguments_data->Value = array_allocate;
-			arguments_data->Type = element_type;
-			arguments_data->Array = true;
+			m_Metadata.RegExprType(any_array_ir_ssa->ID, expr_type);
 
-			IRSSA* arguments_address = CreateIRSSA();
-			arguments_address->Type = IR_u64;
-			arguments_address->Value = IR(IRAddressOf(IR(IRSSAValue(arguments_data->ID))));
-
-			IRStore* data_store = IR(IRStore());
-
-			data_store->AddressSSA = data_member_access_ssa->ID;
-			data_store->Data = IR(IRSSAValue(arguments_address->ID));
-			data_store->Type = IR_u64;
-
-			auto data_store_ssa = CreateIRSSA();
-
-			data_store_ssa->Value = data_store;
-			data_store_ssa->Type = IR_u64;
-		}
-		// count
-		{
-			IRMemberAccess* count_member_access = IR(IRMemberAccess());
-
-			IRSSA* count_member_access_ssa = CreateIRSSA();
-
-			count_member_access->ObjectSSA = array_address->ID;
-			count_member_access->MemberID = 0;
-			count_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
-
-			count_member_access_ssa->Value = count_member_access;
-			count_member_access_ssa->Type = IR_u64;
-
-			IRStore* data_store = IR(IRStore());
-			data_store->AddressSSA = count_member_access_ssa->ID;
-
-			NumericLiteral Node;
-			Node.Val.Int = arguments.size() - start;
-			Node.type = NumericLiteral::Type::Int;
-
-			data_store->Data = (IRSSAValue*)ExpressionCodeGen(AST(Node));
-			data_store->Type = IR_u64;
-
-			auto store_ssa = CreateIRSSA();
-			store_ssa->Type = IR_u64;
-			store_ssa->Value = data_store;
+			return IR(IRSSAValue(any_array_ir_ssa->ID));
 		}
 
-		return IR(IRSSAValue(array_ssa->ID));
+		GS_CORE_ASSERT(0, "Non any var args are yet to be implemented");
+
+		return nullptr;
 	}
 
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)
