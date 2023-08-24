@@ -130,99 +130,54 @@ namespace Glass
 
 		bool llvm = true;
 
-		if (llvm) {
+		if (llvm)
+		{
 			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
 
 			llvm_backend.Compile();
 
-			int run_result = system("a.exe");
+			std::string libraries;
 
-			if (run_result != 0) {
-				GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
+			for (auto& library : m_Options.CLibs) {
+				libraries.push_back(' ');
+				libraries += library;
 			}
-		}
 
-		if (!llvm)
-		{
-			m_TranspilerStart = std::chrono::high_resolution_clock::now();
-			CTranspiler transpiler(code, m_Options.CIncludes, &compiler.GetMetadata());
-			{
-				{
-					std::string c_code = transpiler.Codegen();
-					m_TranspilerEnd = std::chrono::high_resolution_clock::now();
+			std::string linker_cmd;
 
-					std::ofstream out(fs_path(m_Options.Output).remove_filename() / "generated.c");
+			std::string libraries_cmd;
 
-					out << c_code;
-				}
+			for (auto& library : libraries) {
+				libraries_cmd += "-l" + library;
+			}
 
-				fs_path output = fs_path(m_Options.Output);
-				fs_path input = "generated.c";
+			std::string input_name = "output.obj";
+			std::string exe_name = "a.exe";
 
-				std::string libraries;
+			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
+			linker_cmd = fmt::format("clang.exe -g {} {} -o a.exe", input_name, libraries);
 
-				for (auto& library : m_Options.CLibs) {
-					libraries.push_back(' ');
-					libraries += library;
-				}
+			GS_CORE_WARN("Running: {}", linker_cmd);
 
-				std::string compiler_cmd;
+			int lnk_result = system(linker_cmd.c_str());
 
-				if (0) {
-					compiler_cmd = fmt::format("cl.exe {} {} /INCREMENTAL:NO /w /nologo", input.string(), libraries);
-				}
-				else {
+			if (lnk_result != 0) {
+				GS_CORE_ERROR("Error: During Execution of Command");
+			}
+			else {
+				GS_CORE_WARN("CodeGen Done: {}", linker_cmd);
+				if (m_Options.Run) {
 
-					std::string libraries_cmd;
+					GS_CORE_INFO("Running: {}", exe_name);
+					int run_result = system(exe_name.c_str());
 
-					for (auto& library : libraries) {
-						libraries_cmd += "-l" + library;
-					}
-
-					compiler_cmd = fmt::format("tcc.exe -w {} {} ", input.string(), libraries);
-				}
-
-				GS_CORE_WARN("Running: {}", compiler_cmd);
-				auto clang_start = std::chrono::high_resolution_clock::now();
-				int cc_result = system(compiler_cmd.c_str());
-				auto clang_end = std::chrono::high_resolution_clock::now();
-
-				auto lexer_time = std::chrono::duration_cast<std::chrono::microseconds>(m_LexerEnd - m_LexerStart).count() / 1000.0f;
-				auto parser_time = std::chrono::duration_cast<std::chrono::microseconds>(m_ParserEnd - m_ParserStart).count() / 1000.0f;
-				auto compiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_CompilerEnd - m_CompilerStart).count() / 1000.0f;
-				auto transpiler_time = std::chrono::duration_cast<std::chrono::microseconds>(m_TranspilerEnd - m_TranspilerStart).count() / 1000.0f;
-
-				if (0) {
-					GS_CORE_WARN("Timings: ");
-					GS_CORE_WARN("CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - clang_start).count() / 1000.0f);
-					GS_CORE_WARN("Total: {}", lexer_time + parser_time + compiler_time + transpiler_time);
-					GS_CORE_WARN("Total With CL: {}", std::chrono::duration_cast<std::chrono::microseconds>(clang_end - m_LexerStart).count() / 1000.0f);
-					GS_CORE_WARN("Lexer: {}", lexer_time);
-					GS_CORE_WARN("Parser: {}", parser_time);
-					GS_CORE_WARN("Compiler: {}", compiler_time);
-					GS_CORE_WARN("Transpiler: {}", transpiler_time);
-				}
-
-				if (cc_result != 0) {
-					GS_CORE_ERROR("Error: During Execution of Command");
-				}
-				else {
-					GS_CORE_WARN("CodeGen Done: {}", compiler_cmd);
-					if (m_Options.Run) {
-
-						fs_path output_path = fs_path(input).replace_extension(".exe");
-
-						GS_CORE_INFO("Running: {}", output_path);
-						int run_result = system(output_path.string().c_str());
-
-						if (run_result != 0) {
-							GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
-						}
+					if (run_result != 0) {
+						GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
 					}
 				}
-
-				GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
 			}
+
+			GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
 		}
 	}
 

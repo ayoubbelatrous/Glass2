@@ -1,2 +1,2 @@
 clear
-.\Glass\bin\Debug\Glass.exe .\Examples\Main.glass -run
+.\Glass\bin\Debug\Glass.exe .\Examples\HelloWorld.glass -run

@@ -1,23 +1,33 @@
-#foreign fn printf!(u8* format) : i32 {};
-#foreign fn malloc(i32 size) : void* {};
-#foreign fn free(void* ptr) : void {};
+fn Update() : i32 {
 
-#foreign fn strlen(u8* str) : u64 {};
+	Color clear_color;
 
-#foreign fn rand() : i32 {};
+	clear_color.r = 0-128;
+	clear_color.g = 0-128;
+	clear_color.b = 0-128;
+	clear_color.a = 0-128;
 
-struct Entity
-{
-	void* Age2;
-	i32 Age;
-	i32 Age1;
-	i32 Age1;
-};
+	BeginDrawing();
+	ClearBackground(clear_color);
 
-fn take_array(Any* array) : i32 {
+	DrawFPS(60,60);
+
+	EndDrawing();
+
 	return 0;
 }
 
 fn main() : i32 {
+
+	i32 flags = Window_Flags.FLAG_WINDOW_RESIZABLE;
+
+	SetConfigFlags(flags);
+
+	InitWindow(500, 700, "Hello Window");
+
+	while  WindowShouldClose() != 1 {
+		Update();
+	}
+
 	return 0;
 }

@@ -438,6 +438,9 @@ namespace Glass
 	{
 		NodeType Type = statement->GetType();
 
+		//@Debugging
+		RegisterDBGLoc(statement);
+
 		switch (Type)
 		{
 		case NodeType::Foreign:
@@ -761,7 +764,7 @@ namespace Glass
 			args_metadata.push_back(arg_metadata);
 		}
 
-		m_Metadata.RegisterFunction(IRF->ID, functionNode->Symbol.Symbol, return_type, args_metadata);
+		m_Metadata.RegisterFunction(IRF->ID, functionNode->Symbol.Symbol, return_type, args_metadata, false, functionNode->Symbol);
 
 		for (const Statement* stmt : functionNode->GetStatements())
 		{
@@ -896,11 +899,13 @@ namespace Glass
 			}
 		}
 
+		auto alloca = IR(IRAlloca((u32)allocation_type, (u32)allocation_pointer));
+
 		IRSSA* variable_address_ssa = CreateIRSSA();
 		variable_address_ssa->Type = Type.ID;
 		variable_address_ssa->Pointer = 1;
 
-		variable_address_ssa->Value = IR(IRAlloca((u32)allocation_type, (u32)allocation_pointer));
+		variable_address_ssa->Value = alloca;
 
 		RegisterVariable(variable_address_ssa, variableNode->Symbol.Symbol);
 
@@ -914,6 +919,9 @@ namespace Glass
 
 		m_Metadata.RegisterVariableMetadata(variable_address_ssa->ID, var_metadata);
 		m_Metadata.RegExprType(variable_address_ssa->ID, var_metadata.Tipe);
+
+		//@Debugging
+		alloca->VarMetadata = m_Metadata.GetVariableMetadata(variable_address_ssa->ID);
 
 		if (value)
 		{
@@ -1986,9 +1994,6 @@ namespace Glass
 			address_ssa->Value = IR(ir_mem_access);
 			address_ssa->Type = IR_u64;
 
-			address_ssa->Reference = true;
-			address_ssa->ReferenceType = result_type.ID;
-
 			m_Metadata.RegExprType(address_ssa->ID, result_type);
 
 			return IR(IRSSAValue(address_ssa->ID));
@@ -2332,22 +2337,22 @@ namespace Glass
 
 	IRInstruction* Compiler::RefCodeGen(const RefNode* refNode)
 	{
-		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(refNode->What);
-		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
+		GS_CORE_ASSERT("Not Yet Implemented");
+		// 
+		// 		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(refNode->What);
+		// 		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
+		// 
+		// 		IRSSA* ir_ssa = CreateIRSSA();
+		// 		ir_ssa->Type = exprType.ID;
+		// 		ir_ssa->Pointer = exprType.Pointer + 1;
+		// 		ir_ssa->Value = ssa_value;
+		// 
+		// 		Glass::Type expr_type = exprType;
+		// 		expr_type.Pointer--;
+		// 
+		// 		m_Metadata.RegExprType(ir_ssa->ID, expr_type);
 
-		IRAsAddress* ssa_value = IR(IRAsAddress(expr_value->SSA));
-
-		IRSSA* ir_ssa = CreateIRSSA();
-		ir_ssa->Type = exprType.ID;
-		ir_ssa->Pointer = exprType.Pointer + 1;
-		ir_ssa->Value = ssa_value;
-
-		Glass::Type expr_type = exprType;
-		expr_type.Pointer--;
-
-		m_Metadata.RegExprType(ir_ssa->ID, expr_type);
-
-		return IR(IRSSAValue(ir_ssa->ID));
+		return nullptr;
 	}
 
 	//@DeDef
@@ -2490,10 +2495,6 @@ namespace Glass
 					ssa->Type = metadata->Tipe.ID;
 					ssa->Value = IR(load);
 					ssa->Pointer = metadata->Tipe.Pointer > 0;
-
-					ssa->Reference = true;
-					ssa->ReferenceType = metadata->Tipe.ID;
-					ssa->PointerReference = metadata->Tipe.Pointer > 0;
 
 					m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
@@ -2642,6 +2643,8 @@ namespace Glass
 		m_SSAIDCounter++;
 
 		PushIRSSA(SSA);
+
+		SSA->SetDBGLoc(m_CurrentDBGLoc);
 
 		return SSA;
 	}

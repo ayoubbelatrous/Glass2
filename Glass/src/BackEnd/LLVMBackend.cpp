@@ -7,11 +7,27 @@ namespace Glass
 {
 	std::unique_ptr<llvm::LLVMContext> LLVMBackend::m_LLVMContext = std::make_unique<llvm::LLVMContext>();
 
+	void LLVMBackend::InitDebug()
+	{
+		m_DBuilder = new llvm::DIBuilder(*m_LLVMModule);
+
+		m_DCU = m_DBuilder->createCompileUnit(
+			llvm::dwarf::DW_LANG_C, m_DBuilder->createFile("HelloWorld.glass", "./Examples/"),
+			"Glass Compiler", false, "", 0);
+	}
+
+	void LLVMBackend::DumpDebugInfo()
+	{
+		m_DBuilder->finalize();
+	}
+
 	LLVMBackend::LLVMBackend(const Compiler::MetaData* metadata, IRTranslationUnit* program)
 		:m_Metadata(metadata), m_Program(program)
 	{
 		m_LLVMModule = new llvm::Module("Glass", *m_LLVMContext);
 		m_LLVMBuilder = std::make_unique<llvm::IRBuilder<>>(*m_LLVMContext);
+
+		InitDebug();
 
 		InsertLLVMType(IR_int, llvm::Type::getInt32Ty(*m_LLVMContext));
 
@@ -34,27 +50,90 @@ namespace Glass
 
 		InsertLLVMType(IR_void, llvm::Type::getVoidTy(*m_LLVMContext));
 
+		//@Debugging
+		{
+			InsertLLVMDebugType(IR_u8, m_DBuilder->createBasicType("u8", 8, llvm::dwarf::DW_ATE_unsigned));
+			InsertLLVMDebugType(IR_u16, m_DBuilder->createBasicType("u16", 16, llvm::dwarf::DW_ATE_unsigned));
+			InsertLLVMDebugType(IR_u32, m_DBuilder->createBasicType("u32", 32, llvm::dwarf::DW_ATE_unsigned));
+			InsertLLVMDebugType(IR_u64, m_DBuilder->createBasicType("u64", 64, llvm::dwarf::DW_ATE_unsigned));
+
+			InsertLLVMDebugType(IR_i8, m_DBuilder->createBasicType("i8", 8, llvm::dwarf::DW_ATE_signed));
+			InsertLLVMDebugType(IR_i16, m_DBuilder->createBasicType("i16", 16, llvm::dwarf::DW_ATE_signed));
+			InsertLLVMDebugType(IR_i32, m_DBuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed));
+			InsertLLVMDebugType(IR_i64, m_DBuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed));
+
+			InsertLLVMDebugType(IR_void, m_DBuilder->createUnspecifiedType("void"));
+
+			//Array type
+			{
+				std::vector<llvm::Metadata*> fieldTypes;
+
+				Glass::Type count_field_Type;
+				count_field_Type.ID = IR_u64;
+
+				Glass::Type data_field_Type;
+				data_field_Type.ID = IR_void;
+				data_field_Type.Pointer = 1;
+
+				fieldTypes.push_back(GetLLVMDebugType(count_field_Type));
+				fieldTypes.push_back(GetLLVMDebugType(data_field_Type));
+
+				llvm::DICompositeType* array_Debug_Type = m_DBuilder->createStructType(
+					m_DCU,                    // Scope
+					"Array",					// Name
+					nullptr,                    // File
+					0,                          // Line number
+					128,					    // Size in bits
+					32,                          // Alignment in bits
+					llvm::DINode::FlagZero,     // Flags
+					nullptr,                    // Derived from
+					m_DBuilder->getOrCreateArray(fieldTypes) // Elements
+				);
+
+				InsertLLVMDebugType(IR_array, array_Debug_Type);
+			}
+			//Any type
+			{
+				std::vector<llvm::Metadata*> fieldTypes;
+
+				Glass::Type type_field_Type;
+				type_field_Type.ID = IR_u64;
+
+				Glass::Type data_field_Type;
+				data_field_Type.ID = IR_void;
+				data_field_Type.Pointer = 1;
+
+				fieldTypes.push_back(GetLLVMDebugType(type_field_Type));
+				fieldTypes.push_back(GetLLVMDebugType(data_field_Type));
+
+				llvm::DICompositeType* any_Debug_Type = m_DBuilder->createStructType(
+					m_DCU,							// Scope
+					"Any",							// Name
+					nullptr,						// File
+					0,								// Line number
+					128,							// Size in bits
+					32,								// Alignment in bits
+					llvm::DINode::FlagZero,			// Flags
+					nullptr,						// Derived from
+					m_DBuilder->getOrCreateArray(fieldTypes) // Elements
+				);
+
+				InsertLLVMDebugType(IR_any, any_Debug_Type);
+			}
+		}
+
 		Opaque_Type = llvm::StructType::create(*m_LLVMContext, "ptr");
 	}
 
 	void LLVMBackend::Compile()
 	{
+		// Add the current debug info version into the module.
+		m_LLVMModule->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
+			llvm::DEBUG_METADATA_VERSION);
+
 		EnumsCodegen();
 		StructsCodeGen();
 		ForeignCodeGen();
-
-		//		printf();
-// 		{
-// 			std::vector<llvm::Type*> Parameters;
-// 			Parameters.push_back(llvm::Type::getInt8PtrTy(*m_LLVMContext));
-// 
-// 			llvm::FunctionType* Function_Type =
-// 				llvm::FunctionType::get(GetLLVMType(IR_int), Parameters, true);
-// 
-// 
-// 			llvm::Function* llvm_Func =
-// 				llvm::Function::Create(Function_Type, llvm::Function::InternalLinkage, "printfsdfsdf", m_LLVMModule);
-// 		}
 
 		for (auto inst : m_Program->Instructions) {
 			CodeGen(inst);
@@ -66,11 +145,15 @@ namespace Glass
 
 		m_LLVMModule->print(outputFile, nullptr);
 
-		m_LLVMModule->print(llvm::outs(), nullptr, true, true);
+		//m_LLVMModule->print(llvm::outs(), nullptr, true, true);
 
-		llvm::InitializeNativeTarget();
-		llvm::InitializeNativeTargetAsmPrinter();
-		llvm::InitializeNativeTargetAsmParser();
+		llvm::InitializeAllTargetInfos();
+		llvm::InitializeAllTargets();
+		llvm::InitializeAllTargetMCs();
+		llvm::InitializeAllAsmParsers();
+		llvm::InitializeAllAsmPrinters();
+
+		DumpDebugInfo();
 
 		auto TargetTriple = llvm::sys::getDefaultTargetTriple();
 		m_LLVMModule->setTargetTriple(TargetTriple);
@@ -88,7 +171,7 @@ namespace Glass
 
 		m_LLVMModule->setDataLayout(TheTargetMachine->createDataLayout());
 
-		auto Filename = "output.o";
+		auto Filename = "output.obj";
 		std::error_code EC;
 		llvm::raw_fd_ostream dest(Filename, EC, llvm::sys::fs::OF_None);
 
@@ -102,14 +185,7 @@ namespace Glass
 		pass.run(*m_LLVMModule);
 		dest.flush();
 
-		std::string linker_command = "clang output.o -o a.exe";
-
-		int link_status = system(linker_command.c_str());
-
-		if (link_status) {
-			GS_CORE_WARN("{}", linker_command);
-			GS_CORE_ERROR("clang failed");
-		}
+		delete m_LLVMModule;
 	}
 
 	void LLVMBackend::EnumsCodegen()
@@ -167,15 +243,19 @@ namespace Glass
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
 			our_struct_type.LLVMMembers = llvm_Members_Types;
 
-			GS_CORE_WARN("Struct: {}", struct_metadata.Name.Symbol);
-			const llvm::StructLayout* structLayout = dataLayout.getStructLayout(our_struct_type.LLVMType);
-			u64 i = 0;
-			for (const MemberMetadata& member_metadata : struct_metadata.Members) {
-				u64 elementOffset = structLayout->getElementOffset(i);
+			//@Todo add cmd option for this
+			if (0)
+			{
+				GS_CORE_WARN("Struct: {}", struct_metadata.Name.Symbol);
+				const llvm::StructLayout* structLayout = dataLayout.getStructLayout(our_struct_type.LLVMType);
+				u64 i = 0;
+				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
+					u64 elementOffset = structLayout->getElementOffset(i);
 
-				GS_CORE_WARN("Member Offset: {}", elementOffset);
+					GS_CORE_WARN("Member Offset: {}", elementOffset);
 
-				i = i + 1;
+					i = i + 1;
+				}
 			}
 		}
 
@@ -213,7 +293,7 @@ namespace Glass
 					Function_Type, llvm::Function::LinkageTypes::ExternalLinkage,
 					metadata->Name, m_LLVMModule);
 
-			llvm_Func->setCallingConv(llvm::CallingConv::C);
+			//llvm_Func->setCallingConv(llvm::CallingConv::C);
 
 			InsertLLVMFunction(foreign_func_id, llvm_Func);
 		}
@@ -296,13 +376,16 @@ namespace Glass
 		llvm::Function* llvm_Func =
 			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Name, m_LLVMModule);
 
-		std::vector<llvm::Value*> argument_names;
-
 		//BODY CODE GEN///////////////////////////
 
 		llvm::BasicBlock* BB = llvm::BasicBlock::Create(*m_LLVMContext, "entry", llvm_Func);
 		m_LLVMBuilder->SetInsertPoint(BB);
 
+		//@Debuggging
+		FunctionDebugInfo(func->ID, llvm_Func);
+		m_LLVMBuilder->SetCurrentDebugLocation(llvm::DebugLoc());
+
+		std::vector<llvm::Value*> argument_names;
 		for (auto& arg : llvm_Func->args()) {
 			argument_names.push_back((llvm::Value*)&arg);
 		}
@@ -314,11 +397,37 @@ namespace Glass
 		u64 argument_id = 0;
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
 
+			llvm::AllocaInst* argument_Alloca = nullptr;
+
 			if (!arg_metadata.Variadic) {
-				InsertName(arg_metadata.SSAID, m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe)));
+
+				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe));
+
 			}
 			else {
-				InsertName(arg_metadata.SSAID, m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array)));
+				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array));
+			}
+
+			InsertName(arg_metadata.SSAID, argument_Alloca);
+
+			//@Debugging
+			{
+				u32 line_number = (u32)func_metadata->Symbol.Line;
+
+				llvm::DIType* llvm_DType = nullptr;
+
+				llvm::DILocalVariable* D = m_DBuilder->createParameterVariable(
+					m_DLexicalBlocks.back(),
+					arg_metadata.Name,
+					(u32)argument_id,
+					(llvm::DIFile*)mDContext,
+					line_number,
+					GetLLVMDebugType(arg_metadata.Tipe),
+					true);
+
+				m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
+					llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
+					m_LLVMBuilder->GetInsertBlock());
 			}
 
 			m_LLVMBuilder->CreateStore(GetFunctionArgumentName(m_CurrentFunctionID, argument_id), GetName(arg_metadata.SSAID));
@@ -329,7 +438,11 @@ namespace Glass
 			CodeGen(inst);
 		}
 
+		FinalizeFunctionDebugInfo(llvm_Func);
+
 		llvm::verifyFunction(*llvm_Func, &llvm::errs());
+
+		PopDBGLexicalBlock();
 
 		return llvm_Func;
 	}
@@ -350,10 +463,12 @@ namespace Glass
 
 			auto value = CodeGen(ssa->Value);
 
+			//@Debugging
+			SetDBGLocation(ssa->GetDBGLoc());
+
 			if (value) {
 				InsertName(ssa->ID, value);
 			}
-
 		}
 
 		return 0;
@@ -443,10 +558,30 @@ namespace Glass
 		return result;
 	}
 
-	llvm::Value* LLVMBackend::AllocaCodeGen(const IRAlloca* alloca)
+	llvm::Value* LLVMBackend::AllocaCodeGen(const IRAlloca* aloca)
 	{
 		llvm::AllocaInst* llvm_alloca =
-			CreateEntryBlockAlloca(GetLLVMTypeFull(alloca->Type, alloca->Pointer));
+			CreateEntryBlockAlloca(GetLLVMTypeFull(aloca->Type, aloca->Pointer));
+
+		//@Debugging
+		if (aloca->VarMetadata)
+		{
+			const VariableMetadata* var_metadata = aloca->VarMetadata;
+
+			u32 line_number = (u32)var_metadata->Name.Line;
+
+			llvm::DILocalVariable* D = m_DBuilder->createAutoVariable(
+				m_DLexicalBlocks.back(),
+				var_metadata->Name.Symbol,
+				(llvm::DIFile*)mDContext,
+				line_number,
+				GetLLVMDebugType(var_metadata->Tipe),
+				true);
+
+			m_DBuilder->insertDeclare(llvm_alloca, D, m_DBuilder->createExpression(),
+				llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
+				m_LLVMBuilder->GetInsertBlock());
+		}
 
 		return llvm_alloca;
 	}
@@ -650,17 +785,18 @@ namespace Glass
 		llvm::Type* llvm_ArrayStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_array)).LLVMType;
 		GS_CORE_ASSERT(llvm_ArrayStructTy);
 
-		llvm::Type* llvm_AnyArrayType = llvm::ArrayType::get(llvm_AnyStructTy, any_array->Arguments.size());
-
 		llvm::Value* llvm_AnyArray = m_LLVMBuilder->CreateAlloca(
-			llvm_AnyArrayType, nullptr, "any_varargs");
+			llvm_AnyStructTy,
+			llvm::ConstantInt::get(GetLLVMType(IR_u64),
+				any_array->Arguments.size()),
+			"any_varargs");
 
 		u64 i = 0;
 		for (auto& arg : any_array->Arguments) {
 
 			llvm::Value* llvm_AnyArrayElemPtr =
 				m_LLVMBuilder->CreateGEP(
-					llvm_AnyArrayType,
+					llvm_AnyStructTy,
 					llvm_AnyArray,
 					llvm::ConstantInt::get(GetLLVMType(IR_u64), i)
 					, "varargs_getelem");
@@ -690,7 +826,7 @@ namespace Glass
 
 		llvm::Value* llvm_AnyArrayFirstElemPtr =
 			m_LLVMBuilder->CreateGEP(
-				llvm_AnyArrayType,
+				llvm_AnyStructTy,
 				llvm_AnyArray,
 				llvm::ConstantInt::get(GetLLVMType(IR_u64), 0)
 				, "varargs first");

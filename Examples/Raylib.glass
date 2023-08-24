@@ -12,16 +12,16 @@ struct Color {
 	u8 a;
 };
 
-fn _Color(f32 r, f32 g, f32 b, f32 a) : Color {
-	Color color;
-
-	color.r = r * 255;
-	color.g = g * 255;
-	color.b = b * 255;
-	color.a = a * 255;
-
-	return color;
-}
+//fn _Color(f32 r, f32 g, f32 b, f32 a) : Color {
+//	Color color;
+//
+//	color.r = r * 255;
+//	color.g = g * 255;
+//	color.b = b * 255;
+//	color.a = a * 255;
+//
+//	return color;
+//}
 
 struct Rectangle {
 	float x;

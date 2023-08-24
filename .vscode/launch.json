@@ -10,10 +10,10 @@
             "request": "launch",
             "program": "${workspaceFolder}/a.exe",
             "args": [],
-            "stopAtEntry": false,
+            "stopAtEntry": true,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": false,
+            "externalConsole": true,
             "MIMode": "gdb",
             "miDebuggerPath": "gdb",
             "setupCommands": [

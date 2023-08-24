@@ -2,10 +2,6 @@
 
 #include "BackEnd/Compiler.h"
 
-namespace llvm {
-	class Value;
-}
-
 namespace Glass {
 
 	class LLVMBackend {
@@ -168,5 +164,121 @@ namespace Glass {
 		std::unordered_map<u64, llvm::Value*> m_LLVMData;
 
 		llvm::Type* Opaque_Type = nullptr;
+
+		llvm::DIBuilder* m_DBuilder = nullptr;
+		llvm::DICompileUnit* m_DCU;
+
+		std::vector<llvm::DIScope*> m_DLexicalBlocks;
+
+		llvm::DIScope* mDContext = nullptr;
+
+		std::unordered_map<u64, llvm::DIType*> m_LLVMDebugTypes;
+
+		void InsertLLVMDebugType(u64 type_id, llvm::DIType* di_type) {
+			m_LLVMDebugTypes[type_id] = di_type;
+		}
+
+
+		llvm::DIType* GetLLVMDebugType(const Glass::Type& type) {
+			auto it = m_LLVMDebugTypes.find(type.ID);
+			if (it != m_LLVMDebugTypes.end()) {
+
+				llvm::DIType* pointer_type = it->second;
+
+				for (size_t i = 0; i < type.Pointer; i++) {
+					pointer_type = m_DBuilder->createPointerType(pointer_type, 64);
+				}
+
+				return pointer_type;
+			}
+			return nullptr;
+		}
+
+		llvm::DISubroutineType* GetFunctionDebugType(u64 function_id) {
+
+			const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(function_id);
+			GS_CORE_ASSERT(func_metadata, "function metadata not found");
+
+			std::vector<llvm::Metadata*> dbg_param_types;
+
+			dbg_param_types.push_back(GetLLVMDebugType(func_metadata->ReturnType));
+
+			for (auto& argument_metadata : func_metadata->Arguments) {
+				dbg_param_types.push_back(GetLLVMDebugType(argument_metadata.Tipe));
+			}
+
+			llvm::DISubroutineType* func_dbg_type = m_DBuilder->createSubroutineType(
+				m_DBuilder->getOrCreateTypeArray(dbg_param_types));
+
+			return func_dbg_type;
+		}
+
+		void FunctionDebugInfo(u64 function_id, llvm::Function* llvm_func) {
+
+			const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(function_id);
+			GS_CORE_ASSERT(func_metadata, "function metadata not found");
+
+			auto function_dbg_type = GetFunctionDebugType(function_id);
+
+			auto Unit =
+				m_DBuilder->createFile(
+					"HelloWorld.glass", "./Examples");
+
+			mDContext = Unit;
+
+			u32 LineNo = (u32)func_metadata->Symbol.Line;
+			u32 ScopeLine = (u32)func_metadata->Symbol.Line;
+
+			llvm::DIScope* FContext = Unit;
+
+			llvm::DISubprogram* SP = m_DBuilder->createFunction(
+				FContext,
+				func_metadata->Symbol.Symbol,
+				llvm::StringRef(),
+				Unit,
+				LineNo,
+				function_dbg_type,
+				ScopeLine,
+				llvm::DINode::DIFlags::FlagPrototyped,
+				llvm::DISubprogram::SPFlagDefinition);
+
+			llvm_func->setSubprogram(SP);
+
+			m_DLexicalBlocks.push_back(SP);
+		}
+
+		void FinalizeFunctionDebugInfo(llvm::Function* llvm_func) {
+			m_DBuilder->finalizeSubprogram(llvm_func->getSubprogram());
+		}
+
+		void PopDBGLexicalBlock() {
+			m_DLexicalBlocks.pop_back();
+		}
+
+		void SetDBGLocation(DBGSourceLoc loc) {
+
+			if (loc.Line == 0)
+				return;
+
+			if (loc.Col == 0)
+				return;
+
+			llvm::DIScope* Di_Scope = nullptr;
+
+			if (m_DLexicalBlocks.empty()) {
+				Di_Scope = m_DCU;
+			}
+			else {
+				Di_Scope = m_DLexicalBlocks.back();
+			}
+
+			auto Di_Loc = llvm::DILocation::get(Di_Scope->getContext(), loc.Line, loc.Col, Di_Scope);
+
+			m_LLVMBuilder->SetCurrentDebugLocation(Di_Loc);
+		}
+
+
+		void InitDebug();
+		void DumpDebugInfo();
 	};
 }

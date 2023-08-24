@@ -232,6 +232,7 @@ namespace Glass
 	struct FunctionMetadata
 	{
 		std::string Name;
+		Token Symbol;
 
 		std::vector<ArgumentMetadata> Arguments;
 
@@ -583,12 +584,13 @@ namespace Glass
 				return (u64)-1;
 			}
 
-			void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false) {
+			void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false, const Token& symbol = {}) {
 				FunctionMetadata func;
 				func.Name = name;
 				func.ReturnType = returnType;
 				func.Arguments = args;
 				func.Variadic = variadic;
+				func.Symbol = symbol;
 
 				m_Functions[ID] = func;
 				m_FunctionNames[name] = ID;
@@ -983,8 +985,15 @@ namespace Glass
 			return m_ConstantFloatLikelyType;
 		}
 
+		void RegisterDBGLoc(const Statement* stmt) {
+			const Token& token = stmt->GetLocation();
+			m_CurrentDBGLoc.Line = (u32)token.Line + 1;
+			m_CurrentDBGLoc.Col = (u32)token.Begin + 1;
+		}
 
 	private:
+
+		DBGSourceLoc m_CurrentDBGLoc;
 
 		u64 m_ConstantIntegerLikelyType = IR_int;
 		u64 m_ConstantFloatLikelyType = IR_float;

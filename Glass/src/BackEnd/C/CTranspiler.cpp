@@ -416,18 +416,6 @@ typedef struct Any
 			return fmt::format("(u64)(&{})", IRCodeGen(add_of->SSA));
 		}
 		break;
-		case IRNodeType::AsAddress:
-		{
-			IRAsAddress* as_add = (IRAsAddress*)inst;
-			return fmt::format("(void *)__tmp{}", as_add->SSA);
-		}
-		break;
-		case IRNodeType::AddressAsValue:
-		{
-			IRAddressAsValue* as_value = (IRAddressAsValue*)inst;
-			return fmt::format("(u64)__tmp{}", as_value->SSA);
-		}
-		break;
 		case IRNodeType::Store:
 		{
 			IRStore* store = (IRStore*)inst;

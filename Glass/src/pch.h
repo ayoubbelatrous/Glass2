@@ -46,4 +46,5 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/CGPassBuilderOption.h"
 #include "llvm/Support/Host.h"
+#include "llvm/IR/DIBuilder.h"
 #pragma warning(pop)

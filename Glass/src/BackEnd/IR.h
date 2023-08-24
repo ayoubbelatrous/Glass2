@@ -316,6 +316,19 @@ namespace Glass
 		MemberAddress,
 	};
 
+
+	struct DBGSourceLoc {
+
+		DBGSourceLoc() = default;
+
+		DBGSourceLoc(u32 line, u32 col)
+			:Line(line), Col(col)
+		{}
+
+		u32 Line = 0;
+		u32 Col = 0;
+	};
+
 	struct IRSSA : public IRInstruction {
 		u64 ID = 0;
 		IRInstruction* Value = nullptr;
@@ -323,12 +336,6 @@ namespace Glass
 		u64 Type;
 		u64 Pointer = false;
 		bool Array = false;
-
-		RegType SSAType = RegType::None;
-
-		bool Reference = false;
-		bool PointerReference = false;
-		u64 ReferenceType = false;
 
 		virtual std::string ToString() const override {
 			std::string str = "$ ";
@@ -347,7 +354,19 @@ namespace Glass
 		virtual IRNodeType GetType() const {
 			return IRNodeType::SSA;
 		}
+
+		DBGSourceLoc DBGLoc;
+
+		void SetDBGLoc(DBGSourceLoc dbg_loc) {
+			DBGLoc = dbg_loc;
+		}
+
+		DBGSourceLoc GetDBGLoc() const {
+			return DBGLoc;
+		}
 	};
+
+	struct VariableMetadata;
 
 	struct IRAlloca : public IRInstruction {
 		u64 ID = 0;
@@ -355,8 +374,14 @@ namespace Glass
 		u64 Type;
 		u32 Pointer = 0;
 
+		const VariableMetadata* VarMetadata = nullptr;
+
 		IRAlloca(u64 type, u32 pointer)
 			:Type(type), Pointer(pointer)
+		{}
+
+		IRAlloca(u64 type, u32 pointer, const VariableMetadata* var_metadata)
+			:Type(type), Pointer(pointer), VarMetadata(var_metadata)
 		{}
 
 		virtual std::string ToString() const override {
@@ -446,42 +471,6 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::Call;
-		}
-	};
-
-	struct IRAsAddress : public IRInstruction {
-		u64 ID = 0;
-		u64 SSA = 0;
-
-		IRAsAddress(u64 ssa)
-			:SSA(ssa)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			return 	"(int*)$" + std::to_string(SSA);
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::AsAddress;
-		}
-	};
-
-	struct IRAddressAsValue : public IRInstruction {
-		u64 ID = 0;
-		u64 SSA = 0;
-
-		IRAddressAsValue(u64 ssa)
-			:SSA(ssa)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			return 	"(int)$" + std::to_string(SSA);
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::AddressAsValue;
 		}
 	};
 
