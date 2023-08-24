@@ -8,8 +8,7 @@ source_filename = "Glass"
 @0 = private unnamed_addr constant [8 x i8] c"Hi: %s\0A\00", align 1
 @1 = private unnamed_addr constant [10 x i8] c"Arg: %s!\0A\00", align 1
 @2 = private unnamed_addr constant [6 x i8] c"Hello\00", align 1
-@3 = private unnamed_addr constant [5 x i8] c"data\00", align 1
-@4 = private unnamed_addr constant [12 x i8] c"Hello World\00", align 1
+@3 = private unnamed_addr constant [12 x i8] c"Hello World\00", align 1
 
 declare i32 @printf(i8*, ...)
 
@@ -102,34 +101,26 @@ define i32 @main() !dbg !55 {
 entry:
   %0 = alloca %Array, align 8
   %1 = alloca %Any, align 8
-  %2 = alloca %Any, align 8
-  %3 = alloca i32, align 4
-  call void @llvm.dbg.declare(metadata i32* %3, metadata !59, metadata !DIExpression()), !dbg !60
-  store i32 30, i32* %3, align 4, !dbg !61
-  %any_varargs = alloca %Any, i64 2, align 8, !dbg !62
+  %2 = alloca i32, align 4
+  call void @llvm.dbg.declare(metadata i32* %2, metadata !59, metadata !DIExpression()), !dbg !60
+  store i32 30, i32* %2, align 4, !dbg !61
+  %any_varargs = alloca %Any, i64 1, align 8, !dbg !62
   %varargs_getelem = getelementptr %Any, %Any* %any_varargs, i64 0, !dbg !62
-  %4 = getelementptr inbounds %Any, %Any* %2, i32 0, i32 0, !dbg !62
-  %5 = getelementptr inbounds %Any, %Any* %2, i32 0, i32 1, !dbg !62
-  store %ptr* bitcast ([6 x i8]* @2 to %ptr*), %ptr** %5, align 8, !dbg !62
-  store i64 7, i64* %4, align 4, !dbg !62
-  %6 = load %Any, %Any* %2, align 8, !dbg !62
-  store %Any %6, %Any* %varargs_getelem, align 8, !dbg !62
-  %varargs_getelem1 = getelementptr %Any, %Any* %any_varargs, i64 1, !dbg !62
-  %7 = getelementptr inbounds %Any, %Any* %1, i32 0, i32 0, !dbg !62
-  %8 = getelementptr inbounds %Any, %Any* %1, i32 0, i32 1, !dbg !62
-  store %ptr* bitcast ([5 x i8]* @3 to %ptr*), %ptr** %8, align 8, !dbg !62
-  store i64 7, i64* %7, align 4, !dbg !62
-  %9 = load %Any, %Any* %1, align 8, !dbg !62
-  store %Any %9, %Any* %varargs_getelem1, align 8, !dbg !62
-  %10 = getelementptr inbounds %Array, %Array* %0, i32 0, i32 0, !dbg !62
-  %11 = getelementptr inbounds %Array, %Array* %0, i32 0, i32 1, !dbg !62
+  %3 = getelementptr inbounds %Any, %Any* %1, i32 0, i32 0, !dbg !62
+  %4 = getelementptr inbounds %Any, %Any* %1, i32 0, i32 1, !dbg !62
+  store %ptr* bitcast ([6 x i8]* @2 to %ptr*), %ptr** %4, align 8, !dbg !62
+  store i64 7, i64* %3, align 4, !dbg !62
+  %5 = load %Any, %Any* %1, align 8, !dbg !62
+  store %Any %5, %Any* %varargs_getelem, align 8, !dbg !62
+  %6 = getelementptr inbounds %Array, %Array* %0, i32 0, i32 0, !dbg !62
+  %7 = getelementptr inbounds %Array, %Array* %0, i32 0, i32 1, !dbg !62
   %"varargs first" = getelementptr %Any, %Any* %any_varargs, i64 0, !dbg !62
-  %12 = bitcast %Any* %"varargs first" to %ptr*, !dbg !62
-  store %ptr* %12, %ptr** %11, align 8, !dbg !62
-  store i64 2, i64* %10, align 4, !dbg !62
-  %13 = load %Array, %Array* %0, align 8, !dbg !62
-  %14 = call i32 @print_vars(%Array %13), !dbg !62
-  %15 = call i32 @print_n(i8* getelementptr inbounds ([12 x i8], [12 x i8]* @4, i32 0, i32 0)), !dbg !63
+  %8 = bitcast %Any* %"varargs first" to %ptr*, !dbg !62
+  store %ptr* %8, %ptr** %7, align 8, !dbg !62
+  store i64 1, i64* %6, align 4, !dbg !62
+  %9 = load %Array, %Array* %0, align 8, !dbg !62
+  %10 = call i32 @print_vars(%Array %9), !dbg !62
+  %11 = call i32 @print_n(i8* getelementptr inbounds ([12 x i8], [12 x i8]* @3, i32 0, i32 0)), !dbg !63
   ret i32 0, !dbg !64
 }
 
@@ -139,10 +130,10 @@ attributes #0 = { nofree nosync nounwind readnone speculatable willreturn }
 !llvm.module.flags = !{!2}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: "Glass Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "HelloWorld.glass", directory: "./Examples/")
+!1 = !DIFile(filename: "Main.glass", directory: ".")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = distinct !DISubprogram(name: "print_n", scope: !4, file: !4, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !10)
-!4 = !DIFile(filename: "HelloWorld.glass", directory: "./Examples")
+!4 = !DIFile(filename: "HelloWorld.glass", directory: ".\\Examples")
 !5 = !DISubroutineType(types: !6)
 !6 = !{!7, !8}
 !7 = !DIBasicType(name: "i32", size: 32, encoding: DW_ATE_signed)
@@ -165,7 +156,7 @@ attributes #0 = { nofree nosync nounwind readnone speculatable willreturn }
 !24 = distinct !DISubprogram(name: "print_vars", scope: !4, file: !4, line: 15, type: !25, scopeLine: 15, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !32)
 !25 = !DISubroutineType(types: !26)
 !26 = !{!7, !27}
-!27 = !DICompositeType(tag: DW_TAG_structure_type, name: "Any", size: 128, align: 32, elements: !28)
+!27 = !DICompositeType(tag: DW_TAG_structure_type, name: "Any", line: 3435973836, size: 16, align: 32, elements: !28)
 !28 = !{!29, !30}
 !29 = !DIBasicType(name: "u64", size: 64, encoding: DW_ATE_unsigned)
 !30 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !31, size: 64)
@@ -193,13 +184,13 @@ attributes #0 = { nofree nosync nounwind readnone speculatable willreturn }
 !52 = !DILocation(line: 28, column: 4, scope: !24)
 !53 = !DILocation(line: 30, column: 4, scope: !24)
 !54 = !DILocation(line: 33, column: 3, scope: !24)
-!55 = distinct !DISubprogram(name: "main", scope: !4, file: !4, line: 35, type: !56, scopeLine: 35, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !58)
+!55 = distinct !DISubprogram(name: "main", scope: !4, file: !4, line: 39, type: !56, scopeLine: 39, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !58)
 !56 = !DISubroutineType(types: !57)
 !57 = !{!7}
 !58 = !{!59}
-!59 = !DILocalVariable(name: "data", scope: !55, file: !4, line: 37, type: !7)
-!60 = !DILocation(line: 37, scope: !55)
-!61 = !DILocation(line: 38, column: 7, scope: !55)
-!62 = !DILocation(line: 40, column: 3, scope: !55)
-!63 = !DILocation(line: 42, column: 3, scope: !55)
-!64 = !DILocation(line: 44, column: 3, scope: !55)
+!59 = !DILocalVariable(name: "data", scope: !55, file: !4, line: 41, type: !7)
+!60 = !DILocation(line: 41, scope: !55)
+!61 = !DILocation(line: 42, column: 7, scope: !55)
+!62 = !DILocation(line: 44, column: 3, scope: !55)
+!63 = !DILocation(line: 45, column: 3, scope: !55)
+!64 = !DILocation(line: 47, column: 3, scope: !55)

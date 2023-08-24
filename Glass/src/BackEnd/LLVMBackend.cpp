@@ -2,17 +2,65 @@
 
 #include "BackEnd/LLVMBackend.h"
 
-
 namespace Glass
 {
 	std::unique_ptr<llvm::LLVMContext> LLVMBackend::m_LLVMContext = std::make_unique<llvm::LLVMContext>();
+
+	void LLVMBackend::GenerateObjFile()
+	{
+		// Create a file stream for output
+		std::error_code ELC;
+		llvm::raw_fd_ostream outputFile("output.ll", ELC, llvm::sys::fs::OF_None);
+
+		m_LLVMModule->print(outputFile, nullptr);
+
+		//m_LLVMModule->print(llvm::outs(), nullptr, true, true);
+
+		llvm::InitializeAllTargetInfos();
+		llvm::InitializeAllTargets();
+		llvm::InitializeAllTargetMCs();
+		llvm::InitializeAllAsmParsers();
+		llvm::InitializeAllAsmPrinters();
+
+		DumpDebugInfo();
+
+		auto TargetTriple = llvm::sys::getDefaultTargetTriple();
+		m_LLVMModule->setTargetTriple(TargetTriple);
+
+		std::string Error;
+		auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
+
+		auto CPU = "generic";
+		auto Features = "";
+
+		llvm::TargetOptions opt;
+		auto RM = llvm::Optional<llvm::Reloc::Model>();
+		auto TheTargetMachine =
+			Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
+
+		m_LLVMModule->setDataLayout(TheTargetMachine->createDataLayout());
+
+		auto Filename = "output.obj";
+		std::error_code EC;
+		llvm::raw_fd_ostream dest(Filename, EC, llvm::sys::fs::OF_None);
+
+		llvm::legacy::PassManager pass;
+		auto FileType = llvm::CGFT_ObjectFile;
+
+		if (TheTargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+			return;
+		}
+
+		pass.run(*m_LLVMModule);
+		dest.flush();
+	}
 
 	void LLVMBackend::InitDebug()
 	{
 		m_DBuilder = new llvm::DIBuilder(*m_LLVMModule);
 
 		m_DCU = m_DBuilder->createCompileUnit(
-			llvm::dwarf::DW_LANG_C, m_DBuilder->createFile("HelloWorld.glass", "./Examples/"),
+			llvm::dwarf::DW_LANG_C, m_DBuilder->createFile("Main.glass", "."),
 			"Glass Compiler", false, "", 0);
 	}
 
@@ -63,63 +111,6 @@ namespace Glass
 			InsertLLVMDebugType(IR_i64, m_DBuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed));
 
 			InsertLLVMDebugType(IR_void, m_DBuilder->createUnspecifiedType("void"));
-
-			//Array type
-			{
-				std::vector<llvm::Metadata*> fieldTypes;
-
-				Glass::Type count_field_Type;
-				count_field_Type.ID = IR_u64;
-
-				Glass::Type data_field_Type;
-				data_field_Type.ID = IR_void;
-				data_field_Type.Pointer = 1;
-
-				fieldTypes.push_back(GetLLVMDebugType(count_field_Type));
-				fieldTypes.push_back(GetLLVMDebugType(data_field_Type));
-
-				llvm::DICompositeType* array_Debug_Type = m_DBuilder->createStructType(
-					m_DCU,                    // Scope
-					"Array",					// Name
-					nullptr,                    // File
-					0,                          // Line number
-					128,					    // Size in bits
-					32,                          // Alignment in bits
-					llvm::DINode::FlagZero,     // Flags
-					nullptr,                    // Derived from
-					m_DBuilder->getOrCreateArray(fieldTypes) // Elements
-				);
-
-				InsertLLVMDebugType(IR_array, array_Debug_Type);
-			}
-			//Any type
-			{
-				std::vector<llvm::Metadata*> fieldTypes;
-
-				Glass::Type type_field_Type;
-				type_field_Type.ID = IR_u64;
-
-				Glass::Type data_field_Type;
-				data_field_Type.ID = IR_void;
-				data_field_Type.Pointer = 1;
-
-				fieldTypes.push_back(GetLLVMDebugType(type_field_Type));
-				fieldTypes.push_back(GetLLVMDebugType(data_field_Type));
-
-				llvm::DICompositeType* any_Debug_Type = m_DBuilder->createStructType(
-					m_DCU,							// Scope
-					"Any",							// Name
-					nullptr,						// File
-					0,								// Line number
-					128,							// Size in bits
-					32,								// Alignment in bits
-					llvm::DINode::FlagZero,			// Flags
-					nullptr,						// Derived from
-					m_DBuilder->getOrCreateArray(fieldTypes) // Elements
-				);
-
-				InsertLLVMDebugType(IR_any, any_Debug_Type);
-			}
 		}
 
 		Opaque_Type = llvm::StructType::create(*m_LLVMContext, "ptr");
@@ -135,57 +126,24 @@ namespace Glass
 		StructsCodeGen();
 		ForeignCodeGen();
 
-		for (auto inst : m_Program->Instructions) {
-			CodeGen(inst);
+		for (auto i : m_Program->Instructions) {
+
+			if (i->GetType() == IRNodeType::File) {
+
+				IRFile* ir_file = (IRFile*)i;
+				SetLLVMFile(ir_file->File_Name, ir_file->Directory);
+
+				for (auto tl_inst : ir_file->Instructions) {
+					CodeGen(tl_inst);
+				}
+			}
+			else {
+				CodeGen(i);
+			}
+
 		}
 
-		// Create a file stream for output
-		std::error_code ELC;
-		llvm::raw_fd_ostream outputFile("output.ll", ELC, llvm::sys::fs::OF_None);
-
-		m_LLVMModule->print(outputFile, nullptr);
-
-		//m_LLVMModule->print(llvm::outs(), nullptr, true, true);
-
-		llvm::InitializeAllTargetInfos();
-		llvm::InitializeAllTargets();
-		llvm::InitializeAllTargetMCs();
-		llvm::InitializeAllAsmParsers();
-		llvm::InitializeAllAsmPrinters();
-
-		DumpDebugInfo();
-
-		auto TargetTriple = llvm::sys::getDefaultTargetTriple();
-		m_LLVMModule->setTargetTriple(TargetTriple);
-
-		std::string Error;
-		auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
-
-		auto CPU = "generic";
-		auto Features = "";
-
-		llvm::TargetOptions opt;
-		auto RM = llvm::Optional<llvm::Reloc::Model>();
-		auto TheTargetMachine =
-			Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
-
-		m_LLVMModule->setDataLayout(TheTargetMachine->createDataLayout());
-
-		auto Filename = "output.obj";
-		std::error_code EC;
-		llvm::raw_fd_ostream dest(Filename, EC, llvm::sys::fs::OF_None);
-
-		llvm::legacy::PassManager pass;
-		auto FileType = llvm::CGFT_ObjectFile;
-
-		if (TheTargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
-			return;
-		}
-
-		pass.run(*m_LLVMModule);
-		dest.flush();
-
-		delete m_LLVMModule;
+		GenerateObjFile();
 	}
 
 	void LLVMBackend::EnumsCodegen()
@@ -243,6 +201,29 @@ namespace Glass
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
 			our_struct_type.LLVMMembers = llvm_Members_Types;
 
+			//@Debugging
+			{
+				std::vector<llvm::Metadata*> llvm_Field_Types;
+
+				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
+					llvm_Field_Types.push_back(GetLLVMDebugType(member_metadata.Tipe));
+				}
+
+				llvm::DICompositeType* array_Debug_Type = m_DBuilder->createStructType(
+					m_DCU,											// Scope
+					struct_metadata.Name.Symbol,					// Name
+					(llvm::DIFile*)mDContext,						// File
+					(u32)struct_metadata.Name.Line,						// Line number
+					m_Metadata->GetTypeSize(our_struct_type.TypeID),// Size in bits
+					32,												// Alignment in bits
+					llvm::DINode::FlagZero,							// Flags
+					nullptr,										// Derived from
+					m_DBuilder->getOrCreateArray(llvm_Field_Types)	// Elements
+				);
+
+				InsertLLVMDebugType(our_struct_type.TypeID, array_Debug_Type);
+			}
+
 			//@Todo add cmd option for this
 			if (0)
 			{
@@ -250,7 +231,7 @@ namespace Glass
 				const llvm::StructLayout* structLayout = dataLayout.getStructLayout(our_struct_type.LLVMType);
 				u64 i = 0;
 				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
-					u64 elementOffset = structLayout->getElementOffset(i);
+					u64 elementOffset = structLayout->getElementOffset((u32)i);
 
 					GS_CORE_WARN("Member Offset: {}", elementOffset);
 
@@ -612,7 +593,7 @@ namespace Glass
 		GS_CORE_ASSERT(member_access->MemberID < struct_type.LLVMMembers.size(), "Member Idx out of range");
 
 		if (member_access->ReferenceAccess) {
-			llvm_Object = m_LLVMBuilder->CreateLoad(llvm_Object);
+			llvm_Object = m_LLVMBuilder->CreateLoad(llvm_Struct_Type, llvm_Object);
 		}
 
 		return m_LLVMBuilder->CreateStructGEP(llvm_Struct_Type, llvm_Object, (unsigned)member_access->MemberID);

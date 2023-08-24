@@ -33,12 +33,15 @@ fn print_vars(Any ...args) : i32 {
 	return 0;
 }
 
+struct Entity {
+	i32 Age;
+};
+
 fn main() : i32 {
 
 	i32 data = 30;
 
-	print_vars("Hello", "data");
-
+	print_vars("Hello");
 	print_n("Hello World");
 
 	return 0;

@@ -375,14 +375,22 @@ namespace Glass
 		for (CompilerFile* file : m_Files)
 		{
 			ModuleFile* module_file = file->GetAST();
+
+			IRFile* ir_file = IR(IRFile());
+			ir_file->File_Name = file->GetPath().filename().string();
+			ir_file->Directory = file->GetPath().parent_path().string();
+
 			for (const Statement* stmt : module_file->GetStatements())
 			{
 				auto stmt_code = StatementCodeGen(stmt);
 				if (stmt_code != nullptr)
 				{
-					tu->Instructions.push_back(stmt_code);
+					ir_file->Instructions.push_back(stmt_code);
 				}
 			}
+
+			tu->Instructions.push_back(ir_file);
+
 			m_CurrentFile++;
 		}
 

@@ -60,6 +60,8 @@ namespace Glass {
 		const Compiler::MetaData* m_Metadata = nullptr;
 		IRTranslationUnit* m_Program = nullptr;
 
+		void GenerateObjFile();
+
 		void SetFunctionID(u64 id)
 		{
 			m_CurrentFunctionID = id;
@@ -178,7 +180,6 @@ namespace Glass {
 			m_LLVMDebugTypes[type_id] = di_type;
 		}
 
-
 		llvm::DIType* GetLLVMDebugType(const Glass::Type& type) {
 			auto it = m_LLVMDebugTypes.find(type.ID);
 			if (it != m_LLVMDebugTypes.end()) {
@@ -213,6 +214,10 @@ namespace Glass {
 			return func_dbg_type;
 		}
 
+		void SetLLVMFile(const std::string& file_name, const std::string& directory) {
+			mDContext = m_DBuilder->createFile(file_name, directory);
+		}
+
 		void FunctionDebugInfo(u64 function_id, llvm::Function* llvm_func) {
 
 			const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(function_id);
@@ -220,22 +225,16 @@ namespace Glass {
 
 			auto function_dbg_type = GetFunctionDebugType(function_id);
 
-			auto Unit =
-				m_DBuilder->createFile(
-					"HelloWorld.glass", "./Examples");
-
-			mDContext = Unit;
-
 			u32 LineNo = (u32)func_metadata->Symbol.Line;
 			u32 ScopeLine = (u32)func_metadata->Symbol.Line;
 
-			llvm::DIScope* FContext = Unit;
+			llvm::DIScope* FContext = mDContext;
 
 			llvm::DISubprogram* SP = m_DBuilder->createFunction(
 				FContext,
 				func_metadata->Symbol.Symbol,
 				llvm::StringRef(),
-				Unit,
+				(llvm::DIFile*)mDContext,
 				LineNo,
 				function_dbg_type,
 				ScopeLine,

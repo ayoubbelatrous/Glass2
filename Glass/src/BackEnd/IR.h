@@ -72,19 +72,38 @@ namespace Glass
 
 	enum class IRNodeType
 	{
-		ConstValue,
 		SSA,
+		SSAValue,
+
+		ConstValue,
 
 		Alloca,
+		ArrayAllocate,
+		Any,
+		AnyArray,
 
 		ADD,
 		SUB,
 		MUL,
 		DIV,
-		SSAValue,
-		ARGValue,
-		Function,
+
+		Equal,
+		NotEqual,
+		GreaterThan,
+		LesserThan,
+		BitAnd,
+		BitOr,
+
+		If,
+		While,
 		Return,
+		Break,
+
+		Function,
+		ForeignFunction,
+		FuncPtr,
+
+		ARGValue,
 		Call,
 		AsAddress,
 		AddressAsValue,
@@ -97,32 +116,21 @@ namespace Glass
 		StructMember,
 		MemberAccess,
 		ArrayAccess,
-		If,
-		While,
-		SizeOf,
-		Break,
+
+
 		Ref,
 		DeRef,
+
 		TypeOf,
-		Equal,
-		NotEqual,
-		GreaterThan,
-		LesserThan,
-		BitAnd,
-		BitOr,
-		ForeignFunction,
-		ArrayAllocate,
-		FuncPtr,
+		SizeOf,
 
 		GlobAddress,
 		GlobDecl,
 
 		PointerCast,
 
-		Any,
-		AnyArray,
-
 		TranslationUnit,
+		File,
 	};
 
 	struct IRInstruction {
@@ -456,6 +464,19 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::TranslationUnit;
+		}
+	};
+
+	struct IRFile : public IRInstruction {
+		u64 ID = 0;
+
+		std::string File_Name;
+		std::string Directory;
+
+		std::vector<IRInstruction*> Instructions;
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::File;
 		}
 	};
 
