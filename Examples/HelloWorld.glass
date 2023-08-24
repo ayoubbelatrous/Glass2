@@ -41,6 +41,10 @@ fn main() : i32 {
 
 	i32 data = 30;
 
+	Entity entity;
+	entity.Age = 20;
+	entity.Age = 30;
+
 	print_vars("Hello");
 	print_n("Hello World");
 

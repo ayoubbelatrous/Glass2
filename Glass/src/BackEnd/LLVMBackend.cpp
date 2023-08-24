@@ -164,6 +164,9 @@ namespace Glass
 
 	void LLVMBackend::StructsCodeGen()
 	{
+
+		llvm::DataLayout llvm_DataLayout(m_LLVMModule);
+
 		for (const auto& struct_pair : m_Metadata->m_StructMetadata) {
 
 			u64 id = struct_pair.first;
@@ -180,8 +183,6 @@ namespace Glass
 
 			InsertLLVMStructType(struct_type.StructID, struct_type);
 		}
-
-		llvm::DataLayout dataLayout(m_LLVMModule);
 
 		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
 
@@ -201,20 +202,44 @@ namespace Glass
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
 			our_struct_type.LLVMMembers = llvm_Members_Types;
 
+			const llvm::StructLayout* llvm_StructLayout = llvm_DataLayout.getStructLayout(our_struct_type.LLVMType);
+
 			//@Debugging
 			{
 				std::vector<llvm::Metadata*> llvm_Field_Types;
+				u32 elem = 0;
 
 				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
-					llvm_Field_Types.push_back(GetLLVMDebugType(member_metadata.Tipe));
+
+					llvm::Type* llvm_MemberType = GetLLVMTypeFull(member_metadata.Tipe);
+
+					u64 type_size = llvm_DataLayout.getTypeSizeInBits(llvm_MemberType);
+					u32 offset_bits = (u32)llvm_StructLayout->getElementOffsetInBits(elem);
+					u32 align_bits = llvm_DataLayout.getABITypeAlignment(llvm_MemberType);
+
+					llvm::DIDerivedType* llvm_MemberDebugType = m_DBuilder->createMemberType(m_DCU,
+						member_metadata.Name.Symbol,
+						(llvm::DIFile*)mDContext,
+						(int)member_metadata.Name.Line,
+						type_size,
+						offset_bits,
+						align_bits,
+						llvm::DINode::DIFlags::FlagZero,
+						GetLLVMDebugType(member_metadata.Tipe)
+					);
+
+					llvm_Field_Types.push_back(llvm_MemberDebugType);
+					elem++;
 				}
+
+				u64 struct_size = llvm_StructLayout->getSizeInBits();
 
 				llvm::DICompositeType* array_Debug_Type = m_DBuilder->createStructType(
 					m_DCU,											// Scope
 					struct_metadata.Name.Symbol,					// Name
 					(llvm::DIFile*)mDContext,						// File
-					(u32)struct_metadata.Name.Line,						// Line number
-					m_Metadata->GetTypeSize(our_struct_type.TypeID),// Size in bits
+					(u32)struct_metadata.Name.Line,					// Line number
+					struct_size,									// Size in bits
 					32,												// Alignment in bits
 					llvm::DINode::FlagZero,							// Flags
 					nullptr,										// Derived from
@@ -228,14 +253,14 @@ namespace Glass
 			if (0)
 			{
 				GS_CORE_WARN("Struct: {}", struct_metadata.Name.Symbol);
-				const llvm::StructLayout* structLayout = dataLayout.getStructLayout(our_struct_type.LLVMType);
 				u64 i = 0;
 				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
-					u64 elementOffset = structLayout->getElementOffset((u32)i);
+
+					u64 elementOffset = llvm_StructLayout->getElementOffset((u32)i);
 
 					GS_CORE_WARN("Member Offset: {}", elementOffset);
-
 					i = i + 1;
+
 				}
 			}
 		}
