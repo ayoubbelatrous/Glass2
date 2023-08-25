@@ -1,7 +1,50 @@
 #pragma once
 
+#include "BackEnd/Type.h"
+
 namespace Glass
 {
+	enum class TypeInfoType
+	{
+		Base = 0,
+		Member,
+		Struct,
+	};
+
+	struct TypeInfo
+	{
+		Glass::Type Base;
+		TypeInfoType Type;
+	};
+
+	struct TypeInfoMember
+	{
+		Glass::Type Base;
+		TypeInfoType Type;
+
+		std::string member_name;
+	};
+
+	struct TypeInfoStruct
+	{
+		Glass::Type Base;
+		TypeInfoType Type;
+
+		std::vector<TypeInfoMember> members;
+	};
+
+	static inline u64 combineHashes(u64 hash1, u64 hash2) {
+		hash1 ^= hash2 + 0x9e3779b97f4a7c15 + (hash1 << 6) + (hash1 >> 2);
+		return hash1;
+	}
+
+	//Just a place holder for when we add struct parameters
+	static inline u64 TypeInfoStructHash(const TypeInfoStruct& type_info_struct) {
+		u64 base_hash = std::hash<Glass::Type>{}(type_info_struct.Base);
+		u64 members_hash = std::hash<u64>{}(type_info_struct.members.size());
+		return combineHashes(members_hash, base_hash);
+	}
+
 	enum class IRType : u64
 	{
 		IR_void,
@@ -744,54 +787,14 @@ namespace Glass
 		}
 	};
 
-	struct TypeInfo
-	{
-		u64 id;
-		bool pointer = false;
-		std::string name;
-		u64 size;
-		u64 flags = 0;
-	};
-
-	struct TypeInfoMember
-	{
-		u64 id;
-		bool pointer = false;
-		std::string name;
-		u64 size;
-		u64 flags = 0;
-
-		std::string member_name;
-	};
-
-	struct TypeInfoStruct
-	{
-		u64 id;
-		bool pointer = false;
-		std::string name;
-		u64 size;
-		u64 flags = 0;
-
-		std::vector<TypeInfoMember> members;
-	};
-
-	enum class TypeInfoType
-	{
-		Base = 0,
-		Member,
-		Struct,
-	};
-
 	struct IRTypeOf : public IRInstruction {
 		u64 ID = 0;
-		u64 VariableID;
 
-		TypeInfoType typeInfoType;
-		TypeInfo* Type;
+		u64 GlobalTypeArrayIndex = 0;
 
 		virtual std::string ToString() const override
 		{
-			return "typeof(" + std::to_string(Type->id) + ")";
+			return "typeof()";
 		}
 
 		virtual IRNodeType GetType() const {

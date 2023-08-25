@@ -1,52 +1,48 @@
 #foreign fn printf!(u8* fmt) : i32 {};
 
-fn print_n(u8* string) : i32 {
-
-	u32 count = 10;
-	u32 i = 0;
-
-	while i < count {
-		printf("Hi: %s\n", string);
-		i = i + 1;
-	}
-
-	return 0;
-}
-
-fn print_vars(Any ...args) : i32 {
-
-	Any* anies = cast(Any*) args.data;
-	u64 count = args.count;
-
-	u64 i = 0;
-	u64 one = 1;
-
-	while i < count {
-
-		Any any = anies[i];
-
-		printf("Arg: %s!\n", any.data);
-
-		i = i + one;
-	}
-
-	return 0;
-}
-
-struct Entity {
-	i32 Age;
-};
+//fn print_n(u8* string) : i32 {
+//
+//	u32 count = 10;
+//	u32 i = 0;
+//
+//	while i < count {
+//		printf("Hi: %s\n", string);
+//		i = i + 1;
+//	}
+//
+//	return 0;
+//}
+//
+//fn print_vars(Any ...args) : i32 {
+//
+//	Any* anies = cast(Any*) args.data;
+//	u64 count = args.count;
+//
+//	u64 i = 0;
+//	u64 one = 1;
+//
+//	while i < count {
+//
+//		Any any = anies[i];
+//
+//		printf("Arg: %s!\n", any.data);
+//
+//		i = i + one;
+//	}
+//
+//	return 0;
+//}
 
 fn main() : i32 {
 
-	i32 data = 30;
+	TypeInfo* i32_ti = typeof(i32);
 
-	Entity entity;
-	entity.Age = 20;
-	entity.Age = 30;
+	TypeInfo info = *i32_ti;
 
-	print_vars("Hello");
-	print_n("Hello World");
+	printf("i32_ti.ID = %p\n", 		info.id);
+	printf("i32_ti.Name = %p\n", 	info.name);
+	//printf("i32_ti.Pointer = %p\n", info.pointer);
+	//printf("i32_ti.Array = %p\n", 	info.array);
 
 	return 0;
 }

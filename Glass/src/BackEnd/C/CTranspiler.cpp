@@ -284,12 +284,12 @@ typedef struct Any
 							m_TypeInfoTable[id] = i;
 
 							var_type_table += "{";
-							var_type_table += fmt::format(".id={},", type.id);
-							var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
-							var_type_table += fmt::format(".name=\"{}\",", type.name);
-							var_type_table += fmt::format(".size={},", type.size);
-
-							var_type_table += fmt::format(".flags={},", type.flags);
+							//var_type_table += fmt::format(".id={},", type.id);
+							//var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+							//var_type_table += fmt::format(".name=\"{}\",", type.name);
+							//var_type_table += fmt::format(".size={},", type.size);
+							//
+							//var_type_table += fmt::format(".flags={},", type.flags);
 							var_type_table += "},";
 
 							i++;
@@ -320,11 +320,11 @@ typedef struct Any
 							m_TypeInfoTable[id] = i;
 
 							var_struct_type_table += "{";
-							var_struct_type_table += fmt::format(".id={},", type.id);
-							var_struct_type_table += fmt::format(".pointer={},", (u64)type.pointer);
-							var_struct_type_table += fmt::format(".name=\"{}\",", type.name);
-							var_struct_type_table += fmt::format(".size={},", type.size);
-							var_struct_type_table += fmt::format(".flags={},", type.flags);
+							//var_struct_type_table += fmt::format(".id={},", type.id);
+							//var_struct_type_table += fmt::format(".pointer={},", (u64)type.pointer);
+							//var_struct_type_table += fmt::format(".name=\"{}\",", type.name);
+							//var_struct_type_table += fmt::format(".size={},", type.size);
+							//var_struct_type_table += fmt::format(".flags={},", type.flags);
 
 							std::string member_type_info_name = fmt::format("__struct_{}_members", id);
 
@@ -333,11 +333,11 @@ typedef struct Any
 							for (const TypeInfoMember& member : type.members) {
 								type_info_struct_member_data += "{";
 
-								type_info_struct_member_data += fmt::format(".id={},", member.id);
-								type_info_struct_member_data += fmt::format(".pointer={},", (u64)member.pointer);
-								type_info_struct_member_data += fmt::format(".name=\"{}\",", m_Metadata->GetType(member.id));
-								type_info_struct_member_data += fmt::format(".size={},", m_Metadata->GetTypeSize(member.id));
-								type_info_struct_member_data += fmt::format(".flags={},", member.flags);
+								//type_info_struct_member_data += fmt::format(".id={},", member.id);
+								//type_info_struct_member_data += fmt::format(".pointer={},", (u64)member.pointer);
+								//type_info_struct_member_data += fmt::format(".name=\"{}\",", m_Metadata->GetType(member.id));
+								//type_info_struct_member_data += fmt::format(".size={},", m_Metadata->GetTypeSize(member.id));
+								//type_info_struct_member_data += fmt::format(".flags={},", member.flags);
 
 								type_info_struct_member_data += fmt::format(".member_name=\"{}\",", member.member_name);
 
@@ -649,16 +649,16 @@ typedef struct Any
 
 	std::string CTranspiler::TypeOfCodeGen(IRTypeOf* type_of)
 	{
-		if (type_of->typeInfoType == TypeInfoType::Base) {
-			m_VariableTypeInfo[m_VariableTypeInfo.size()] = *type_of->Type;
-
-			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
-		}
-		else if (type_of->typeInfoType == TypeInfoType::Struct) {
-			m_VariableStructTypeInfo[m_VariableStructTypeInfo.size()] = *(TypeInfoStruct*)type_of->Type;
-
-			return fmt::format("(&__var_type_info_struct_table[{}])", m_VariableStructTypeInfo.size() - 1);
-		}
+		// 		if (type_of->typeInfoType == TypeInfoType::Base) {
+		// 			m_VariableTypeInfo[m_VariableTypeInfo.size()] = *type_of->Type;
+		// 
+		// 			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
+		// 		}
+		// 		else if (type_of->typeInfoType == TypeInfoType::Struct) {
+		// 			m_VariableStructTypeInfo[m_VariableStructTypeInfo.size()] = *(TypeInfoStruct*)type_of->Type;
+		// 
+		// 			return fmt::format("(&__var_type_info_struct_table[{}])", m_VariableStructTypeInfo.size() - 1);
+		// 		}
 
 		return "";
 	}

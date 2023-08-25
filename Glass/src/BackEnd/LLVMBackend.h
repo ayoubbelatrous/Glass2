@@ -14,6 +14,8 @@ namespace Glass {
 		void StructsCodeGen();
 		void ForeignCodeGen();
 
+		void GenerateTypeInfo();
+
 		llvm::Value* CodeGen(const IRInstruction* instruction);
 		llvm::Value* FunctionCodeGen(const IRFunction* func);
 
@@ -49,6 +51,10 @@ namespace Glass {
 		llvm::Value* AnyCodeGen(const IRAny* any);
 		llvm::Value* AnyArrayCodeGen(const IRAnyArray* any_array);
 
+		//TypeInfo
+		llvm::Value* TypeOfCodeGen(const IRTypeOf* any_array);
+		/////////////////////////
+
 		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type);
 
 	private:
@@ -59,6 +65,11 @@ namespace Glass {
 
 		const Compiler::MetaData* m_Metadata = nullptr;
 		IRTranslationUnit* m_Program = nullptr;
+
+		//TypeInfo
+		llvm::Value* m_GlobalTypeInfoArray = nullptr;
+		llvm::StructType* m_TypeInfoElemTy = nullptr;
+		/////////////////////
 
 		void GenerateObjFile();
 
@@ -275,7 +286,6 @@ namespace Glass {
 
 			m_LLVMBuilder->SetCurrentDebugLocation(Di_Loc);
 		}
-
 
 		void InitDebug();
 		void DumpDebugInfo();

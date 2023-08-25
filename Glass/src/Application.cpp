@@ -130,7 +130,7 @@ namespace Glass
 
 		bool llvm = true;
 
-		if (llvm)
+		if (llvm && compilation_successful)
 		{
 			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
 

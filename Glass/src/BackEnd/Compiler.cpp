@@ -2195,11 +2195,11 @@ namespace Glass
 
 	IRInstruction* Compiler::TypeofCodeGen(const TypeOfNode* typeof)
 	{
-		u64 type_id = 0;
-		u64 type_size = 0;
+		u64 GlobalTypeInfoArrayIndex = -1;
 
-		u64 variable_id = 0;
-		bool pointer = false;
+		u64 type_id = -1;
+		u64 pointer = -1;
+		u64 array = -1;
 
 		if (typeof->What->GetType() == NodeType::Identifier)
 		{
@@ -2224,7 +2224,6 @@ namespace Glass
 				const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariableSSA(type_ident->Symbol.Symbol));
 				type_id = metadata->Tipe.ID;
 				pointer = metadata->Tipe.Pointer;
-				variable_id = metadata->DataSSA->ID;
 			}
 
 			if (symbol_type == SymbolType::Enum)
@@ -2232,7 +2231,6 @@ namespace Glass
 				const auto metadata = m_Metadata.GetEnum(type_ident->Symbol.Symbol);
 				type_id = m_Metadata.GetType(type_ident->Symbol.Symbol);
 				pointer = 0;
-				variable_id = 0;
 			}
 
 			if (symbol_type == SymbolType::Function)
@@ -2247,11 +2245,6 @@ namespace Glass
 			type_id = m_Metadata.GetExprType(code->SSA).ID;
 		}
 
-		type_size = m_Metadata.GetTypeSize(type_id);
-
-		TypeInfoType type_info_type;
-		TypeInfo* type_info = nullptr;
-
 		{
 			u64 struct_id = m_Metadata.GetStructIDFromType(type_id);
 
@@ -2262,53 +2255,39 @@ namespace Glass
 
 				TypeInfoStruct* type_info_struct = IR(TypeInfoStruct());
 
-				type_info_struct->id = type_id;
-				type_info_struct->name = m_Metadata.GetType(type_id);
-				type_info_struct->pointer = pointer;
-				type_info_struct->size = type_size;
-				type_info_struct->flags |= TI_STRUCT;
+				type_info_struct->Base.ID = type_id;
+				type_info_struct->Base.Pointer = pointer;
+				type_info_struct->Base.Array = false;
 
 				for (const MemberMetadata& member : struct_metadata->Members)
 				{
-
 					TypeInfoMember member_type_info;
-					member_type_info.id = member.Tipe.ID;
-					member_type_info.name = m_Metadata.GetType(member.Tipe.ID);
 
+					member_type_info.Base.ID = member.Tipe.ID;
+					member_type_info.Base.Pointer = member.Tipe.Pointer;
+					member_type_info.Base.Array = member.Tipe.Array;
 					member_type_info.member_name = member.Name.Symbol;
-					member_type_info.pointer = m_Metadata.GetTypeSize(member.Tipe.Pointer);
-					member_type_info.size = m_Metadata.GetTypeSize(member.Tipe.ID);
-
-					member_type_info.flags |= TI_STRUCT_MEMBER;
 
 					type_info_struct->members.push_back(member_type_info);
 				}
 
-				type_info_type = TypeInfoType::Struct;
-				type_info = (TypeInfo*)type_info_struct;
+				GlobalTypeInfoArrayIndex = m_Metadata.InsertUniqueTypeInfoStruct(type_info_struct);
 			}
 			else
 			{
-
 				TypeInfo* type_info_basic = IR(TypeInfo());
 
-				type_info_basic->id = type_id;
-				type_info_basic->name = m_Metadata.GetType(type_id);
-				type_info_basic->pointer = pointer;
-				type_info_basic->size = type_size;
-				type_info_basic->flags = 0;
+				type_info_basic->Base.ID = type_id;
+				type_info_basic->Base.Pointer = pointer;
 
-				type_info_type = TypeInfoType::Base;
-				type_info = type_info_basic;
+				GlobalTypeInfoArrayIndex = m_Metadata.InsertUniqueTypeInfo(type_info_basic);
 			}
 		}
 
 		IRSSA* ssa = CreateIRSSA();
 
 		IRTypeOf type_of;
-
-		type_of.typeInfoType = type_info_type;
-		type_of.Type = type_info;
+		type_of.GlobalTypeArrayIndex = GlobalTypeInfoArrayIndex;
 
 		ssa->Value = IR(type_of);
 

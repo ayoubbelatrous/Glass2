@@ -3,10 +3,10 @@
 #include "FrontEnd/CompilerFile.h"
 #include "BackEnd/IR.h"
 #include "FrontEnd/Ast.h"
+#include "BackEnd/Type.h"
 
 namespace Glass
 {
-
 	using TypeFlags = u64;
 
 	enum TypeInfoFlag {
@@ -93,26 +93,6 @@ namespace Glass
 	{
 		std::string message;
 		MessageType Type;
-	};
-
-	enum class TypeType
-	{
-		Value = 0,
-		Pointer,
-	};
-
-	struct Type
-	{
-		u64 ID = 0;
-		bool Array = false;
-		u64 Pointer = 0;
-
-		Type* Ext = nullptr;
-	};
-
-	struct FunctionType {
-		std::vector <Type> Arguments;
-		Type ReturnType;
 	};
 
 	struct VariableMetadata
@@ -328,6 +308,22 @@ namespace Glass
 
 		struct MetaData
 		{
+			//TypeInfo
+
+			std::unordered_map<u64, TypeInfo*> m_UniqueTypeInfoMap;
+
+			u64 InsertUniqueTypeInfo(TypeInfo* type_info) {
+				m_UniqueTypeInfoMap[std::hash<Glass::Type>{}(type_info->Base)] = type_info;
+				return std::distance(m_UniqueTypeInfoMap.begin(), m_UniqueTypeInfoMap.find(std::hash<Glass::Type>{}(type_info->Base)));
+			}
+
+			u64 InsertUniqueTypeInfoStruct(TypeInfoStruct* type_info_struct) {
+				m_UniqueTypeInfoMap[TypeInfoStructHash(*type_info_struct)] = (TypeInfo*)type_info_struct;
+				return std::distance(m_UniqueTypeInfoMap.begin(), m_UniqueTypeInfoMap.find(TypeInfoStructHash(*type_info_struct)));
+			}
+
+			///////////////
+
 			u64 m_CurrentFunction = 0;
 
 			u64 m_ScopeIDCounter = 0;

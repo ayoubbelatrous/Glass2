@@ -126,6 +126,8 @@ namespace Glass
 		StructsCodeGen();
 		ForeignCodeGen();
 
+		GenerateTypeInfo();
+
 		for (auto i : m_Program->Instructions) {
 
 			if (i->GetType() == IRNodeType::File) {
@@ -164,7 +166,6 @@ namespace Glass
 
 	void LLVMBackend::StructsCodeGen()
 	{
-
 		llvm::DataLayout llvm_DataLayout(m_LLVMModule);
 
 		for (const auto& struct_pair : m_Metadata->m_StructMetadata) {
@@ -305,6 +306,57 @@ namespace Glass
 		}
 	}
 
+	void LLVMBackend::GenerateTypeInfo()
+	{
+		llvm::Type* llvm_TypeInfoElemMemberTy = GetLLVMType(IR_u64);
+		llvm::Type* llvm_TypeInfoElemMemberBodyTy[8] =
+		{
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+		};
+
+		m_TypeInfoElemTy = llvm::StructType::create(*m_LLVMContext, "TypeInfoTableElem");
+		m_TypeInfoElemTy->setBody(llvm_TypeInfoElemMemberBodyTy);
+
+		u64 total_type_info_elements
+			= m_Metadata->m_UniqueTypeInfoMap.size();
+
+		llvm::Type* llvm_TypeInfoArrayTy
+			= llvm::ArrayType::get(m_TypeInfoElemTy, total_type_info_elements);
+
+		llvm::GlobalVariable* llvm_GlobalTypeInfoArray = nullptr;
+
+		llvm_GlobalTypeInfoArray =
+			new llvm::GlobalVariable(
+				*m_LLVMModule,						// Module to which the global variable belongs
+				llvm_TypeInfoArrayTy,               // Type of the global variable
+				true,								// Whether the variable is constant
+				llvm::GlobalValue::ExternalLinkage, // Linkage type
+				llvm::ConstantAggregateZero::get(llvm_TypeInfoArrayTy), // Initializer (all zeros)
+				"TypeInfoArray"						// Name of the global variable
+			);
+
+		m_GlobalTypeInfoArray = llvm_GlobalTypeInfoArray;
+	}
+
+	llvm::Value* LLVMBackend::TypeOfCodeGen(const IRTypeOf* typeof)
+	{
+		llvm::Value* llvm_TypeInfoPtr = m_LLVMBuilder->CreateGEP(
+			m_TypeInfoElemTy,
+			m_GlobalTypeInfoArray,
+			llvm::ConstantInt::get(GetLLVMType(IR_u64), typeof->GlobalTypeArrayIndex),
+			"ti_lookup");
+
+		return m_LLVMBuilder->CreateBitCast(llvm_TypeInfoPtr, GetLLVMTypeFull(IR_typeinfo, 1));
+	}
+
 	llvm::Value* LLVMBackend::CodeGen(const IRInstruction* instruction)
 	{
 		IRNodeType Type = instruction->GetType();
@@ -354,6 +406,9 @@ namespace Glass
 
 		case IRNodeType::Any: return AnyCodeGen((IRAny*)instruction);
 		case IRNodeType::AnyArray: return AnyArrayCodeGen((IRAnyArray*)instruction);
+
+		case IRNodeType::TypeOf: return TypeOfCodeGen((IRTypeOf*)instruction);
+
 		default:
 			return 0;
 		}
