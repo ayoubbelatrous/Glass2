@@ -149,6 +149,8 @@ namespace Glass
 
 		}
 
+		llvm::verifyModule(*m_LLVMModule, &llvm::outs());
+
 		GenerateObjFile();
 	}
 
@@ -326,13 +328,63 @@ namespace Glass
 		m_TypeInfoElemTy = llvm::StructType::create(*m_LLVMContext, "TypeInfoTableElem");
 		m_TypeInfoElemTy->setBody(llvm_TypeInfoElemMemberBodyTy);
 
+		std::unordered_map<u64, u64> Struct_Typeinfo_member_indices;
+		llvm::GlobalVariable* llvm_GlobalMemberTypeInfo_Array = nullptr;
+
+		{
+			std::vector<llvm::Constant*> llvm_GlobalTypeInfoArray_MemberData;
+
+
+			u64 total_Struct_type_info_elements = 0;
+			u64 Struct_type_info_elements_index = 0;
+
+			for (auto& [hash, typeinfo] : m_Metadata->m_UniqueTypeInfoMap) {
+				if (typeinfo->Type == TypeInfoType::Struct) {
+
+					TypeInfoStruct* typeinfo_Struct = (TypeInfoStruct*)typeinfo;
+
+					for (const TypeInfoMember& member : typeinfo_Struct->members) {
+
+						llvm::Constant* ti_member_elem = nullptr;
+						llvm::Constant* ti_elem_member_name = m_LLVMBuilder->CreateGlobalStringPtr(member.member_name, "", 0, m_LLVMModule);
+
+						ti_member_elem = llvm::ConstantStruct::get(
+							(llvm::StructType*)GetLLVMType(IR_typeinfo_member)
+							, {
+								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+								ti_elem_member_name,
+							});
+
+						llvm_GlobalTypeInfoArray_MemberData.push_back(ti_member_elem);
+						total_Struct_type_info_elements++;
+					}
+
+
+					Struct_Typeinfo_member_indices[hash] = Struct_type_info_elements_index;
+					Struct_type_info_elements_index++;
+				}
+			}
+
+			auto llvm_TypeInfoMember_ArrayTy = llvm::ArrayType::get(
+				GetLLVMType(IR_typeinfo_member), total_Struct_type_info_elements
+			);
+
+			llvm_GlobalMemberTypeInfo_Array =
+				new llvm::GlobalVariable(
+					*m_LLVMModule,
+					llvm_TypeInfoMember_ArrayTy,
+					true,
+					llvm::GlobalValue::ExternalLinkage,
+					llvm::ConstantArray::get(llvm_TypeInfoMember_ArrayTy, llvm_GlobalTypeInfoArray_MemberData),
+					"TypeInfo_Members_Array"
+				);
+		}
+
 		u64 total_type_info_elements
 			= m_Metadata->m_UniqueTypeInfoMap.size();
 
 		llvm::ArrayType* llvm_TypeInfoArrayTy
 			= llvm::ArrayType::get(m_TypeInfoElemTy, total_type_info_elements);
-
-		llvm::GlobalVariable* llvm_GlobalTypeInfoArray = nullptr;
 
 		std::vector<llvm::Constant*> llvm_GlobalTypeInfoArrayData;
 
@@ -346,18 +398,39 @@ namespace Glass
 
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
-						ti_elem_name,
+						llvm::ConstantExpr::getPtrToInt(ti_elem_name,GetLLVMType(IR_u64)),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeInfoFlags(typeinfo->Base.ID)),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 					});
 			}
 			else {
-				ti_elem = llvm::ConstantAggregateZero::get(m_TypeInfoElemTy);
+				TypeInfoStruct* typeinfo_Struct = (TypeInfoStruct*)typeinfo;
+
+				llvm::Constant* ti_elem_name =
+					m_LLVMBuilder->CreateGlobalStringPtr(
+						m_Metadata->GetType(typeinfo_Struct->Base.ID), "", 0, m_LLVMModule);
+
+				llvm::Constant* ti_elem_members_ptr =
+					llvm::ConstantExpr::getGetElementPtr(
+						GetLLVMType(IR_typeinfo_member),
+						llvm_GlobalMemberTypeInfo_Array,
+						llvm::ConstantInt::get(GetLLVMType(IR_u64), Struct_Typeinfo_member_indices[hash])
+					);
+
+				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+					, {
+						llvm::ConstantExpr::getPtrToInt(ti_elem_name,GetLLVMType(IR_u64)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeInfoFlags(typeinfo->Base.ID)),
+						llvm::ConstantExpr::getPtrToInt(ti_elem_members_ptr,GetLLVMType(IR_u64)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+					});
 			}
 
 			llvm_GlobalTypeInfoArrayData.push_back(ti_elem);
 		}
+
+		llvm::GlobalVariable* llvm_GlobalTypeInfoArray = nullptr;
 
 		llvm_GlobalTypeInfoArray =
 			new llvm::GlobalVariable(

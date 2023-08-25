@@ -28,7 +28,7 @@ namespace Glass
 	struct TypeInfoStruct
 	{
 		Glass::Type Base;
-		TypeInfoType Type;
+		TypeInfoType Type = TypeInfoType::Struct;
 
 		std::vector<TypeInfoMember> members;
 	};

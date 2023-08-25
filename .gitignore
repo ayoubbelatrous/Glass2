@@ -11,9 +11,14 @@ bin
 
 
 int
-test.exe
-*.o
-*.dll
+
+**.exe
+**.o
+**.obj
+**.ll
+**.s
+**.s
+
 .vscode/tasks.json
 generated.c
 generated.exe
