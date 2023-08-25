@@ -8,6 +8,7 @@
 namespace Glass
 {
 	using TypeFlags = u64;
+	using TypeInfoFlags = u64;
 
 	enum TypeInfoFlag {
 		TI_BASE_TYPE = BIT(0),
@@ -322,6 +323,34 @@ namespace Glass
 				return std::distance(m_UniqueTypeInfoMap.begin(), m_UniqueTypeInfoMap.find(TypeInfoStructHash(*type_info_struct)));
 			}
 
+			TypeInfoFlags GetTypeInfoFlags(u64 Type) const
+			{
+				TypeInfoFlags type_info_flags = 0;
+				TypeFlags type_flags = GetTypeFlags(Type);
+
+				if (type_flags & TypeFlag::FLAG_BASE_TYPE) {
+					type_info_flags |= TI_BASE_TYPE;
+				}
+
+				if (type_flags & TypeFlag::FLAG_UNSIGNED_TYPE) {
+					type_info_flags |= TI_UNSIGNED_TYPE;
+				}
+
+				if (type_flags & TypeFlag::FLAG_NUMERIC_TYPE) {
+					type_info_flags |= TI_NUMERIC_TYPE;
+				}
+
+				if (type_flags & TypeFlag::FLAG_FLOATING_TYPE) {
+					type_info_flags |= TI_FLOATING_TYPE;
+				}
+
+				if (type_flags & TypeFlag::FLAG_STRUCT_TYPE) {
+					type_info_flags |= TI_STRUCT;
+				}
+
+				return type_info_flags;
+			}
+
 			///////////////
 
 			u64 m_CurrentFunction = 0;
@@ -596,6 +625,7 @@ namespace Glass
 				m_Types[ID] = name;
 				m_TypeNames[name] = ID;
 				m_TypeSizes[ID] = size;
+				m_TypeFlags[ID] = 0;
 			}
 
 			u64 ComputeStructSize(const StructMetadata* metadata) {
@@ -725,6 +755,8 @@ namespace Glass
 
 		Compiler(std::vector<CompilerFile*> files);
 
+		void InitTypeSystem();
+
 		IRTranslationUnit* CodeGen();
 
 		IRInstruction* StatementCodeGen(const Statement* statement);
@@ -741,7 +773,7 @@ namespace Glass
 		IRInstruction* ReturnCodeGen(const ReturnNode* returnNode);
 		IRInstruction* StructCodeGen(const StructNode* structNode);
 
-		IRInstruction* EnumCodeGen(const EnumNode* enumNode);
+		IRInstruction* EnumCodeGen(const EnumNode* enumNode, u64 type_id = (u64)-1);
 
 		IRInstruction* IfCodeGen(const IfNode* ifNode);
 		IRInstruction* WhileCodeGen(const WhileNode* ifNode);

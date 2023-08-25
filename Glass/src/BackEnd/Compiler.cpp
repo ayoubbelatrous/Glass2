@@ -6,6 +6,8 @@
 #include "FrontEnd/AstCopier.h"
 #include "FrontEnd/AstPolymorpher.h"
 #include "Interpeter/Interpeter.h"
+#include "FrontEnd/Parser.h"
+#include "FrontEnd/Lexer.h"
 
 #define NULL_ID (u64)-1
 #define MSG_LOC(x) PushMessage(CompilerMessage{ PrintTokenLocation((x->GetLocation())), MessageType::Error })
@@ -17,29 +19,36 @@ namespace Glass
 {
 	Compiler::Compiler(std::vector<CompilerFile*> files) : m_Files(files)
 	{
-		m_Metadata.RegisterType((u64)IRType::IR_void, "void", 0);
+	}
 
-		m_Metadata.RegisterType((u64)IRType::IR_float, "float", 4);
-		m_Metadata.RegisterType((u64)IRType::IR_int, "int", 4);
+	void Compiler::InitTypeSystem()
+	{
+		m_Metadata.RegisterType(IR_void, "void", 0);
 
-		m_Metadata.RegisterType((u64)IRType::IR_i8, "i8", 1);
-		m_Metadata.RegisterType((u64)IRType::IR_i16, "i16", 2);
-		m_Metadata.RegisterType((u64)IRType::IR_i32, "i32", 4);
-		m_Metadata.RegisterType((u64)IRType::IR_i64, "i64", 8);
+		m_Metadata.RegisterType(IR_float, "float", 4);
+		m_Metadata.RegisterType(IR_int, "int", 4);
 
-		m_Metadata.RegisterType((u64)IRType::IR_u8, "u8", 1);
-		m_Metadata.RegisterType((u64)IRType::IR_u16, "u16", 2);
-		m_Metadata.RegisterType((u64)IRType::IR_u32, "u32", 4);
-		m_Metadata.RegisterType((u64)IRType::IR_u64, "u64", 8);
+		m_Metadata.RegisterType(IR_i8, "i8", 1);
+		m_Metadata.RegisterType(IR_i16, "i16", 2);
+		m_Metadata.RegisterType(IR_i32, "i32", 4);
+		m_Metadata.RegisterType(IR_i64, "i64", 8);
 
-		m_Metadata.RegisterType((u64)IRType::IR_f32, "f32", 4);
-		m_Metadata.RegisterType((u64)IRType::IR_f64, "f64", 8);
+		m_Metadata.RegisterType(IR_u8, "u8", 1);
+		m_Metadata.RegisterType(IR_u16, "u16", 2);
+		m_Metadata.RegisterType(IR_u32, "u32", 4);
+		m_Metadata.RegisterType(IR_u64, "u64", 8);
 
-		m_Metadata.RegisterType((u64)IRType::IR_bool, "bool", 1);
+		m_Metadata.RegisterType(IR_f32, "f32", 4);
+		m_Metadata.RegisterType(IR_f64, "f64", 8);
 
-		m_Metadata.GetTypeFlags(IR_int) |= FLAG_BASE_TYPE;
+		m_Metadata.RegisterType(IR_bool, "bool", 1);
+
+		m_Metadata.RegisterType(IR_type, "Type", 8);
+
 
 		{
+			m_Metadata.GetTypeFlags(IR_int) |= FLAG_BASE_TYPE;
+
 			m_Metadata.GetTypeFlags(IR_i8) |= FLAG_BASE_TYPE;
 			m_Metadata.GetTypeFlags(IR_i16) |= FLAG_BASE_TYPE;
 			m_Metadata.GetTypeFlags(IR_i32) |= FLAG_BASE_TYPE;
@@ -57,6 +66,8 @@ namespace Glass
 
 			m_Metadata.GetTypeFlags(IR_void) |= FLAG_BASE_TYPE;
 			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_BASE_TYPE;
+
+			m_Metadata.GetTypeFlags(IR_type) |= FLAG_BASE_TYPE;
 		}
 
 		{
@@ -80,285 +91,83 @@ namespace Glass
 			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
 		}
 
-		{
+		const fs_path base_file_path = "Library/Base.glass";
 
-			EnumMetadata type_flags_metadata;
-			type_flags_metadata.Name.Symbol = "TypeInfo_Flags";
+		std::ifstream in(base_file_path);
+		std::stringstream base_buffer;
+		base_buffer << in.rdbuf();
 
+		std::string base_source = base_buffer.str();
+
+		CompilerFile base_file = CompilerFile(10, base_source, base_file_path);
+
+		Lexer lexer = Lexer(base_source, base_file_path);
+
+		base_file.SetTokens(lexer.Lex());
+
+		Parser parser = Parser(base_file);
+
+		ModuleFile* base_Ast = parser.CreateAST();
+
+		auto generate_base_struct = [this](StructNode* structNode, u64 type_id, u64 struct_id) {
+
+			Token& struct_name = structNode->Name;
+			auto& struct_members = structNode->m_Members;
+
+			StructMetadata struct_metadata;
+			struct_metadata.Name = struct_name;
+
+			for (VariableNode* member : struct_members)
 			{
-				EnumMemberMetadata member;
-				member.Name = "BASE_TYPE";
-				member.Value = TI_BASE_TYPE;
+				MemberMetadata member_metadata;
+				member_metadata.Name = member->Symbol;
+				member_metadata.Tipe.ID = m_Metadata.GetType(member->Type->Symbol.Symbol);
+				member_metadata.Tipe.Pointer = member->Type->Pointer;
+				member_metadata.Tipe.Array = member->Type->Array;
 
-				type_flags_metadata.InsertMember(member.Name, member);
+				if (member_metadata.Tipe.ID == (u64)-1) {
+					MSG_LOC(member);
+					FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member->Symbol.Symbol, member->Type->Symbol.Symbol);
+					return;
+				}
+
+				struct_metadata.Members.push_back(member_metadata);
 			}
 
-			{
-				EnumMemberMetadata member;
-				member.Name = "NUMERIC_TYPE";
-				member.Value = TI_NUMERIC_TYPE;
+			m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
+		};
 
-				type_flags_metadata.InsertMember(member.Name, member);
+		for (Statement* stmt : base_Ast->GetStatements()) {
+			NodeType node_type = stmt->GetType();
+
+			if (node_type == NodeType::StructNode) {
+
+				StructNode* stmt_Struct = (StructNode*)stmt;
+
+				if (stmt_Struct->Name.Symbol == "Any") {
+					generate_base_struct(stmt_Struct, IR_any, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "Array") {
+					generate_base_struct(stmt_Struct, IR_array, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo") {
+					generate_base_struct(stmt_Struct, IR_typeinfo, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Member") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_member, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Struct") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_struct, GetStructID());
+				}
 			}
+			if (node_type == NodeType::Enum) {
 
-			{
-				EnumMemberMetadata member;
-				member.Name = "UNSIGNED_TYPE";
-				member.Value = TI_UNSIGNED_TYPE;
+				EnumNode* stmt_Enum = (EnumNode*)stmt;
 
-				type_flags_metadata.InsertMember(member.Name, member);
+				if (stmt_Enum->Name.Symbol == "TypeInfo_Flags") {
+					EnumCodeGen(stmt_Enum, IR_typeinfo_flags);
+				}
 			}
-
-			{
-				EnumMemberMetadata member;
-				member.Name = "FLOATING_TYPE";
-				member.Value = TI_FLOATING_TYPE;
-
-				type_flags_metadata.InsertMember(member.Name, member);
-			}
-
-			{
-				EnumMemberMetadata member;
-				member.Name = "STRUCT";
-				member.Value = TI_STRUCT;
-
-				type_flags_metadata.InsertMember(member.Name, member);
-			}
-
-			{
-				EnumMemberMetadata member;
-				member.Name = "STRUCT_MEMBER";
-				member.Value = TI_STRUCT_MEMBER;
-
-				type_flags_metadata.InsertMember(member.Name, member);
-			}
-
-			{
-				EnumMemberMetadata member;
-				member.Name = "ENUM_TYPE";
-				member.Value = TI_ENUM;
-
-				type_flags_metadata.InsertMember(member.Name, member);
-			}
-
-			{
-				EnumMemberMetadata member;
-				member.Name = "FUNCTION";
-				member.Value = TI_FUNCTION;
-
-				type_flags_metadata.InsertMember(member.Name, member);
-			}
-
-			m_Metadata.RegisterEnum(GetEnumID(), IR_typeinfo_flags, type_flags_metadata);
-		}
-
-		{
-			StructMetadata any_Metadata;
-			any_Metadata.Name.Symbol = "Any";
-
-			// type
-			{
-				MemberMetadata type_member_metadata;
-				type_member_metadata.Name.Symbol = "type";
-				type_member_metadata.Tipe.ID = IR_u64; //@TODO: Change to Type when we add first class types
-				type_member_metadata.Tipe.Pointer = 0;
-
-				any_Metadata.Members.push_back(type_member_metadata);
-			}
-
-			// data
-			{
-				MemberMetadata data_member_metadata;
-				data_member_metadata.Name.Symbol = "data";
-				data_member_metadata.Tipe.ID = IR_void;
-				data_member_metadata.Tipe.Pointer = 1;
-
-				any_Metadata.Members.push_back(data_member_metadata);
-			}
-
-			m_Metadata.RegisterStruct(GetStructID(), IR_any, any_Metadata);
-		}
-
-		{
-			StructMetadata array_info_Metadata;
-			array_info_Metadata.Name.Symbol = "Array";
-
-			// type
-			{
-				MemberMetadata count_member_metadata;
-				count_member_metadata.Name.Symbol = "count";
-				count_member_metadata.Tipe.ID = IR_u64;
-				count_member_metadata.Tipe.Pointer = 0;
-
-				array_info_Metadata.Members.push_back(count_member_metadata);
-			}
-
-			// data
-			{
-				MemberMetadata data_member_metadata;
-				data_member_metadata.Name.Symbol = "data";
-				data_member_metadata.Tipe.ID = IR_void;
-				data_member_metadata.Tipe.Pointer = 1;
-
-				array_info_Metadata.Members.push_back(data_member_metadata);
-			}
-
-			m_Metadata.RegisterStruct(GetStructID(), IR_array, array_info_Metadata);
-		}
-
-		{
-
-			StructMetadata type_info_member_Metadata;
-			type_info_member_Metadata.Name.Symbol = "TypeInfo_Member";
-
-			// id
-			{
-				MemberMetadata id_member_metadata;
-				id_member_metadata.Name.Symbol = "id";
-				id_member_metadata.Tipe.ID = IR_u64;
-				id_member_metadata.Tipe.Pointer = 0;
-
-				type_info_member_Metadata.Members.push_back(id_member_metadata);
-			}
-
-			// name
-			{
-				MemberMetadata name_member_metadata;
-				name_member_metadata.Name.Symbol = "name";
-				name_member_metadata.Tipe.ID = IR_u8;
-				name_member_metadata.Tipe.Pointer = 1;
-
-				type_info_member_Metadata.Members.push_back(name_member_metadata);
-			}
-
-			// size
-			{
-				MemberMetadata size_member_metadata;
-				size_member_metadata.Name.Symbol = "size";
-				size_member_metadata.Tipe.ID = IR_u64;
-				size_member_metadata.Tipe.Pointer = 0;
-
-				type_info_member_Metadata.Members.push_back(size_member_metadata);
-			}
-
-			// size
-			{
-				MemberMetadata size_member_metadata;
-				size_member_metadata.Name.Symbol = "flags";
-				size_member_metadata.Tipe.ID = IR_u64;
-				size_member_metadata.Tipe.Pointer = 0;
-
-				type_info_member_Metadata.Members.push_back(size_member_metadata);
-			}
-
-			// member_name
-			{
-				MemberMetadata mem_name_member_metadata;
-				mem_name_member_metadata.Name.Symbol = "member_name";
-				mem_name_member_metadata.Tipe.ID = IR_u8;
-				mem_name_member_metadata.Tipe.Pointer = 1;
-
-				type_info_member_Metadata.Members.push_back(mem_name_member_metadata);
-			}
-
-			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo_member, type_info_member_Metadata);
-		}
-
-		{
-
-			StructMetadata type_info_struct_Metadata;
-			type_info_struct_Metadata.Name.Symbol = "TypeInfo_Struct";
-
-			// id
-			{
-				MemberMetadata id_member_metadata;
-				id_member_metadata.Name.Symbol = "id";
-				id_member_metadata.Tipe.ID = IR_u64;
-				id_member_metadata.Tipe.Pointer = 0;
-
-				type_info_struct_Metadata.Members.push_back(id_member_metadata);
-			}
-
-			// name
-			{
-				MemberMetadata name_member_metadata;
-				name_member_metadata.Name.Symbol = "name";
-				name_member_metadata.Tipe.ID = IR_u8;
-				name_member_metadata.Tipe.Pointer = 1;
-
-				type_info_struct_Metadata.Members.push_back(name_member_metadata);
-			}
-
-			// size
-			{
-				MemberMetadata size_member_metadata;
-				size_member_metadata.Name.Symbol = "size";
-				size_member_metadata.Tipe.ID = IR_u64;
-				size_member_metadata.Tipe.Pointer = 0;
-
-				type_info_struct_Metadata.Members.push_back(size_member_metadata);
-			}
-
-			// members
-			{
-				MemberMetadata members_member_metadata;
-				members_member_metadata.Name.Symbol = "members";
-				members_member_metadata.Tipe.ID = IR_typeinfo_member;
-				members_member_metadata.Tipe.Pointer = 1;
-				members_member_metadata.Tipe.Array = 1;
-
-				type_info_struct_Metadata.Members.push_back(members_member_metadata);
-			}
-
-			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo_struct, type_info_struct_Metadata);
-		}
-
-		{
-
-			StructMetadata type_info_Metadata;
-			type_info_Metadata.Name.Symbol = "TypeInfo";
-
-			// id
-			{
-				MemberMetadata id_member_metadata;
-				id_member_metadata.Name.Symbol = "id";
-				id_member_metadata.Tipe.ID = IR_u64;
-				id_member_metadata.Tipe.Pointer = 0;
-
-				type_info_Metadata.Members.push_back(id_member_metadata);
-			}
-
-			// name
-			{
-				MemberMetadata name_member_metadata;
-				name_member_metadata.Name.Symbol = "name";
-				name_member_metadata.Tipe.ID = IR_u8;
-				name_member_metadata.Tipe.Pointer = 1;
-
-				type_info_Metadata.Members.push_back(name_member_metadata);
-			}
-
-			// size
-			{
-				MemberMetadata size_member_metadata;
-				size_member_metadata.Name.Symbol = "size";
-				size_member_metadata.Tipe.ID = IR_u64;
-				size_member_metadata.Tipe.Pointer = 0;
-
-				type_info_Metadata.Members.push_back(size_member_metadata);
-			}
-
-			// flags
-			{
-				MemberMetadata flags_member_metadata;
-				flags_member_metadata.Name.Symbol = "flags";
-				flags_member_metadata.Tipe.ID = IR_typeinfo_flags;
-				flags_member_metadata.Tipe.Pointer = 0;
-
-				type_info_Metadata.Members.push_back(flags_member_metadata);
-			}
-
-			m_Metadata.RegisterStruct(GetStructID(), IR_typeinfo, type_info_Metadata);
 		}
 
 		m_TypeIDCounter = IR_typeinfo;
@@ -370,6 +179,8 @@ namespace Glass
 		//		@PUSH_SCOPE @GLOBAL
 		m_Metadata.PushContextGlobal();
 		//////////////////////////////////////////////////////////////////////////
+
+		InitTypeSystem();
 
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
 		for (CompilerFile* file : m_Files)
@@ -623,7 +434,7 @@ namespace Glass
 		u64 poly_func_id = GetFunctionID();
 
 		Type return_type;
-		return_type.ID = (u64)IRType::IR_void;
+		return_type.ID = IR_void;
 
 		if (functionNode->ReturnType)
 		{
@@ -1088,7 +899,7 @@ namespace Glass
 		return IR(ir_struct);
 	}
 
-	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode)
+	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode, u64 type_id /*= (u64)-1*/)
 	{
 		{
 			SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
@@ -1147,7 +958,11 @@ namespace Glass
 			IOTA++;
 		}
 
-		m_Metadata.RegisterEnum(GetEnumID(), GetTypeID(), metadata);
+		if (type_id == NULL_ID) {
+			type_id = GetEnumID();
+		}
+
+		m_Metadata.RegisterEnum(GetEnumID(), type_id, metadata);
 
 		return nullptr;
 	}
@@ -2350,7 +2165,7 @@ namespace Glass
 
 	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{
-		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(deRefNode->What);
+		IRSSAValue* expr_value = (IRSSAValue*)GetExpressionByValue(deRefNode->What);
 		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
 
 		Glass::Type expr_type = exprType;

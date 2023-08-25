@@ -17,7 +17,7 @@ enum #flags TypeInfo_Flags {
 	STRUCT_MEMBER	;
 	ENUM			;
 	FUNCTION		;
-}
+};
 
 struct TypeInfo {
 	u8* name;

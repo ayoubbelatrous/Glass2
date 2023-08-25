@@ -98,6 +98,8 @@ namespace Glass
 
 		InsertLLVMType(IR_void, llvm::Type::getVoidTy(*m_LLVMContext));
 
+		InsertLLVMType(IR_type, llvm::Type::getInt64Ty(*m_LLVMContext));
+
 		//@Debugging
 		{
 			InsertLLVMDebugType(IR_u8, m_DBuilder->createBasicType("u8", 8, llvm::dwarf::DW_ATE_unsigned));
@@ -111,6 +113,8 @@ namespace Glass
 			InsertLLVMDebugType(IR_i64, m_DBuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed));
 
 			InsertLLVMDebugType(IR_void, m_DBuilder->createUnspecifiedType("void"));
+
+			InsertLLVMDebugType(IR_type, m_DBuilder->createBasicType("Type", 64, llvm::dwarf::DW_ATE_unsigned));
 		}
 
 		Opaque_Type = llvm::StructType::create(*m_LLVMContext, "ptr");
@@ -216,15 +220,16 @@ namespace Glass
 
 					u64 type_size = llvm_DataLayout.getTypeSizeInBits(llvm_MemberType);
 					u32 offset_bits = (u32)llvm_StructLayout->getElementOffsetInBits(elem);
-					u32 align_bits = llvm_DataLayout.getABITypeAlignment(llvm_MemberType);
+					u32 align_bits = llvm_DataLayout.getABITypeAlignment(llvm_MemberType) * 8;
 
-					llvm::DIDerivedType* llvm_MemberDebugType = m_DBuilder->createMemberType(m_DCU,
+					llvm::DIDerivedType* llvm_MemberDebugType = m_DBuilder->createMemberType(
+						m_DCU,
 						member_metadata.Name.Symbol,
 						(llvm::DIFile*)mDContext,
 						(int)member_metadata.Name.Line,
 						type_size,
-						offset_bits,
 						align_bits,
+						offset_bits,
 						llvm::DINode::DIFlags::FlagZero,
 						GetLLVMDebugType(member_metadata.Tipe)
 					);
@@ -309,13 +314,9 @@ namespace Glass
 	void LLVMBackend::GenerateTypeInfo()
 	{
 		llvm::Type* llvm_TypeInfoElemMemberTy = GetLLVMType(IR_u64);
-		llvm::Type* llvm_TypeInfoElemMemberBodyTy[8] =
-		{
-			llvm_TypeInfoElemMemberTy,
-			llvm_TypeInfoElemMemberTy,
-			llvm_TypeInfoElemMemberTy,
-			llvm_TypeInfoElemMemberTy,
 
+		llvm::Type* llvm_TypeInfoElemMemberBodyTy[4] =
+		{
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
@@ -328,18 +329,43 @@ namespace Glass
 		u64 total_type_info_elements
 			= m_Metadata->m_UniqueTypeInfoMap.size();
 
-		llvm::Type* llvm_TypeInfoArrayTy
+		llvm::ArrayType* llvm_TypeInfoArrayTy
 			= llvm::ArrayType::get(m_TypeInfoElemTy, total_type_info_elements);
 
 		llvm::GlobalVariable* llvm_GlobalTypeInfoArray = nullptr;
 
+		std::vector<llvm::Constant*> llvm_GlobalTypeInfoArrayData;
+
+		for (auto& [hash, typeinfo] : m_Metadata->m_UniqueTypeInfoMap) {
+
+			llvm::Constant* ti_elem = nullptr;
+
+			if (typeinfo->Type == TypeInfoType::Base) {
+
+				llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(m_Metadata->GetType(typeinfo->Base.ID), "", 0, m_LLVMModule);
+
+				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+					, {
+						ti_elem_name,
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeInfoFlags(typeinfo->Base.ID)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+					});
+			}
+			else {
+				ti_elem = llvm::ConstantAggregateZero::get(m_TypeInfoElemTy);
+			}
+
+			llvm_GlobalTypeInfoArrayData.push_back(ti_elem);
+		}
+
 		llvm_GlobalTypeInfoArray =
 			new llvm::GlobalVariable(
-				*m_LLVMModule,						// Module to which the global variable belongs
-				llvm_TypeInfoArrayTy,               // Type of the global variable
-				true,								// Whether the variable is constant
-				llvm::GlobalValue::ExternalLinkage, // Linkage type
-				llvm::ConstantAggregateZero::get(llvm_TypeInfoArrayTy), // Initializer (all zeros)
+				*m_LLVMModule,
+				llvm_TypeInfoArrayTy,
+				true,
+				llvm::GlobalValue::ExternalLinkage,
+				llvm::ConstantArray::get(llvm_TypeInfoArrayTy, llvm_GlobalTypeInfoArrayData),
 				"TypeInfoArray"						// Name of the global variable
 			);
 

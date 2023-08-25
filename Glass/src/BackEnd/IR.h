@@ -67,6 +67,8 @@ namespace Glass
 
 		IR_bool,
 
+		IR_type,
+
 		IR_any,
 
 		IR_array,
@@ -100,6 +102,8 @@ namespace Glass
 		IR_f64,
 
 		IR_bool,
+
+		IR_type,
 
 		IR_any,
 
