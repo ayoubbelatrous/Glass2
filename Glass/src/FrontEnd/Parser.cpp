@@ -782,13 +782,13 @@ namespace Glass
 
 	Expression* Parser::ParseMemberExpr()
 	{
-		Expression* left = ParseCallExpr();
+		Expression* left = ParseDeRefExpr();
 
 		while (At().Type == TokenType::Period) {
 
 			Token period = Consume();
 
-			Expression* right = ParseCallExpr();
+			Expression* right = ParseDeRefExpr();
 
 			MemberAccess Node;
 
@@ -799,6 +799,28 @@ namespace Glass
 		}
 
 		return left;
+	}
+
+	Expression* Parser::ParseDeRefExpr()
+	{
+		Expression* right = nullptr;
+
+		if (At().Type == TokenType::Multiply) {
+
+			Consume();
+
+			right = ParseCallExpr();
+
+			DeRefNode Node;
+			Node.What = right;
+
+			right = (Expression*)AST(Node);
+		}
+		else {
+			right = ParseCallExpr();
+		}
+
+		return right;
 	}
 
 	Expression* Parser::ParseCallExpr()
@@ -946,17 +968,6 @@ namespace Glass
 			Consume();
 
 			RefNode Node;
-
-			Node.What = ParseExpression();
-
-			return Application::AllocateAstNode(Node);
-		}
-		break;
-		case TokenType::Multiply:
-		{
-			Consume();
-
-			DeRefNode Node;
 
 			Node.What = ParseExpression();
 

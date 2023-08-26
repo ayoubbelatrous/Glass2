@@ -3,6 +3,9 @@
 
 fn main() : i32 {
 
-	i64 num = 4;
+	u64 size = sizeof(i32);
+
+	i32* data = cast(i32*) malloc(size);
+
 	return 0;
 }

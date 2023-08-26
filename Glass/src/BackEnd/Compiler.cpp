@@ -688,6 +688,12 @@ namespace Glass
 
 			Type = TypeExpressionCodeGen(variableNode->Type);
 
+			if (!Type) {
+				PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
+				return nullptr;
+			}
+
 			if (variableNode->Type->Array)
 			{
 				allocation_type = IR_array;
@@ -695,12 +701,6 @@ namespace Glass
 			else
 			{
 				allocation_type = Type->BaseID;
-
-				if (allocation_type == NULL_ID) {
-					PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
-					PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
-					return nullptr;
-				}
 			}
 			if (!variableNode->Type->Array)
 			{
@@ -2119,6 +2119,9 @@ namespace Glass
 	{
 		auto expr_value = (IRSSAValue*)GetExpressionByValue(cast->Expr);
 
+		if (!expr_value)
+			return nullptr;
+
 		auto new_ssa = CreateIRSSA();
 
 		auto cast_type = TypeExpressionCodeGen(cast->Type);
@@ -2161,21 +2164,19 @@ namespace Glass
 	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{
 		IRSSAValue* expr_value = (IRSSAValue*)GetExpressionByValue(deRefNode->What);
+
+		if (!expr_value)
+			return nullptr;
+
 		TypeStorage* exprType = m_Metadata.GetExprType(expr_value->SSA);
 
 		u16 indirection_count = TypeSystem::IndirectionCount(exprType);
 
 		if (indirection_count == 0) {
 			MSG_LOC(deRefNode);
-			FMT_WARN("trying to dereference a non pointer value, the type of said value is {}", PrintType(TSToLegacy(exprType)));
+			FMT_WARN("trying to dereference a non pointer value, the type of said value is '{}'", PrintType(TSToLegacy(exprType)));
 			return nullptr;
 		}
-
-		// 		IRLoad* load = IR(IRLoad());
-		// 
-		// 		load->SSAddress = expr_value->SSA;
-		// 		load->Type = exprType->BaseID;
-		// 		load->Pointer = (u64)indirection_count - 1;
 
 		m_Metadata.RegExprType(expr_value->SSA, exprType);
 
@@ -2342,6 +2343,10 @@ namespace Glass
 		case NodeType::DeReference:
 		{
 			auto ir_address = (IRSSAValue*)ExpressionCodeGen(expr);
+
+			if (!ir_address)
+				return nullptr;
+
 			auto expr_type = m_Metadata.GetExprType(ir_address->SSA);
 
 			IRLoad* ir_load = IR(IRLoad());

@@ -64,6 +64,7 @@ namespace Glass
 
 		Statement* ParsePrimaryExpr();
 
+		Expression* ParseDeRefExpr();
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
 		Expression* ParseCompExpr();
