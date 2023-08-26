@@ -998,6 +998,9 @@ namespace Glass
 		std::vector<IRSSA*> condition_ssas = PoPIRSSA();
 		PopScope();
 
+		if (!condition)
+			return false;
+
 		IRWhile WHILE;
 		WHILE.SSA = condition->SSA;
 
@@ -1527,11 +1530,18 @@ namespace Glass
 			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
 			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
 
+			if (!left_ssa || !right_ssa) {
+				return nullptr;
+			}
+
+			auto expr_type = m_Metadata.GetExprType(right_ssa->SSA);
+
 			IRStore* store = IR(IRStore());
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = left_ssa->SSA;
-				store->Type = m_Metadata.GetExprType(right_ssa->SSA)->BaseID;
+				store->Type = expr_type->BaseID;
+				store->Pointer = TypeSystem::IndirectionCount(expr_type) - 1;
 			}
 			return store;
 		}
@@ -1714,8 +1724,12 @@ namespace Glass
 
 			return ir_ssa_val;
 		}
-
-		return IR(ir_call);
+		else {
+			auto void_ssa = CreateIRSSA();
+			void_ssa->Type = IR_void;
+			void_ssa->Value = IR(ir_call);
+			return nullptr;
+		}
 	}
 
 
@@ -2348,17 +2362,22 @@ namespace Glass
 				return nullptr;
 
 			auto expr_type = m_Metadata.GetExprType(ir_address->SSA);
+			auto new_type = TypeSystem::ReduceIndirection((TSPtr*)expr_type);
+
+			u16 new_type_ind_count = (u64)TypeSystem::IndirectionCount(new_type);
 
 			IRLoad* ir_load = IR(IRLoad());
 			ir_load->Type = expr_type->BaseID;
-			ir_load->Pointer = TypeSystem::IndirectionCount(expr_type) - 1;
+			ir_load->Pointer = new_type_ind_count;
 			ir_load->SSAddress = ir_address->SSA;
 
 			auto load_ssa = CreateIRSSA();
 
 			load_ssa->Type = expr_type->BaseID;
-			load_ssa->Pointer = TypeSystem::IndirectionCount(expr_type) - 1;
+			load_ssa->Pointer = new_type_ind_count;
 			load_ssa->Value = ir_load;
+
+			m_Metadata.RegExprType(load_ssa->ID, new_type);
 
 			return IR(IRSSAValue(load_ssa->ID));
 		}

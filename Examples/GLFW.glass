@@ -1,0 +1,37 @@
+#foreign fn printf!(u8* fmt) : i32 {};
+#foreign fn malloc(u64 size) : void* {};
+
+//#foreign fn wglGetProcAddress(u8* gl_proc) : void* {};
+
+#foreign struct GLFWwindow{};
+
+#foreign fn glfwInit() : i32 {};
+#foreign fn glfwCreateWindow(i32 w, i32 h, u8* name, void* share, void* monitor) : GLFWwindow* {};
+#foreign fn glfwMakeContextCurrent(GLFWwindow* wnd) : void {};
+#foreign fn glfwWindowShouldClose(GLFWwindow* wnd) : i32 {};
+
+#foreign fn glfwPollEvents() : void {};
+#foreign fn glfwSwapBuffers(GLFWwindow* wnd) : void {};
+
+fn main() : i32 {
+
+	i32 init_result = glfwInit();
+
+	if init_result == 0 {
+		printf("Error Initilizaing GLFW\n");
+		return 0;
+	}
+
+	void* null = 0;
+
+	GLFWwindow* window = glfwCreateWindow(500, 500, "Helo",null, null);
+
+	glfwMakeContextCurrent(window);
+
+	while glfwWindowShouldClose(window) == 0 {
+		glfwPollEvents();
+		glfwSwapBuffers(window);
+	}
+
+	return 0;
+}

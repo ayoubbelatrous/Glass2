@@ -974,6 +974,11 @@ namespace Glass
 			return Application::AllocateAstNode(Node);
 		}
 		break;
+		case TokenType::Multiply:
+		{
+			return ParseDeRefExpr();
+		}
+		break;
 		}
 
 		return nullptr;

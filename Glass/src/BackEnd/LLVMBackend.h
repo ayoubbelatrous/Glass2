@@ -114,10 +114,6 @@ namespace Glass {
 
 			llvm::Type* full_type = GetLLVMType(type);
 
-
-			if (type == IR_void)
-				full_type = Opaque_Type;
-
 			if (pointer) {
 				for (size_t i = 0; i < pointer; i++)
 				{
@@ -237,7 +233,7 @@ namespace Glass {
 			auto function_dbg_type = GetFunctionDebugType(function_id);
 
 			u32 LineNo = (u32)func_metadata->Symbol.Line;
-			u32 ScopeLine = (u32)func_metadata->Symbol.Line;
+			u32 ScopeLine = (u32)func_metadata->Symbol.Line + 1;
 
 			llvm::DIScope* FContext = mDContext;
 
@@ -255,6 +251,8 @@ namespace Glass {
 			llvm_func->setSubprogram(SP);
 
 			m_DLexicalBlocks.push_back(SP);
+
+			//SetDBGLocation(DBGSourceLoc(func_metadata->Symbol.Line + 1, 0));
 		}
 
 		void FinalizeFunctionDebugInfo(llvm::Function* llvm_func) {

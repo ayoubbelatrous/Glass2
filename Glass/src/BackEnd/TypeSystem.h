@@ -149,7 +149,7 @@ namespace Glass {
 				return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);
 			}
 			else {
-				return pointer;
+				return pointer->Pointee;
 			}
 		}
 

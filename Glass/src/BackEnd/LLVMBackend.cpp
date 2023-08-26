@@ -605,6 +605,10 @@ namespace Glass
 			CodeGen(inst);
 		}
 
+		if (func_metadata->ReturnType.ID == IR_void) {
+			m_LLVMBuilder->CreateRet(nullptr);
+		}
+
 		FinalizeFunctionDebugInfo(llvm_Func);
 
 		llvm::verifyFunction(*llvm_Func, &llvm::errs());
