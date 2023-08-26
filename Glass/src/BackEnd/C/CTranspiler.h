@@ -9,7 +9,7 @@ namespace Glass
 	{
 	public:
 
-		CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const Compiler::MetaData* metadata);
+		CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const MetaData* metadata);
 
 		std::string Codegen();
 
@@ -67,7 +67,7 @@ namespace Glass
 
 		std::unordered_map <u64, u64> m_TypeInfoTable;
 
-		const Compiler::MetaData* m_Metadata = nullptr;
+		const MetaData* m_Metadata = nullptr;
 
 		std::unordered_map<u64, std::string> m_TypeMap;
 		IRTranslationUnit* m_Program = nullptr;

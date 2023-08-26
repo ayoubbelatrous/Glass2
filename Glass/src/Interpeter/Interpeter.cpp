@@ -6,7 +6,7 @@
 namespace Glass
 {
 
-	Interpeter::Interpeter(IRInstruction* program, const Compiler::MetaData* metadata)
+	Interpeter::Interpeter(IRInstruction* program, const MetaData* metadata)
 		:m_Program((IRTranslationUnit*)program), m_Metadata(metadata)
 	{
 	}

@@ -6,7 +6,7 @@ namespace Glass {
 
 	class LLVMBackend {
 	public:
-		LLVMBackend(const Compiler::MetaData* metadata, IRTranslationUnit* program);
+		LLVMBackend(const MetaData* metadata, IRTranslationUnit* program);
 
 		void Compile();
 
@@ -63,7 +63,7 @@ namespace Glass {
 		std::unique_ptr<llvm::IRBuilder<>> m_LLVMBuilder;
 		llvm::Module* m_LLVMModule = nullptr;
 
-		const Compiler::MetaData* m_Metadata = nullptr;
+		const MetaData* m_Metadata = nullptr;
 		IRTranslationUnit* m_Program = nullptr;
 
 		//TypeInfo

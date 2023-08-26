@@ -69,7 +69,7 @@ namespace Glass
 		m_DBuilder->finalize();
 	}
 
-	LLVMBackend::LLVMBackend(const Compiler::MetaData* metadata, IRTranslationUnit* program)
+	LLVMBackend::LLVMBackend(const MetaData* metadata, IRTranslationUnit* program)
 		:m_Metadata(metadata), m_Program(program)
 	{
 		m_LLVMModule = new llvm::Module("Glass", *m_LLVMContext);

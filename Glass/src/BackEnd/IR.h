@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BackEnd/Type.h"
+#include "Base/Hash.h"
 
 namespace Glass
 {
@@ -33,16 +34,11 @@ namespace Glass
 		std::vector<TypeInfoMember> members;
 	};
 
-	static inline u64 combineHashes(u64 hash1, u64 hash2) {
-		hash1 ^= hash2 + 0x9e3779b97f4a7c15 + (hash1 << 6) + (hash1 >> 2);
-		return hash1;
-	}
-
 	//Just a place holder for when we add struct parameters
 	static inline u64 TypeInfoStructHash(const TypeInfoStruct& type_info_struct) {
 		u64 base_hash = std::hash<Glass::Type>{}(type_info_struct.Base);
 		u64 members_hash = std::hash<u64>{}(type_info_struct.members.size());
-		return combineHashes(members_hash, base_hash);
+		return Combine2Hashes(members_hash, base_hash);
 	}
 
 	enum class IRType : u64

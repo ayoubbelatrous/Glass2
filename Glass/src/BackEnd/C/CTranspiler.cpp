@@ -7,7 +7,7 @@
 
 namespace Glass
 {
-	CTranspiler::CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const Compiler::MetaData* metadata)
+	CTranspiler::CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const MetaData* metadata)
 		:m_Program(program), m_Includes(includes), m_Metadata(metadata)
 	{
 	}

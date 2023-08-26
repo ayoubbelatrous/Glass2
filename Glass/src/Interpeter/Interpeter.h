@@ -11,7 +11,7 @@ namespace Glass
 	{
 	public:
 
-		Interpeter(IRInstruction* program, const Compiler::MetaData* metadata);
+		Interpeter(IRInstruction* program, const MetaData* metadata);
 
 		void Prepare();
 
@@ -53,7 +53,7 @@ namespace Glass
 
 		std::unordered_map<u64, IRFunction*> m_Functions;
 		IRTranslationUnit* m_Program = nullptr;
-		const Compiler::MetaData* m_Metadata = nullptr;
+		const MetaData* m_Metadata = nullptr;
 
 		u64 m_RegisterPointer = 0;
 		u64 m_StackPointer = 0;

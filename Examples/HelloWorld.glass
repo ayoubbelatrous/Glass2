@@ -13,8 +13,6 @@ struct Entity {
 
 fn main() : i32 {
 
-	void* func = main;
-
 	i32 loop_counter = 100;
 	i32 i = 0;
 

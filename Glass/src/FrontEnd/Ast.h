@@ -228,6 +228,64 @@ namespace Glass
 		}
 	};
 
+	class TypeExpressionTypeName : public Expression
+	{
+	public:
+
+		Token Symbol;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TypeExpression;
+		}
+
+		virtual std::string ToString() const {
+			return "<" + Symbol.Symbol + ">";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Symbol;
+		}
+	};
+
+	class TypeExpressionArray : public Expression
+	{
+	public:
+
+		TypeExpression* ElementType;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TypeExpression;
+		}
+
+		virtual std::string ToString() const {
+			return "";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return ElementType->GetLocation();
+		}
+	};
+
+	class TypeExpressionPointer : public Expression
+	{
+	public:
+
+		Token Symbol;
+		TypeExpression Pointee;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TypeExpression;
+		}
+
+		virtual std::string ToString() const {
+			return "<" + Symbol.Symbol + ">";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Symbol;
+		}
+	};
+
 	class NumericLiteral : public Expression
 	{
 	public:

@@ -17,6 +17,8 @@
 
 namespace Glass
 {
+	TypeSystem* TypeSystem::m_Instance = nullptr;
+
 	Compiler::Compiler(std::vector<CompilerFile*> files) : m_Files(files)
 	{
 	}
@@ -171,6 +173,8 @@ namespace Glass
 		}
 
 		m_TypeIDCounter = IR_typeinfo;
+
+		TypeSystem::Init(m_Metadata);
 	}
 
 	IRTranslationUnit* Compiler::CodeGen()
@@ -2140,18 +2144,18 @@ namespace Glass
 	IRInstruction* Compiler::RefCodeGen(const RefNode* refNode)
 	{
 		GS_CORE_ASSERT("Not Yet Implemented");
-		// 
+		//
 		// 		IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(refNode->What);
 		// 		const Glass::Type& exprType = m_Metadata.GetExprType(expr_value->SSA);
-		// 
+		//
 		// 		IRSSA* ir_ssa = CreateIRSSA();
 		// 		ir_ssa->Type = exprType.ID;
 		// 		ir_ssa->Pointer = exprType.Pointer + 1;
 		// 		ir_ssa->Value = ssa_value;
-		// 
+		//
 		// 		Glass::Type expr_type = exprType;
 		// 		expr_type.Pointer--;
-		// 
+		//
 		// 		m_Metadata.RegExprType(ir_ssa->ID, expr_type);
 
 		return nullptr;
