@@ -18,7 +18,7 @@ int
 **.ll
 **.s
 **.s
-
+**.pdb
 .vscode/tasks.json
 generated.c
 generated.exe

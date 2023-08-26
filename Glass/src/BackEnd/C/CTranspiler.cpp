@@ -441,7 +441,7 @@ typedef struct Any
 
 			std::string ptr;
 
-			for (u64 i = 0; i < load->ReferencePointer; i++)
+			for (u64 i = 0; i < load->Pointer; i++)
 			{
 				ptr += "*";
 			}

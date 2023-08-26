@@ -11,6 +11,8 @@
 
 namespace Glass {
 
+	struct TypeStorage;
+
 	using TypeFlags = u64;
 	using TypeInfoFlags = u64;
 
@@ -103,7 +105,8 @@ namespace Glass {
 	struct VariableMetadata
 	{
 		Token Name;
-		Type Tipe;
+		TypeStorage* Type = nullptr;
+		Glass::Type Tipe;
 		bool IsArg = false;
 		bool Global = false;
 
@@ -222,6 +225,7 @@ namespace Glass {
 		std::vector<ArgumentMetadata> Arguments;
 
 		Type ReturnType;
+		TypeStorage* ReturnTypeNew = nullptr;
 
 		bool Variadic = false;
 		bool Foreign = false;
@@ -433,7 +437,7 @@ namespace Glass {
 		std::unordered_map<std::string, u64> m_EnumNames;
 		std::unordered_map<u64, EnumMetadata> m_Enums;
 
-		std::unordered_map<u64, std::unordered_map<u64, Type>> m_ExpressionType;
+		std::unordered_map<u64, std::unordered_map<u64, TypeStorage*>> m_ExpressionType;
 
 		std::unordered_map<Operator, std::unordered_map<OperatorQuery, u64, OperatorQueryHasher>> m_Operators;
 
@@ -609,7 +613,7 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false, const Token& symbol = {}) {
+		void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false, const Token& symbol = {}, TypeStorage* ret_t_new = nullptr) {
 			FunctionMetadata func;
 			func.Name = name;
 			func.ReturnType = returnType;
@@ -678,11 +682,11 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		const Type& GetExprType(u64 ssa) const {
+		TypeStorage* GetExprType(u64 ssa) const {
 			return m_ExpressionType.at(m_CurrentFunction).at(ssa);
 		}
 
-		void RegExprType(u64 ssa, const Type& type) {
+		void RegExprType(u64 ssa, TypeStorage* type) {
 			m_ExpressionType[m_CurrentFunction][ssa] = type;
 		}
 

@@ -1,21 +1,4 @@
-fn Update() : i32 {
-
-	Color clear_color;
-
-	clear_color.r = 0-128;
-	clear_color.g = 0-128;
-	clear_color.b = 0-128;
-	clear_color.a = 0-128;
-
-	BeginDrawing();
-	ClearBackground(clear_color);
-
-	DrawFPS(60,60);
-
-	EndDrawing();
-
-	return 0;
-}
+#foreign fn ColorFromHSV(f32 hue, f32 sat, f32 value) : Color {};
 
 fn main() : i32 {
 
@@ -25,8 +8,23 @@ fn main() : i32 {
 
 	InitWindow(500, 700, "Hello Window");
 
-	while  WindowShouldClose() != 1 {
-		Update();
+	Color clear_color;
+
+	clear_color.r = 255;
+	clear_color.g = 255;
+	clear_color.b = 255;
+	clear_color.a = 255;
+
+	u32 color = 125;
+
+	while WindowShouldClose() != 1 {
+
+		BeginDrawing();
+		ClearBackground(color);
+
+		DrawFPS(60, 60);
+
+		EndDrawing();
 	}
 
 	return 0;

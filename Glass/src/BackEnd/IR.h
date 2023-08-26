@@ -577,7 +577,7 @@ namespace Glass
 		u64 ID = 0;
 		u64 SSAddress = 0;
 		u64 Type = 0;
-		u64 ReferencePointer = false;
+		u64 Pointer = false;
 
 		virtual std::string ToString() const override {
 			return 	fmt::format("LOAD ${}", SSAddress);

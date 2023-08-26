@@ -23,6 +23,30 @@ namespace Glass
 
 		Statement* ParseTypeExpr();
 
+		// i32*[..]* var;
+		/*
+		*
+		*	TypeName
+			|
+			|___> Pointer
+						 |
+						 |___>Array
+								  |
+								  |___>Pointer
+			TypeName
+			|
+			|___> Pointer
+						 |
+						 |___>Array
+								  |
+								  |___>Pointer
+		*
+		*/
+
+		Statement* ParseTypeExprName();
+		Statement* ParseTypeExprPointer();
+		Statement* ParseTypeExprArray();
+
 		Statement* ParseScope();
 		Statement* ParseArgumentList();
 		Statement* ParseFunction();

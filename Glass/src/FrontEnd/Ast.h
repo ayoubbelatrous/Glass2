@@ -13,7 +13,13 @@ namespace Glass
 		NumericLiteral,
 		StringLiteral,
 		BinaryExpression,
+
 		TypeExpression,
+
+		TE_TypeName,
+		TE_Pointer,
+		TE_Array,
+
 		Scope,
 		ArgumentList,
 		Function,
@@ -228,14 +234,14 @@ namespace Glass
 		}
 	};
 
-	class TypeExpressionTypeName : public Expression
+	class TypeExpressionTypeName : public TypeExpression
 	{
 	public:
 
 		Token Symbol;
 
 		virtual NodeType GetType() const override {
-			return NodeType::TypeExpression;
+			return NodeType::TE_TypeName;
 		}
 
 		virtual std::string ToString() const {
@@ -247,14 +253,33 @@ namespace Glass
 		}
 	};
 
-	class TypeExpressionArray : public Expression
+	class TypeExpressionPointer : public TypeExpression
+	{
+	public:
+
+		TypeExpression* Pointee = nullptr;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TE_Pointer;
+		}
+
+		virtual std::string ToString() const {
+			return "";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Pointee->GetLocation();
+		}
+	};
+
+	class TypeExpressionArray : public TypeExpression
 	{
 	public:
 
 		TypeExpression* ElementType;
 
 		virtual NodeType GetType() const override {
-			return NodeType::TypeExpression;
+			return NodeType::TE_Array;
 		}
 
 		virtual std::string ToString() const {
@@ -263,26 +288,6 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return ElementType->GetLocation();
-		}
-	};
-
-	class TypeExpressionPointer : public Expression
-	{
-	public:
-
-		Token Symbol;
-		TypeExpression Pointee;
-
-		virtual NodeType GetType() const override {
-			return NodeType::TypeExpression;
-		}
-
-		virtual std::string ToString() const {
-			return "<" + Symbol.Symbol + ">";
-		}
-
-		virtual const Token& GetLocation() const override {
-			return Symbol;
 		}
 	};
 

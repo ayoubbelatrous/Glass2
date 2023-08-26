@@ -30,6 +30,10 @@ namespace Glass
 		std::string Error;
 		auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
 
+		if (!Error.empty()) {
+			GS_CORE_ERROR("llvm error: Target Error {}", Error);
+		}
+
 		auto CPU = "generic";
 		auto Features = "";
 
@@ -111,6 +115,9 @@ namespace Glass
 			InsertLLVMDebugType(IR_i16, m_DBuilder->createBasicType("i16", 16, llvm::dwarf::DW_ATE_signed));
 			InsertLLVMDebugType(IR_i32, m_DBuilder->createBasicType("i32", 32, llvm::dwarf::DW_ATE_signed));
 			InsertLLVMDebugType(IR_i64, m_DBuilder->createBasicType("i64", 64, llvm::dwarf::DW_ATE_signed));
+
+			InsertLLVMDebugType(IR_f32, m_DBuilder->createBasicType("f32", 32, llvm::dwarf::DW_ATE_float));
+			InsertLLVMDebugType(IR_f64, m_DBuilder->createBasicType("f64", 64, llvm::dwarf::DW_ATE_float));
 
 			InsertLLVMDebugType(IR_void, m_DBuilder->createUnspecifiedType("void"));
 
@@ -748,7 +755,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
-		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->ReferencePointer), GetName(load->SSAddress));
+		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->Pointer), GetName(load->SSAddress));
 		return ld;
 	}
 

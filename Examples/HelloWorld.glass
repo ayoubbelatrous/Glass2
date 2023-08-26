@@ -1,39 +1,8 @@
 #foreign fn printf!(u8* fmt) : i32 {};
 #foreign fn malloc(u64 size) : void* {};
 
-enum Entity_Flags {
-	Player;
-	Enemy;
-};
-
-struct Entity {
-	u32 			ID;
-	Entity_Flags 	Flags;
-};
-
 fn main() : i32 {
 
-	i32 loop_counter = 100;
-	i32 i = 0;
-
-	while i < loop_counter {
-
-		if (i / 3) == 0 {
-			printf("foo\n");
-		}
-
-		if (i / 5) == 0 {
-			printf("bar\n");
-		}
-
-		if (i / 5) == 0 {
-			if (i / 3) == 0 {
-				printf("foo bar\n");
-			}
-		}
-
-		i = i + 1;
-	}
-
+	i64 num = 4;
 	return 0;
 }
