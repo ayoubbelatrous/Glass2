@@ -927,8 +927,17 @@ namespace Glass
 				return ParseSizeOfExpr();
 			}
 			else {
+
+				if (
+					At().Type == TokenType::Symbol &&
+					At(1).Type == TokenType::Multiply) {
+
+					return ParseTypeExpr();
+				}
+
 				Identifier identifier;
 				identifier.Symbol = Consume();
+
 				return AST(identifier);
 			}
 		}

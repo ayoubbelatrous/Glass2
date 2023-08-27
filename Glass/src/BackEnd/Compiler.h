@@ -53,12 +53,16 @@ namespace Glass
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
 		IRInstruction* CastCodeGen(const CastNode* typeof);
 
+		IRInstruction* TypeInfoCodeGen(const FunctionCall* type_info_call);
+
 		IRInstruction* RefCodeGen(const RefNode* refNode);
 		IRInstruction* DeRefCodeGen(const DeRefNode* deRefNode);
 
 		IRSSAValue* GetExpressionByValue(const Expression* expr);
 		IRSSAValue* PassAsAny(const Expression* expr);
 		IRSSAValue* PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg);
+		IRSSAValue* TypeExpressionCodeGen(TypeExpression* type_expr);
+		IRSSAValue* TypeValueCodeGen(TypeStorage* type);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
@@ -66,7 +70,8 @@ namespace Glass
 
 		IRFunction* CreatePolyMorhOverload(u64 ID, const PolyMorphOverloads& overloads);
 
-		TypeStorage* TypeExpressionCodeGen(TypeExpression* type_expr);
+		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
+
 		Glass::Type TSToLegacy(TypeStorage* type);
 		TypeStorage* LegacyToTS(const Glass::Type& type);
 

@@ -134,6 +134,10 @@ namespace Glass
 		TypeOf,
 		SizeOf,
 
+		TypeInfo,
+
+		TypeValue,
+
 		GlobAddress,
 		GlobDecl,
 
@@ -149,6 +153,23 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const = 0;
+	};
+
+	struct IRTypeValue : public IRInstruction {
+
+		IRTypeValue(TypeStorage* type)
+			:Type(type)
+		{}
+
+		TypeStorage* Type;
+
+		virtual std::string ToString() const {
+			return "TypeValue()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::TypeValue;
+		}
 	};
 
 	struct IRCONSTValue : public IRInstruction {
@@ -769,6 +790,24 @@ namespace Glass
 		}
 	};
 
+	struct IRTypeInfo : public IRInstruction {
+		u64 ID = 0;
+		u64 ArgumentSSA = -1;
+
+		IRTypeInfo(u64 argument)
+			:ArgumentSSA(argument)
+		{}
+
+		virtual std::string ToString() const override
+		{
+			return "typeinfo()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::TypeInfo;
+		}
+	};
+
 	struct IREQ : public IRInstruction {
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
@@ -1040,15 +1079,15 @@ namespace Glass
 		u64 ID = 0;
 
 		u64 DataSSA;
-		u64 TypeID;
+		TypeStorage* Type;
 
-		IRAny(u64 data, u64 type_id)
-			: DataSSA(data), TypeID(type_id)
+		IRAny(u64 data, TypeStorage* type_id)
+			: DataSSA(data), Type(type_id)
 		{
 		}
 
 		virtual std::string ToString() const override {
-			return fmt::format("Any ({},{})", DataSSA, TypeID);
+			return fmt::format("Any ({})", DataSSA);
 		}
 
 		virtual IRNodeType GetType() const {

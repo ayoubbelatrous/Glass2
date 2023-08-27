@@ -144,6 +144,15 @@ namespace Glass {
 			return new_type;
 		}
 
+		static TypeStorage* IncreaseIndirection(TypeStorage* type) {
+			if (type->Kind == TypeStorageKind::Pointer) {
+				return TypeSystem::GetPtr(((TSPtr*)type)->Pointee, ((TSPtr*)type)->Indirection + 1);
+			}
+			else {
+				return TypeSystem::GetPtr(type, 1);
+			}
+		}
+
 		static TypeStorage* ReduceIndirection(TSPtr* pointer) {
 			if (pointer->Indirection - 1 != 0) {
 				return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);

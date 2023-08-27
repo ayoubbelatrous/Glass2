@@ -340,6 +340,11 @@ namespace Glass {
 				type_info_flags |= TI_STRUCT;
 			}
 
+			if (type_flags & TypeFlag::FLAG_ENUM_TYPE) {
+				type_info_flags |= TI_ENUM;
+			}
+
+
 			return type_info_flags;
 		}
 

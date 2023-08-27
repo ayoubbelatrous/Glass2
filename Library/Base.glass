@@ -1,37 +1,38 @@
 struct Any {
-	Type 	type;
-	void* 	data;
+	Type 	type				;
+	void* 	data				;
 };
 
 struct Array {
-	u64 	count;
-	void* 	data;
+	u64 	count				;
+	void* 	data				;
 };
 
 enum #flags TypeInfo_Flags {
-	BASE_TYPE		;
-	NUMERIC_TYPE	;
-	UNSIGNED_TYPE	;
-	FLOATING_TYPE	;
-	STRUCT			;
-	STRUCT_MEMBER	;
-	ENUM			;
-	FUNCTION		;
+	BASE_TYPE					;
+	NUMERIC_TYPE				;
+	UNSIGNED_TYPE				;
+	FLOATING_TYPE				;
+	STRUCT						;
+	STRUCT_MEMBER				;
+	ENUM						;
+	FUNCTION					;
 };
 
 struct TypeInfo {
-	u8* name;
-	u64 flags;
+	u8* name					;
+	TypeInfo_Flags flags		;
 };
 
 struct TypeInfo_Member {
-	Type type;
-	u8* name;
+	u8* name					;
+	Type type					;
+	u32 offset					;
 };
 
 struct TypeInfo_Struct {
-	u8* name;
-	u64 flags;
-
-	TypeInfo_Member* members;
+	u8* name					;
+	TypeInfo_Flags flags		;
+	TypeInfo_Member* members	;
+	u64 member_count			;
 };

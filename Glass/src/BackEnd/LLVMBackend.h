@@ -52,7 +52,9 @@ namespace Glass {
 		llvm::Value* AnyArrayCodeGen(const IRAnyArray* any_array);
 
 		//TypeInfo
-		llvm::Value* TypeOfCodeGen(const IRTypeOf* any_array);
+		llvm::Value* TypeOfCodeGen(const IRTypeOf* type_of);
+		llvm::Value* TypeInfoCodeGen(const IRTypeInfo* type_info);
+		llvm::Value* TypeValueCodeGen(const IRTypeValue* type_value);
 		/////////////////////////
 
 		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type);
@@ -113,6 +115,11 @@ namespace Glass {
 		llvm::Type* GetLLVMTypeFull(u64 type, u64 pointer) {
 
 			llvm::Type* full_type = GetLLVMType(type);
+
+			if (pointer) {
+				if (type == IR_void)
+					return Opaque_Type;
+			}
 
 			if (pointer) {
 				for (size_t i = 0; i < pointer; i++)
