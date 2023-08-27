@@ -170,6 +170,14 @@ namespace Glass {
 			return type->Kind == TypeStorageKind::Array;
 		}
 
+		static std::unordered_map<u64, TypeStorage*>& GetTypeMap() {
+			return m_Instance->m_Types;
+		}
+
+		static u64 GetTypeInfoIndex(TypeStorage* ts) {
+			return std::distance(m_Instance->m_Types.begin(), m_Instance->m_Types.find(ts->Hash));
+		}
+
 	private:
 
 		const MetaData& m_Metadata;

@@ -315,18 +315,6 @@ namespace Glass {
 	{
 		//TypeInfo
 
-		std::unordered_map<u64, TypeInfo*> m_UniqueTypeInfoMap;
-
-		u64 InsertUniqueTypeInfo(TypeInfo* type_info) {
-			m_UniqueTypeInfoMap[std::hash<Glass::Type>{}(type_info->Base)] = type_info;
-			return std::distance(m_UniqueTypeInfoMap.begin(), m_UniqueTypeInfoMap.find(std::hash<Glass::Type>{}(type_info->Base)));
-		}
-
-		u64 InsertUniqueTypeInfoStruct(TypeInfoStruct* type_info_struct) {
-			m_UniqueTypeInfoMap[TypeInfoStructHash(*type_info_struct)] = (TypeInfo*)type_info_struct;
-			return std::distance(m_UniqueTypeInfoMap.begin(), m_UniqueTypeInfoMap.find(TypeInfoStructHash(*type_info_struct)));
-		}
-
 		TypeInfoFlags GetTypeInfoFlags(u64 Type) const
 		{
 			TypeInfoFlags type_info_flags = 0;
@@ -605,7 +593,7 @@ namespace Glass {
 			m_GlobalVariables[name] = glob_id;
 		}
 
-		u64 GetGlobalVariable(const std::string& name) {
+		u64 GetGlobalVariable(const std::string& name) const {
 			auto it = m_GlobalVariables.find(name);
 			if (it != m_GlobalVariables.end()) {
 				return it->second;
@@ -690,7 +678,7 @@ namespace Glass {
 			m_ExpressionType[m_CurrentFunction][ssa] = type;
 		}
 
-		SymbolType GetSymbolType(const std::string& symbol) {
+		SymbolType GetSymbolType(const std::string& symbol) const {
 			if (GetFunctionMetadata(symbol) != (u64)-1) {
 				return SymbolType::Function;
 			}
@@ -725,17 +713,17 @@ namespace Glass {
 			m_TypeFlags[TypeID] |= FLAG_NUMERIC_TYPE;
 		}
 
-		const EnumMetadata* GetEnumFromType(u64 type_id) {
+		const EnumMetadata* GetEnumFromType(u64 type_id) const {
 			auto it = m_TypeToEnum.find(type_id);
 
 			if (it != m_TypeToEnum.end()) {
-				return &m_Enums[it->second];
+				return &m_Enums.at(it->second);
 			}
 
 			return nullptr;
 		}
 
-		const EnumMetadata* GetEnum(u64 enum_id) {
+		const EnumMetadata* GetEnum(u64 enum_id) const {
 			auto it = m_Enums.find(enum_id);
 
 			if (it != m_Enums.end()) {
@@ -745,11 +733,11 @@ namespace Glass {
 			return nullptr;
 		}
 
-		const EnumMetadata* GetEnum(const std::string& name) {
+		const EnumMetadata* GetEnum(const std::string& name) const {
 			auto it = m_EnumNames.find(name);
 
 			if (it != m_EnumNames.end()) {
-				return &m_Enums[it->second];
+				return &m_Enums.at(it->second);
 			}
 
 			return nullptr;

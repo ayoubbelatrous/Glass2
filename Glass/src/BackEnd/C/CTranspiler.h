@@ -57,14 +57,6 @@ namespace Glass
 		std::string m_LabelCode;
 		std::string m_SSAHeader;
 
-		std::unordered_map <u64, TypeInfo> m_VariableTypeInfo;
-		std::unordered_map <u64, TypeInfoStruct> m_VariableStructTypeInfo;
-		std::unordered_map <u64, TypeInfoMember> m_VariableMemberTypeInfo;
-
-		u64 GetVarTypeInfoID() {
-			return m_VariableTypeInfo.size() + 1;
-		}
-
 		std::unordered_map <u64, u64> m_TypeInfoTable;
 
 		const MetaData* m_Metadata = nullptr;

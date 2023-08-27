@@ -1,11 +1,18 @@
 #foreign fn printf!(u8* fmt) : i32 {};
 #foreign fn malloc(u64 size) : void* {};
 
-fn main() : i32 {
+fn print(Any... args) : i32 {
 
-	u64 size = sizeof(i32);
+	i32 i = 0;
+	i32 count = 0;
 
-	i32* data = cast(i32*) malloc(size);
+	while i < count {
+		i = i + 1;
+	}
 
+	return 0;
+}
+
+fn main () : i32 {
 	return 0;
 }

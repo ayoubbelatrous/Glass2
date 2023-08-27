@@ -5,41 +5,8 @@
 
 namespace Glass
 {
-	enum class TypeInfoType
-	{
-		Base = 0,
-		Member,
-		Struct,
-	};
 
-	struct TypeInfo
-	{
-		Glass::Type Base;
-		TypeInfoType Type;
-	};
-
-	struct TypeInfoMember
-	{
-		Glass::Type Base;
-		TypeInfoType Type;
-
-		std::string member_name;
-	};
-
-	struct TypeInfoStruct
-	{
-		Glass::Type Base;
-		TypeInfoType Type = TypeInfoType::Struct;
-
-		std::vector<TypeInfoMember> members;
-	};
-
-	//Just a place holder for when we add struct parameters
-	static inline u64 TypeInfoStructHash(const TypeInfoStruct& type_info_struct) {
-		u64 base_hash = std::hash<Glass::Type>{}(type_info_struct.Base);
-		u64 members_hash = std::hash<u64>{}(type_info_struct.members.size());
-		return Combine2Hashes(members_hash, base_hash);
-	}
+	struct TypeStorage;
 
 	enum class IRType : u64
 	{
@@ -790,7 +757,7 @@ namespace Glass
 	struct IRTypeOf : public IRInstruction {
 		u64 ID = 0;
 
-		u64 GlobalTypeArrayIndex = 0;
+		TypeStorage* Type = 0;
 
 		virtual std::string ToString() const override
 		{

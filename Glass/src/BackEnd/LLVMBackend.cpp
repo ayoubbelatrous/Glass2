@@ -322,6 +322,8 @@ namespace Glass
 
 	void LLVMBackend::GenerateTypeInfo()
 	{
+		std::unordered_map<u64, TypeStorage*>& UniqueTypeInfoMap = TypeSystem::GetTypeMap();
+
 		llvm::Type* llvm_TypeInfoElemMemberTy = GetLLVMType(IR_u64);
 
 		llvm::Type* llvm_TypeInfoElemMemberBodyTy[4] =
@@ -341,35 +343,30 @@ namespace Glass
 		{
 			std::vector<llvm::Constant*> llvm_GlobalTypeInfoArray_MemberData;
 
-
 			u64 total_Struct_type_info_elements = 0;
 			u64 Struct_type_info_elements_index = 0;
 
-			for (auto& [hash, typeinfo] : m_Metadata->m_UniqueTypeInfoMap) {
-				if (typeinfo->Type == TypeInfoType::Struct) {
+			for (const auto& [struct_id, struct_metadata] : m_Metadata->m_StructMetadata) {
 
-					TypeInfoStruct* typeinfo_Struct = (TypeInfoStruct*)typeinfo;
+				for (const MemberMetadata& member : struct_metadata.Members) {
 
-					for (const TypeInfoMember& member : typeinfo_Struct->members) {
+					llvm::Constant* ti_member_elem = nullptr;
+					llvm::Constant* ti_elem_member_name = m_LLVMBuilder->CreateGlobalStringPtr(member.Name.Symbol, "", 0, m_LLVMModule);
 
-						llvm::Constant* ti_member_elem = nullptr;
-						llvm::Constant* ti_elem_member_name = m_LLVMBuilder->CreateGlobalStringPtr(member.member_name, "", 0, m_LLVMModule);
+					ti_member_elem = llvm::ConstantStruct::get(
+						(llvm::StructType*)GetLLVMType(IR_typeinfo_member)
+						, {
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							ti_elem_member_name,
+						});
 
-						ti_member_elem = llvm::ConstantStruct::get(
-							(llvm::StructType*)GetLLVMType(IR_typeinfo_member)
-							, {
-								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-								ti_elem_member_name,
-							});
-
-						llvm_GlobalTypeInfoArray_MemberData.push_back(ti_member_elem);
-						total_Struct_type_info_elements++;
-					}
-
-
-					Struct_Typeinfo_member_indices[hash] = Struct_type_info_elements_index;
-					Struct_type_info_elements_index++;
+					llvm_GlobalTypeInfoArray_MemberData.push_back(ti_member_elem);
+					total_Struct_type_info_elements++;
 				}
+
+
+				Struct_Typeinfo_member_indices[struct_id] = Struct_type_info_elements_index;
+				Struct_type_info_elements_index++;
 			}
 
 			auto llvm_TypeInfoMember_ArrayTy = llvm::ArrayType::get(
@@ -387,48 +384,52 @@ namespace Glass
 				);
 		}
 
-		u64 total_type_info_elements
-			= m_Metadata->m_UniqueTypeInfoMap.size();
+		u64 total_type_info_elements = UniqueTypeInfoMap.size();
 
 		llvm::ArrayType* llvm_TypeInfoArrayTy
 			= llvm::ArrayType::get(m_TypeInfoElemTy, total_type_info_elements);
 
 		std::vector<llvm::Constant*> llvm_GlobalTypeInfoArrayData;
 
-		for (auto& [hash, typeinfo] : m_Metadata->m_UniqueTypeInfoMap) {
+		for (auto& [hash, typeinfo] : UniqueTypeInfoMap) {
 
 			llvm::Constant* ti_elem = nullptr;
 
-			if (typeinfo->Type == TypeInfoType::Base) {
+			u64 struct_id = m_Metadata->GetStructIDFromType(typeinfo->BaseID);
 
-				llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(m_Metadata->GetType(typeinfo->Base.ID), "", 0, m_LLVMModule);
+			TypeInfoFlags type_info_flags = m_Metadata->GetTypeInfoFlags(typeinfo->BaseID);
+
+			if (struct_id == -1) {
+
+				llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(
+					m_Metadata->GetType(typeinfo->BaseID), "", 0, m_LLVMModule);
 
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
-						llvm::ConstantExpr::getPtrToInt(ti_elem_name,GetLLVMType(IR_u64)),
-						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeInfoFlags(typeinfo->Base.ID)),
+						llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 					});
 			}
-			else {
-				TypeInfoStruct* typeinfo_Struct = (TypeInfoStruct*)typeinfo;
+			else if (struct_id != -1) {
+				const StructMetadata* struct_metadata = m_Metadata->GetStructMetadata(struct_id);
 
 				llvm::Constant* ti_elem_name =
 					m_LLVMBuilder->CreateGlobalStringPtr(
-						m_Metadata->GetType(typeinfo_Struct->Base.ID), "", 0, m_LLVMModule);
+						struct_metadata->Name.Symbol, "", 0, m_LLVMModule);
 
 				llvm::Constant* ti_elem_members_ptr =
 					llvm::ConstantExpr::getGetElementPtr(
 						GetLLVMType(IR_typeinfo_member),
 						llvm_GlobalMemberTypeInfo_Array,
-						llvm::ConstantInt::get(GetLLVMType(IR_u64), Struct_Typeinfo_member_indices[hash])
+						llvm::ConstantInt::get(GetLLVMType(IR_u64), Struct_Typeinfo_member_indices[struct_id])
 					);
 
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
 						llvm::ConstantExpr::getPtrToInt(ti_elem_name,GetLLVMType(IR_u64)),
-						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeInfoFlags(typeinfo->Base.ID)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
 						llvm::ConstantExpr::getPtrToInt(ti_elem_members_ptr,GetLLVMType(IR_u64)),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 					});
@@ -457,7 +458,7 @@ namespace Glass
 		llvm::Value* llvm_TypeInfoPtr = m_LLVMBuilder->CreateGEP(
 			m_TypeInfoElemTy,
 			m_GlobalTypeInfoArray,
-			llvm::ConstantInt::get(GetLLVMType(IR_u64), typeof->GlobalTypeArrayIndex),
+			llvm::ConstantInt::get(GetLLVMType(IR_u64), TypeSystem::GetTypeInfoIndex(typeof->Type)),
 			"ti_lookup");
 
 		return m_LLVMBuilder->CreateBitCast(llvm_TypeInfoPtr, GetLLVMTypeFull(IR_typeinfo, 1));

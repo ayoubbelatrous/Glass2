@@ -2071,49 +2071,14 @@ namespace Glass
 			type_id = m_Metadata.GetExprType(code->SSA)->BaseID;
 		}
 
-		{
-			u64 struct_id = m_Metadata.GetStructIDFromType(type_id);
-
-			if (struct_id != (u64)-1)
-			{
-
-				const StructMetadata* struct_metadata = m_Metadata.GetStructMetadata(struct_id);
-
-				TypeInfoStruct* type_info_struct = IR(TypeInfoStruct());
-
-				type_info_struct->Base.ID = type_id;
-				type_info_struct->Base.Pointer = pointer;
-				type_info_struct->Base.Array = false;
-
-				for (const MemberMetadata& member : struct_metadata->Members)
-				{
-					TypeInfoMember member_type_info;
-
-					member_type_info.Base.ID = member.Tipe.ID;
-					member_type_info.Base.Pointer = member.Tipe.Pointer;
-					member_type_info.Base.Array = member.Tipe.Array;
-					member_type_info.member_name = member.Name.Symbol;
-
-					type_info_struct->members.push_back(member_type_info);
-				}
-
-				GlobalTypeInfoArrayIndex = m_Metadata.InsertUniqueTypeInfoStruct(type_info_struct);
-			}
-			else
-			{
-				TypeInfo* type_info_basic = IR(TypeInfo());
-
-				type_info_basic->Base.ID = type_id;
-				type_info_basic->Base.Pointer = pointer;
-
-				GlobalTypeInfoArrayIndex = m_Metadata.InsertUniqueTypeInfo(type_info_basic);
-			}
-		}
-
 		IRSSA* ssa = CreateIRSSA();
 
 		IRTypeOf type_of;
-		type_of.GlobalTypeArrayIndex = GlobalTypeInfoArrayIndex;
+
+		Glass::Type type_info_query;
+		type_info_query.ID = type_id;
+
+		type_of.Type = LegacyToTS(type_info_query);
 
 		ssa->Value = IR(type_of);
 
