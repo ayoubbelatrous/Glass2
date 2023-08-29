@@ -244,7 +244,8 @@ namespace Glass
 
 	Statement* ASTCopier::CopyTypeExpr(TypeExpression* expr)
 	{
-		return Application::AllocateAstNode(*expr);
+		//return Application::AllocateAstNode(*expr);
+		return nullptr;
 	}
 
 	Statement* ASTCopier::CopyArrayAccess(ArrayAccess* expr)

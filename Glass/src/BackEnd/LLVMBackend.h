@@ -24,11 +24,14 @@ namespace Glass {
 		llvm::Value* SSACodeGen(const IRSSA* ssa);
 		llvm::Value* SSAValueCodeGen(const IRSSAValue* ssa_value);
 
+		llvm::Value* GlobalAddrCodeGen(const IRGlobalAddress* global_address);
+
 		llvm::Value* ConstValueCodeGen(const IRCONSTValue* constant);
 
 		llvm::Value* OpCodeGen(const IRBinOp* op);
 
 		llvm::Value* AllocaCodeGen(const IRAlloca* alloca);
+		void GlobalVariableCodeGen(const IRGlobalDecl* global_decl);
 
 		llvm::Value* LoadCodeGen(const IRLoad* load);
 		llvm::Value* StoreCodeGen(const IRStore* store);
@@ -44,6 +47,7 @@ namespace Glass {
 		llvm::Value* SizeOfCodeGen(const IRSizeOF* size_of);
 
 		llvm::Value* PointerCastCodeGen(const IRPointerCast* ptr_cast);
+		llvm::Value* NullPtrCodeGen(const IRNullPtr* null_ptr);
 
 		llvm::Value* IfCodeGen(const IRIf* _if);
 		llvm::Value* WhileCodeGen(const IRWhile* _while);
@@ -57,7 +61,7 @@ namespace Glass {
 		llvm::Value* TypeValueCodeGen(const IRTypeValue* type_value);
 		/////////////////////////
 
-		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type);
+		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Constant* arraySize = nullptr);
 
 	private:
 
@@ -98,6 +102,16 @@ namespace Glass {
 		llvm::Value* GetName(u64 id)
 		{
 			return m_Names.at(m_CurrentFunctionID).at(id);
+		}
+
+		llvm::Value* InsertGlobalVariable(u64 id, llvm::GlobalVariable* global_variable)
+		{
+			return m_GlobalVariables[id] = global_variable;
+		}
+
+		llvm::Value* GetGlobalVariable(u64 id)
+		{
+			return m_GlobalVariables.at(id);
 		}
 
 		void InsertLLVMType(u64 type_id, llvm::Type* llvm_type) {
@@ -173,6 +187,7 @@ namespace Glass {
 
 		u64 m_CurrentFunctionID = 0;
 		std::unordered_map<u64, std::unordered_map<u64, llvm::Value*>> m_Names;
+		std::unordered_map<u64, llvm::GlobalVariable*> m_GlobalVariables;
 
 		std::unordered_map<u64, std::vector<llvm::Value*>> m_FunctionArgNames;
 		std::unordered_map<u64, llvm::Function*> m_LLVMFunctions;

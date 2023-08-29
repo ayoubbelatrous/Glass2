@@ -633,15 +633,15 @@ typedef struct Any
 		case IRNodeType::GlobDecl:
 		{
 			IRGlobalDecl* global_decl = (IRGlobalDecl*)inst;
+			// 
+			// 			std::string type = m_Metadata->GetType(global_decl->Type);
+			// 
+			// 			for (u64 i = 0; i < global_decl->Pointer; i++)
+			// 			{
+			// 				type.push_back('*');
+			// 			}
 
-			std::string type = m_Metadata->GetType(global_decl->Type);
-
-			for (u64 i = 0; i < global_decl->Pointer; i++)
-			{
-				type.push_back('*');
-			}
-
-			return fmt::format("{} __glob{}", type, global_decl->GlobID);
+			return fmt::format("{} __glob{}", 0, global_decl->GlobID);
 		}
 		break;
 		}

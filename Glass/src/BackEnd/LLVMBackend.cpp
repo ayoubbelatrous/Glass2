@@ -528,6 +528,9 @@ namespace Glass
 		case IRNodeType::SSAValue: return SSAValueCodeGen((IRSSAValue*)instruction);
 		case IRNodeType::Alloca: return AllocaCodeGen((IRAlloca*)instruction);
 
+		case IRNodeType::GlobDecl: GlobalVariableCodeGen((IRGlobalDecl*)instruction); break;
+		case IRNodeType::GlobAddress: return GlobalAddrCodeGen((IRGlobalAddress*)instruction);
+
 		case IRNodeType::Load: return LoadCodeGen((IRLoad*)instruction);
 		case IRNodeType::Store: return StoreCodeGen((IRStore*)instruction);
 
@@ -539,6 +542,7 @@ namespace Glass
 		case IRNodeType::SizeOf: return SizeOfCodeGen((IRSizeOF*)instruction);
 
 		case IRNodeType::PointerCast: return PointerCastCodeGen((IRPointerCast*)instruction);
+		case IRNodeType::NullPtr: return NullPtrCodeGen((IRNullPtr*)instruction);
 
 		case IRNodeType::If: return IfCodeGen((IRIf*)instruction);
 		case IRNodeType::While: return WhileCodeGen((IRWhile*)instruction);
@@ -697,6 +701,12 @@ namespace Glass
 		return GetName(ssa_value->SSA);
 	}
 
+
+	llvm::Value* LLVMBackend::GlobalAddrCodeGen(const IRGlobalAddress* global_address)
+	{
+		return GetGlobalVariable(global_address->GlobID);
+	}
+
 	llvm::Value* LLVMBackend::ConstValueCodeGen(const IRCONSTValue* constant)
 	{
 		if (m_Metadata->GetTypeFlags(constant->Type) & FLAG_FLOATING_TYPE) {
@@ -745,16 +755,40 @@ namespace Glass
 		switch (type)
 		{
 		case IRNodeType::ADD:
-			result = m_LLVMBuilder->CreateAdd(lhs, rhs, "addition");
+			if (m_Metadata->GetTypeFlags(op->Type) & TypeFlag::FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFAdd(lhs, rhs);
+			}
+			else
+			{
+				result = m_LLVMBuilder->CreateAdd(lhs, rhs);
+			}
 			break;
 		case IRNodeType::SUB:
-			result = m_LLVMBuilder->CreateSub(lhs, rhs, "subtract");
+			if (m_Metadata->GetTypeFlags(op->Type) & TypeFlag::FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFSub(lhs, rhs);
+			}
+			else
+			{
+				result = m_LLVMBuilder->CreateSub(lhs, rhs);
+			}
 			break;
 		case IRNodeType::MUL:
-			result = m_LLVMBuilder->CreateMul(lhs, rhs, "multiply");
+			if (m_Metadata->GetTypeFlags(op->Type) & TypeFlag::FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFMul(lhs, rhs);
+			}
+			else
+			{
+				result = m_LLVMBuilder->CreateMul(lhs, rhs);
+			}
 			break;
 		case IRNodeType::DIV:
-			result = m_LLVMBuilder->CreateSDiv(lhs, rhs, "signed div");
+			if (m_Metadata->GetTypeFlags(op->Type) & TypeFlag::FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFDiv(lhs, rhs);
+			}
+			else
+			{
+				result = m_LLVMBuilder->CreateSDiv(lhs, rhs);
+			}
 			break;
 
 		case IRNodeType::Equal:
@@ -813,6 +847,21 @@ namespace Glass
 		return llvm_alloca;
 	}
 
+
+	void LLVMBackend::GlobalVariableCodeGen(const IRGlobalDecl* global_decl)
+	{
+		u64 indirection = 0;
+		if (global_decl->Type->Kind == TypeStorageKind::Pointer) {
+			indirection = ((TSPtr*)global_decl->Type)->Indirection;
+		}
+
+		auto type = GetLLVMTypeFull(global_decl->Type->BaseID, indirection);
+
+		auto llvm_GlobalVar = new llvm::GlobalVariable(*m_LLVMModule, type, false, llvm::GlobalVariable::LinkageTypes::CommonLinkage, llvm::ConstantAggregateZero::get(type));
+
+		InsertGlobalVariable(global_decl->GlobID, llvm_GlobalVar);
+	}
+
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
 		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->Pointer), GetName(load->SSAddress));
@@ -841,8 +890,11 @@ namespace Glass
 		if (member_access->ReferenceAccess) {
 			llvm_Object = m_LLVMBuilder->CreateLoad(llvm_Struct_Type->getPointerTo(), llvm_Object);
 		}
-
-		//llvm_Object->print(llvm::outs());
+		// 		GS_CORE_WARN("Member Access Begin");
+		// 		llvm_Object->print(llvm::outs());
+		// 		GS_CORE_WARN("Member Access Second");
+		// 		llvm_Struct_Type->print(llvm::outs());
+		// 		GS_CORE_WARN("Member Access End");
 
 		return m_LLVMBuilder->CreateStructGEP(llvm_Struct_Type, llvm_Object, (unsigned)member_access->MemberID);
 	}
@@ -869,7 +921,21 @@ namespace Glass
 
 			IRSSAValue* as_ssa_value = (IRSSAValue*)arg;
 
-			llvm_Arguments.push_back(GetName(as_ssa_value->SSA));
+			if (llvm_Func->isVarArg()) {
+
+				auto llvm_arg_Val = GetName(as_ssa_value->SSA);
+
+				if (llvm_arg_Val->getType() == GetLLVMType(IR_f32)) {
+					llvm_Arguments.push_back(m_LLVMBuilder->CreateFPExt(llvm_arg_Val, GetLLVMType(IR_f64)));
+				}
+				else {
+					llvm_Arguments.push_back(GetName(as_ssa_value->SSA));
+				}
+			}
+			else
+			{
+				llvm_Arguments.push_back(GetName(as_ssa_value->SSA));
+			}
 		}
 
 		return m_LLVMBuilder->CreateCall(llvm_Func, llvm_Arguments);
@@ -921,6 +987,11 @@ namespace Glass
 	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
 	{
 		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMTypeFull(ptr_cast->Type, ptr_cast->Pointer));
+	}
+
+	llvm::Value* LLVMBackend::NullPtrCodeGen(const IRNullPtr* null_ptr)
+	{
+		return llvm::ConstantPointerNull::get((llvm::PointerType*)GetLLVMTypeFull(null_ptr->TypeID, null_ptr->Indirection));
 	}
 
 	llvm::Value* LLVMBackend::IfCodeGen(const IRIf* _if)
@@ -1014,11 +1085,10 @@ namespace Glass
 		llvm::Type* llvm_ArrayStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_array)).LLVMType;
 		GS_CORE_ASSERT(llvm_ArrayStructTy);
 
-		llvm::Value* llvm_AnyArray = m_LLVMBuilder->CreateAlloca(
+		llvm::Value* llvm_AnyArray = CreateEntryBlockAlloca(
 			llvm_AnyStructTy,
 			llvm::ConstantInt::get(GetLLVMType(IR_u64),
-				any_array->Arguments.size()),
-			"any_varargs");
+				any_array->Arguments.size()));
 
 		u64 i = 0;
 		for (auto& arg : any_array->Arguments) {
@@ -1073,13 +1143,13 @@ namespace Glass
 		return m_LLVMBuilder->CreateLoad(llvm_ArrayStructTy, llvm_ArrayStruct);
 	}
 
-	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Type* type)
+	llvm::AllocaInst* LLVMBackend::CreateEntryBlockAlloca(llvm::Type* type, llvm::Constant* arraySize /*= nullptr*/)
 	{
 		llvm::Function* function = m_LLVMBuilder->GetInsertBlock()->getParent();
 
 		llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
 			function->getEntryBlock().begin());
-		auto alloca = TmpB.CreateAlloca(type);
+		auto alloca = TmpB.CreateAlloca(type, arraySize);
 		return alloca;
 	}
 

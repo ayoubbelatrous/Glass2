@@ -132,8 +132,7 @@ namespace Glass
 	{
 		for (Statement* a : arg_list->GetArguments()) {
 			VariableNode* arg = (VariableNode*)a;
-			arg->Type->PolyMorphic = false;
-			ReplaceIfMatch(arg->Type->Symbol.Symbol);
+			//ReplaceIfMatch(arg->Type->Symbol.Symbol);
 		}
 	}
 
@@ -170,7 +169,7 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyTypeExpr(TypeExpression* expr)
 	{
-		ReplaceIfMatch(expr->Symbol.Symbol);
+		//ReplaceIfMatch(expr->Symbol.Symbol);
 	}
 
 	void ASTPolyMorpher::PolyArrayAccess(ArrayAccess* expr)

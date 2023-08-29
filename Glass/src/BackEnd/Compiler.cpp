@@ -93,6 +93,8 @@ namespace Glass
 			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
 		}
 
+		TypeSystem::Init(m_Metadata);
+
 		const fs_path base_file_path = "Library/Base.glass";
 
 		std::ifstream in(base_file_path);
@@ -123,13 +125,17 @@ namespace Glass
 			{
 				MemberMetadata member_metadata;
 				member_metadata.Name = member->Symbol;
-				member_metadata.Tipe.ID = m_Metadata.GetType(member->Type->Symbol.Symbol);
-				member_metadata.Tipe.Pointer = member->Type->Pointer;
-				member_metadata.Tipe.Array = member->Type->Array;
+
+				auto type = TypeExpressionGetType(member->Type);
+
+				member_metadata.Tipe = TSToLegacy(type);
 
 				if (member_metadata.Tipe.ID == (u64)-1) {
 					MSG_LOC(member);
-					FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member->Symbol.Symbol, member->Type->Symbol.Symbol);
+
+					//@Todo Add type print helper and use it here
+
+					FMT_WARN("struct '{}' member '{}' is of undefined type 'TODO'", struct_name.Symbol, member->Symbol.Symbol);
 					return;
 				}
 
@@ -173,8 +179,6 @@ namespace Glass
 		}
 
 		m_TypeIDCounter = IR_typeinfo;
-
-		TypeSystem::Init(m_Metadata);
 	}
 
 	IRTranslationUnit* Compiler::CodeGen()
@@ -332,27 +336,25 @@ namespace Glass
 
 			u64 ID = GetFunctionID();
 
-			Type return_type;
-			return_type.ID = m_Metadata.GetType(fn_decl->ReturnType->Symbol.Symbol);
-			return_type.Pointer = fn_decl->ReturnType->Pointer;
+			auto return_type_ts = TypeExpressionGetType(fn_decl->ReturnType);
+
+			Type return_type = TSToLegacy(return_type_ts);
 
 			std::vector<ArgumentMetadata> args;
 
 			for (const Statement* a : fn_decl->GetArgList()->GetArguments())
 			{
-				const VariableNode* decl_arg = (VariableNode*)a;
+				const ArgumentNode* decl_arg = (ArgumentNode*)a;
 
 				ArgumentMetadata fmt_arg;
 
 				fmt_arg.Name = decl_arg->Symbol.Symbol;
-				fmt_arg.Tipe.Pointer = decl_arg->Type->Pointer;
-				fmt_arg.Tipe.ID = m_Metadata.GetType(decl_arg->Type->Symbol.Symbol);
-				fmt_arg.Tipe.Array = decl_arg->Type->Array;
+				fmt_arg.Tipe = TSToLegacy(TypeExpressionGetType(decl_arg->Type));
 
 				args.push_back(fmt_arg);
 			}
 
-			m_Metadata.RegisterFunction(ID, fn_decl->Symbol.Symbol, return_type, args, fn_decl->Variadic);
+			m_Metadata.RegisterFunction(ID, fn_decl->Symbol.Symbol, return_type, args, fn_decl->CVariadic);
 
 			FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(ID);
 			metadata->Foreign = true;
@@ -442,68 +444,11 @@ namespace Glass
 
 		if (functionNode->ReturnType)
 		{
-			return_type.ID = m_Metadata.GetType(functionNode->ReturnType->Symbol.Symbol);
-			return_type.Pointer = functionNode->ReturnType->Pointer;
-			return_type.Array = functionNode->ReturnType->Array;
+			auto return_type_ts = TypeExpressionGetType(functionNode->ReturnType);
+			return_type = TSToLegacy(return_type_ts);
 		}
 
 		m_Metadata.RegisterFunction(poly_func_id, functionNode->Symbol.Symbol, return_type);
-
-		bool poly_morphic = false;
-
-		{
-			const auto& arg_list = functionNode->GetArgList()->GetArguments();
-
-			for (const auto arg : arg_list)
-			{
-				auto var = (VariableNode*)arg;
-				if (var->Type->PolyMorphic)
-				{
-					poly_morphic = true;
-					break;
-				}
-			}
-		}
-
-		if (poly_morphic)
-		{
-			FunctionMetadata* func_metadata = m_Metadata.GetFunctionMetadata(poly_func_id);
-
-			func_metadata->PolyMorphic = true;
-
-			auto& arg_list = functionNode->GetArgList()->GetArguments();
-
-			std::vector<ArgumentMetadata> args_metadata;
-
-			for (auto arg : arg_list)
-			{
-				auto var = (VariableNode*)arg;
-
-				ArgumentMetadata arg_metadata;
-
-				arg_metadata.Name = var->Symbol.Symbol;
-
-				if (var->Type->PolyMorphic)
-				{
-					arg_metadata.PolyMorphic = true;
-					arg_metadata.PolyMorhID = func_metadata->GetPolyMorphID(var->Type->Symbol.Symbol);
-				}
-				else
-				{
-					arg_metadata.Tipe.ID = m_Metadata.GetType(var->Type->Symbol.Symbol);
-				}
-
-				arg_metadata.Tipe.Pointer = var->Type->Pointer;
-
-				args_metadata.push_back(arg_metadata);
-
-				func_metadata->Arguments = args_metadata;
-			}
-
-			func_metadata->FunctionAST = functionNode;
-
-			return nullptr;
-		}
 
 		std::vector<ArgumentMetadata> args_metadata;
 
@@ -524,9 +469,9 @@ namespace Glass
 
 			IRSSA* arg_address_ssa = CreateIRSSA();
 
-			VariableNode* var = (VariableNode*)a;
+			ArgumentNode* arg = (ArgumentNode*)a;
 
-			RegisterVariable(arg_address_ssa, var->Symbol.Symbol);
+			RegisterVariable(arg_address_ssa, arg->Symbol.Symbol);
 
 			arg_address_ssa->Type = IR_u64;
 			arg_address_ssa->Pointer = false;
@@ -539,30 +484,33 @@ namespace Glass
 
 			arg_address_ssa->Value = IR(address_of);
 
-			u64 arg_type = m_Metadata.GetType(var->Type->Symbol.Symbol);
+			TypeStorage* argument_type = TypeExpressionGetType(arg->Type);
+			Glass::Type legacy_argument_type;
 
-			if (arg_type == (u64)-1)
+			if (!arg->Variadic) {
+
+				legacy_argument_type = TSToLegacy(argument_type);
+			}
+			else {
+				legacy_argument_type.ID = IR_array;
+			}
+
+			if (!argument_type)
 			{
-
-				PushMessage(CompilerMessage{ PrintTokenLocation(var->Type->GetLocation()), MessageType::Error });
+				PushMessage(CompilerMessage{ PrintTokenLocation(arg->Type->GetLocation()), MessageType::Error });
 				PushMessage(CompilerMessage{ fmt::format("argument '{}' is of undefined type '{}', at '{}' function definition",
-														var->Symbol.Symbol, var->Type->Symbol.Symbol, functionNode->DefinitionTk.Symbol),
+														arg->Symbol.Symbol, PrintType(legacy_argument_type), functionNode->DefinitionTk.Symbol),
 											MessageType::Warning });
-
 				return nullptr;
 			}
 
 			VariableMetadata var_metadata = {
-				var->Symbol,
+				arg->Symbol,
 				nullptr,
-				Type{
-					arg_type,
-					var->Type->Array || var->Type->Variadic,
-					var->Type->Pointer,
-				},
+				legacy_argument_type,
 			};
 
-			if (!var->Type->Variadic)
+			if (!arg->Variadic)
 			{
 				arg_ssa->Type = var_metadata.Tipe.ID;
 			}
@@ -571,7 +519,7 @@ namespace Glass
 				arg_ssa->Type = IR_array;
 			}
 
-			arg_ssa->Pointer = var->Type->Pointer;
+			arg_ssa->Pointer = legacy_argument_type.Pointer;
 
 			m_Metadata.RegisterVariableMetadata(arg_address_ssa->ID, var_metadata);
 
@@ -579,10 +527,12 @@ namespace Glass
 
 			ArgumentMetadata arg_metadata;
 
-			arg_metadata.Name = var->Symbol.Symbol;
-			arg_metadata.Tipe.Pointer = arg_ssa->Pointer;
-			arg_metadata.Tipe.ID = var_metadata.Tipe.ID;
-			arg_metadata.Variadic = var->Type->Variadic;
+			arg_metadata.Name = arg->Symbol.Symbol;
+
+			arg_metadata.Tipe.Pointer = TypeSystem::IndirectionCount(argument_type);
+			arg_metadata.Tipe.ID = argument_type->BaseID;
+
+			arg_metadata.Variadic = arg->Variadic;
 			arg_metadata.SSAID = arg_address_ssa->ID;
 
 			args_metadata.push_back(arg_metadata);
@@ -656,60 +606,43 @@ namespace Glass
 		u64 allocation_pointer = 0;
 
 		if (variableNode->Type != nullptr) {
-
-			u64 assignment_type_id = m_Metadata.GetType(variableNode->Type->Symbol.Symbol);
-
+			Type = TypeExpressionGetType(variableNode->Type);
+			u64 assignment_type_id = Type->BaseID;
 			SetLikelyConstantType(assignment_type_id);
+
 		}
 
 		if (variableNode->Assignment != nullptr)
 		{
 			value = GetExpressionByValue(variableNode->Assignment);
-
 			if (!value) {
 				return nullptr;
 			}
 		}
 
-		if (variableNode->Type != nullptr) {
-			ResetLikelyConstantIntegerType();
-		}
+		ResetLikelyConstantType();
 
 		if (variableNode->Type == nullptr) {
 			TypeStorage* assignment_type = m_Metadata.GetExprType(value->SSA);
 			Type = assignment_type;
+		}
 
-			if (Type->Kind == TypeStorageKind::Array)
-			{
-				allocation_type = IR_array;
-			}
+		if (!Type) {
+			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '@TODO'"), MessageType::Warning });
+			return nullptr;
+		}
+
+
+		if (Type->Kind == TypeStorageKind::Array)
+		{
+			allocation_type = IR_array;
 		}
 		else {
-
-			Type = TypeExpressionGetType(variableNode->Type);
-
-			if (!Type) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
-				return nullptr;
-			}
-
-			if (variableNode->Type->Array)
-			{
-				allocation_type = IR_array;
-			}
-			else
-			{
-				allocation_type = Type->BaseID;
-			}
-			if (!variableNode->Type->Array)
-			{
-				for (u64 i = 0; i < variableNode->Type->Pointer; i++)
-				{
-					allocation_pointer++;
-				}
-			}
+			allocation_type = Type->BaseID;
 		}
+
+		allocation_pointer = TypeSystem::IndirectionCount(Type);
 
 		auto alloca = IR(IRAlloca((u32)allocation_type, (u32)allocation_pointer));
 
@@ -766,8 +699,6 @@ namespace Glass
 
 		u64 glob_id = GetGlobalID();
 
-		TypeStorage* Type;
-
 		if (variableNode->Assignment != nullptr)
 		{
 			MSG_LOC(variableNode->Assignment);
@@ -777,28 +708,14 @@ namespace Glass
 
 		IRSSA* StorageSSA = CreateIRSSA();
 
-		Type = TypeExpressionGetType(variableNode->Type);
+		TypeStorage* Type = TypeExpressionGetType(variableNode->Type);
 
-		if (variableNode->Type->Array)
-		{
-			StorageSSA->Type = IR_array;
-		}
-		else
-		{
-			StorageSSA->Type = Type->BaseID;
+		StorageSSA->Type = Type->BaseID;
 
-			if (StorageSSA->Type == NULL_ID) {
-				PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '{}'", variableNode->Type->Symbol.Symbol), MessageType::Warning });
-				return nullptr;
-			}
-		}
-		if (!variableNode->Type->Array)
-		{
-			for (u64 i = 0; i < variableNode->Type->Pointer; i++)
-			{
-				StorageSSA->Pointer++;
-			}
+		if (StorageSSA->Type == NULL_ID) {
+			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '@TODO'"), MessageType::Warning });
+			return nullptr;
 		}
 
 		StorageSSA->Value = nullptr;
@@ -815,13 +732,9 @@ namespace Glass
 		m_Metadata.RegisterGlobalVariable(glob_id, variableNode->Symbol.Symbol);
 		m_Metadata.RegisterVariableMetadata(glob_id, var_metadata);
 
-		//m_Metadata.RegExprType(IRssa->ID, var_metadata.Tipe);
-
 		IRGlobalDecl* global = IR(IRGlobalDecl());
 		global->GlobID = glob_id;
-		global->Type = var_metadata.Tipe.ID;
-		global->Pointer = var_metadata.Tipe.Pointer;
-		global->Array = var_metadata.Tipe.Array;
+		global->Type = Type;
 
 		return global;
 	}
@@ -845,18 +758,16 @@ namespace Glass
 		StructMetadata struct_metadata;
 		struct_metadata.Name = struct_name;
 
-		for (VariableNode* member : struct_members)
+		for (VariableNode* member_node : struct_members)
 		{
-
 			MemberMetadata member_metadata;
-			member_metadata.Name = member->Symbol;
-			member_metadata.Tipe.ID = m_Metadata.GetType(member->Type->Symbol.Symbol);
-			member_metadata.Tipe.Pointer = member->Type->Pointer;
-			member_metadata.Tipe.Array = member->Type->Array;
+			member_metadata.Name = member_node->Symbol;
+
+			member_metadata.Tipe = TSToLegacy(TypeExpressionGetType(member_node->Type));
 
 			if (member_metadata.Tipe.ID == (u64)-1) {
-				MSG_LOC(member);
-				FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member->Symbol.Symbol, member->Type->Symbol.Symbol);
+				MSG_LOC(member_node);
+				FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member_node->Symbol.Symbol);
 				return nullptr;
 			}
 
@@ -967,6 +878,9 @@ namespace Glass
 		IRSSAValue* condition = nullptr;
 
 		auto cond = GetExpressionByValue(ifNode->Condition);
+
+		if (!cond)
+			return nullptr;
 
 		auto condition_type = m_Metadata.GetExprType(cond->SSA);
 
@@ -1470,6 +1384,8 @@ namespace Glass
 			return nullptr;
 			break;
 		}
+
+		((IRBinOp*)IRssa->Value)->Type = result_type;
 
 		IRSSAValue* ssa_value = IR(IRSSAValue());
 
@@ -2170,12 +2086,25 @@ namespace Glass
 		auto cast_type = TypeExpressionGetType(cast->Type);
 
 		new_ssa->Type = cast_type->BaseID;
-		new_ssa->Pointer = cast->Type->Pointer;
+		new_ssa->Pointer = TypeSystem::IndirectionCount(cast_type);
 		new_ssa->Value = IR(IRPointerCast(new_ssa->Type, new_ssa->Pointer, expr_value->SSA));
 
 		m_Metadata.RegExprType(new_ssa->ID, cast_type);
 
 		return IR(IRSSAValue(new_ssa->ID));
+	}
+
+
+	IRInstruction* Compiler::NullCodeGen()
+	{
+		auto null_ptr_ssa = CreateIRSSA();
+		null_ptr_ssa->Type = IR_void;
+		null_ptr_ssa->Pointer = 30;
+		null_ptr_ssa->Value = IR(IRNullPtr(IR_void, 1));
+
+		m_Metadata.RegExprType(null_ptr_ssa->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
+
+		return IR(IRSSAValue(null_ptr_ssa->ID));
 	}
 
 	IRInstruction* Compiler::TypeInfoCodeGen(const FunctionCall* type_info_call)
@@ -2351,6 +2280,10 @@ namespace Glass
 		case NodeType::Identifier:
 		{
 			Identifier* identifier = (Identifier*)expr;
+
+			if (identifier->Symbol.Symbol == "null") {
+				return (IRSSAValue*)NullCodeGen();
+			}
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
 
@@ -2612,7 +2545,7 @@ namespace Glass
 		{
 			VariableNode* arg = (VariableNode*)a;
 
-			arg->Type->PolyMorphic = false;
+			//arg->Type->PolyMorphic = false;
 		}
 
 		IRFunction* ir_func = CreateIRFunction(new_function);
@@ -2624,14 +2557,20 @@ namespace Glass
 
 	TypeStorage* Compiler::TypeExpressionGetType(TypeExpression* type_expr)
 	{
-		TypeStorage* type = TypeSystem::GetBasic(type_expr->Symbol.Symbol);
+		u16 indirection = 0;
+		TypeStorage* type = nullptr;
 
-		if (type_expr->Pointer) {
-			type = TypeSystem::GetPtr(type, type_expr->Pointer);
+		if (type_expr->GetType() == NodeType::TE_Pointer) {
+			indirection = ((TypeExpressionPointer*)type_expr)->Indirection;
+			type_expr = ((TypeExpressionPointer*)type_expr)->Pointee;
 		}
 
-		if (type_expr->Array) {
-			type = TypeSystem::GetDynArray(type);
+		if (type_expr->GetType() == NodeType::TE_TypeName) {
+			type = TypeSystem::GetBasic(((TypeExpressionTypeName*)type_expr)->Symbol.Symbol);
+		}
+
+		if (indirection) {
+			type = TypeSystem::GetPtr(type, indirection);
 		}
 
 		return type;

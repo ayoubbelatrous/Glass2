@@ -19,10 +19,14 @@ namespace Glass
 		TE_TypeName,
 		TE_Pointer,
 		TE_Array,
+		TE_What,
+
+		TE_Func,
 
 		Scope,
 		ArgumentList,
 		Function,
+		Argument,
 		Variable,
 		Return,
 		Call,
@@ -212,21 +216,23 @@ namespace Glass
 
 	class TypeExpression : public Expression
 	{
+	};
+
+	class TypeExpressionFunc : public TypeExpression
+	{
 	public:
 
-		virtual NodeType GetType() const override
-		{
-			return NodeType::TypeExpression;
+		Token Symbol;
+
+		std::vector<TypeExpression*> Arguments;
+		TypeExpression* ReturnType;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TE_Func;
 		}
 
-		Token Symbol;
-		u64 Pointer = false;
-		bool Array = false;
-		bool PolyMorphic = false;
-		bool Variadic = false;
-
 		virtual std::string ToString() const {
-			return "<" + Symbol.Symbol + ">";
+			return "(func)";
 		}
 
 		virtual const Token& GetLocation() const override {
@@ -258,6 +264,7 @@ namespace Glass
 	public:
 
 		TypeExpression* Pointee = nullptr;
+		u16 Indirection = 0;
 
 		virtual NodeType GetType() const override {
 			return NodeType::TE_Pointer;
@@ -461,6 +468,28 @@ namespace Glass
 		std::vector<Statement*> m_Arguments;
 	};
 
+	class ArgumentNode : public Expression
+	{
+	public:
+
+		Token Symbol;
+		TypeExpression* Type = nullptr;
+		bool Variadic = false;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Argument;
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Symbol;
+		}
+
+		virtual std::string ToString() const {
+			return Type->ToString() + " : " + Symbol.Symbol;
+		}
+	};
+
 	class FunctionNode : public Statement
 	{
 	public:
@@ -505,7 +534,7 @@ namespace Glass
 
 		TypeExpression* ReturnType = nullptr;
 
-		bool Variadic = false;
+		bool CVariadic = false;
 
 		virtual const Token& GetLocation() const override {
 			return Symbol;

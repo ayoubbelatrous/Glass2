@@ -1,3 +1,7 @@
+#foreign fn printf!(u8* fmt) : i32 {};
+#foreign fn strlen(u8* str) : i32 {};
+#foreign fn putchar(u8 c) : void {};
+
 fn ansi_red() {
 	printf("\e[1;31m");
 }
@@ -22,150 +26,130 @@ fn ansi_clear() {
 	printf("\e[0m");
 }
 
-fn print_any(Any any) : i32
-{
-	if any.type == int {
-		printf("%i", *any.data);
-        return 0;
-	}
-
-	if any.type == i32 {
-		printf("%i", *any.data);
-        return 0;
-	}
-
-    if any.type == u32 {
-		printf("%i", *any.data);
-        return 0;
-	}
-
-    if any.type == u64 {
-		printf("%zu", *any.data);
-        return 0;
-	}
-
-     if any.type == i64 {
-		printf("%zu", *any.data);
-        return 0;
-	}
-
-	if any.type == float {
-		float* f = any.data;
-		printf("%f", *f);
-        return 0;
-	}
-
-	if any.type == f32 {
-		float* f_32 = any.data;
-		printf("%f", *f_32);
-        return 0;
-	}
-
-	if any.type == u8 {
-		printf("%s", any.data);
-        return 0;
-	}
+fn print_s_int(i64 signed) {
+	printf("%i", signed);
 }
 
-fn print_signed_int(i64 integer) {
-	printf("%i", integer);
+fn print_u_int(u64 unsigned) {
+	printf("%u", unsigned);
 }
 
-fn print_unsigned_int(u64 integer) {
-	printf("%zu", integer);
+fn print_float(f32 flt) {
+	printf("%f", flt);
 }
 
-fn print_float(f64 floating) {
-	printf("%f", floating);
-}
-
-fn print_bool(bool boolean) {
-	printf("%b", boolean);
-}
-
-fn print_c_string(u8* str) {
+fn print_string(u8* str) {
 	printf("%s", str);
 }
 
-fn print(Any... args) {
-	Any fmt_any = args[0];
-	u8* fmt  = fmt_any.data;
+fn print_any(Any any) : i32 {
 
-	i32 arg_i = 1;
-	i32 fmt_i = 0;
+	TypeInfo* typeinfo = type_info(any.type);
 
-	i32 fmt_count = strlen(fmt);
+	i64 zero = 0;
 
-	while fmt_i != fmt_count {
-		u8 c = fmt[fmt_i];
+	// Base Types
+	if typeinfo.flags & TypeInfo_Flags.BASE_TYPE {
 
-		if c == "%"[0] {
-			print_any(args[arg_i]);
-			arg_i = arg_i + 1;
+		if typeinfo.flags & TypeInfo_Flags.NUMERIC_TYPE {
+
+			//Strings
+			if any.type == u8* {
+				print_string(*cast(u8**)any.data);
+			}
+
+			//Numbers
+
+			if any.type != u8* {
+				if typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE {
+					f32 flt = *cast(f32*) any.data;
+					print_float(flt);
+				}
+
+				if (typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE) == zero {
+
+					if (typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE) == zero {
+						print_s_int(*cast(i64*) any.data);
+					}
+
+					if typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE {
+						print_u_int(*cast(u64*) any.data);
+					}
+				}
+			}
+
 		}
-
-		if c != "%"[0] {
-			putchar(c);
-		}
-
-		fmt_i = fmt_i + 1;
 	}
+
+	if typeinfo.flags & TypeInfo_Flags.STRUCT {
+
+		i8* base_ptr = cast(i8*) any.data;
+		TypeInfo_Struct* type_info_struct = cast(TypeInfo_Struct*) typeinfo;
+
+		u64 member_it = 0;
+
+		printf("{:%s: ", type_info_struct.name);
+
+		while member_it < type_info_struct.member_count {
+
+			if member_it != zero {
+				printf(", ");
+			}
+
+			TypeInfo_Member member = type_info_struct.members[member_it];
+
+			u8* member_ptr = &base_ptr[member.offset];
+
+			Any struct_any;
+			struct_any.data = cast(void*) member_ptr;
+			struct_any.type = member.type;
+
+			printf("%s: ", member.name);
+			print_any(struct_any);
+
+			member_it = member_it + 1;
+		}
+
+		printf(" }");
+	}
+
+	return 0;
 }
 
-fn log_error(Any... args) {
-	Any fmt_any = args[0];
-	u8* fmt  = fmt_any.data;
+fn print(Any... args) : i32 {
 
-	i32 arg_i = 1;
-	i32 fmt_i = 0;
+	Any* arguments = cast(Any*) args.data;
 
-	i32 fmt_count = strlen(fmt);
+	Any fmt_arg = arguments[0];
+	u8* fmt_string = cast(u8*) fmt_arg.data;
 
-	ansi_red();
+	i32 format_char_count = strlen(fmt_string);
+	i32 format_it = 0;
 
-	while fmt_i != fmt_count {
-		u8 c = fmt[fmt_i];
+	u8 current_char = 0;
 
-		if c == "%"[0] {
-			print_any(args[arg_i]);
-			arg_i = arg_i + 1;
+	Any current_argument;
+	TypeInfo current_argument_typeinfo;
+
+	u64 argument_count = args.count;
+	u64 argument_it = 0;
+
+	while format_it < format_char_count {
+
+		current_char = fmt_string[format_it];
+
+		if current_char == "%"[0] {
+			argument_it = argument_it + 1;
+			current_argument = arguments[argument_it];
+			print_any(current_argument);
 		}
 
-		if c != "%"[0] {
-			putchar(c);
+		if current_char != "%"[0] {
+			putchar(current_char);
 		}
 
-		fmt_i = fmt_i + 1;
+		format_it = format_it + 1;
 	}
 
-	ansi_clear();
-}
-
-fn log_warn(Any... args) {
-	Any fmt_any = args[0];
-	u8* fmt  = fmt_any.data;
-
-	i32 arg_i = 1;
-	i32 fmt_i = 0;
-
-	i32 fmt_count = strlen(fmt);
-
-	ansi_yellow();
-
-	while fmt_i != fmt_count {
-		u8 c = fmt[fmt_i];
-
-		if c == "%"[0] {
-			print_any(args[arg_i]);
-			arg_i = arg_i + 1;
-		}
-
-		if c != "%"[0] {
-			putchar(c);
-		}
-
-		fmt_i = fmt_i + 1;
-	}
-
-	ansi_clear();
+	return 0;
 }

@@ -142,6 +142,7 @@ namespace Glass
 		GlobDecl,
 
 		PointerCast,
+		NullPtr,
 
 		TranslationUnit,
 		File,
@@ -153,6 +154,24 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const = 0;
+	};
+
+	struct IRNullPtr : public IRInstruction {
+
+		IRNullPtr(u64 type_id, u64 indirection)
+			:TypeID(type_id), Indirection(indirection)
+		{}
+
+		u64 TypeID = -1;
+		u64 Indirection = -1;
+
+		virtual std::string ToString() const {
+			return "NullPtr";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::NullPtr;
+		}
 	};
 
 	struct IRTypeValue : public IRInstruction {
@@ -1028,7 +1047,7 @@ namespace Glass
 
 		virtual std::string ToString() const override
 		{
-			return "global &var";
+			return "global $var";
 		}
 
 		virtual IRNodeType GetType() const {
@@ -1040,13 +1059,11 @@ namespace Glass
 		u64 ID = 0;
 		u64 GlobID = 0;
 
-		u64 Type = 0;
-		u64 Pointer = false;
-		bool Array = false;
+		TypeStorage* Type = nullptr;
 
 		virtual std::string ToString() const override
 		{
-			return "global var;";
+			return "decl global var";
 		}
 
 		virtual IRNodeType GetType() const {

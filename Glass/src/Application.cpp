@@ -136,26 +136,27 @@ namespace Glass
 
 			llvm_backend.Compile();
 
-			std::string libraries;
-
-			for (auto& library : m_Options.CLibs) {
-				libraries.push_back(' ');
-				libraries += library;
-			}
-
-			std::string linker_cmd;
-
 			std::string libraries_cmd;
 
-			for (auto& library : libraries) {
-				libraries_cmd += "-l" + library;
+			for (auto& library : m_Options.CLibs) {
+
+				auto lib_as_path = fs_path(library);
+
+				if (lib_as_path.extension().empty()) {
+					libraries_cmd += "-l" + library + ' ';
+				}
+				else {
+					libraries_cmd += library + ' ';
+				}
 			}
 
 			std::string input_name = "output.obj";
 			std::string exe_name = "a.exe";
 
+			std::string linker_cmd;
+
 			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
-			linker_cmd = fmt::format("clang.exe -g {} {} -o a.exe", input_name, libraries);
+			linker_cmd = fmt::format("clang.exe -g {} {} -o a.exe", input_name, libraries_cmd);
 
 			GS_CORE_WARN("Running: {}", linker_cmd);
 

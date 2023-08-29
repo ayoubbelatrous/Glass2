@@ -53,6 +53,8 @@ namespace Glass
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
 		IRInstruction* CastCodeGen(const CastNode* typeof);
 
+		IRInstruction* NullCodeGen();
+
 		IRInstruction* TypeInfoCodeGen(const FunctionCall* type_info_call);
 
 		IRInstruction* RefCodeGen(const RefNode* refNode);

@@ -195,68 +195,75 @@ namespace Glass
 
 	Statement* Parser::ParseTypeExpr()
 	{
-		if (At().Type != TokenType::Dollar) {
-			if (ExpectedToken(TokenType::Symbol)) {
-				return ParseStatement();
+		TypeExpression* current = nullptr;
+
+		while (true) {
+
+			TokenType tk_type = At().Type;
+
+			if (tk_type == TokenType::OpenParen) {
+				current = (TypeExpression*)ParseFuncTypeExpr();
+				continue;
 			}
+
+			if (tk_type == TokenType::Symbol && !current) {
+				TypeExpressionTypeName type_name;
+				type_name.Symbol = Consume();
+				current = AST(type_name);
+				continue;
+			}
+
+			if (tk_type == TokenType::Multiply) {
+				TypeExpressionPointer pointer;
+				pointer.Pointee = current;
+
+				while (At().Type == TokenType::Multiply) {
+					Consume();
+					pointer.Indirection++;
+				}
+
+				current = AST(pointer);
+				continue;
+			}
+
+			break;
 		}
 
-		TypeExpression Node;
+		return current;
+	}
 
-		if (At().Type == TokenType::Dollar) {
-			Consume();
-			Node.PolyMorphic = true;
-		}
+	Statement* Parser::ParseFuncTypeExpr()
+	{
+		TypeExpressionFunc Node;
 
-		Node.Symbol = Consume();
+		Consume();
 
-		while (At().Type == TokenType::Multiply) {
-			Consume();
-			Node.Pointer++;
-		}
+		while (At().Type != TokenType::CloseParen) {
 
-		if (At().Type == TokenType::OpenBracket) {
-			Consume();
+			auto argument = ParseTypeExpr();
 
-			if (ExpectedToken(TokenType::Period)) {
-				Abort("Expected . in type");
-			}
+			Node.Arguments.push_back((TypeExpression*)argument);
 
-			Consume();
-
-			if (ExpectedToken(TokenType::Period)) {
-				Abort("Expected . in type");
-			}
-
-			Consume();
-
-			if (ExpectedToken(TokenType::CloseBracket)) {
-				Abort("Expected ']' after type Instead Got");
-			}
-			else {
+			if (At().Type != TokenType::CloseParen) {
+				if (ExpectedToken(TokenType::Comma)) {
+					Abort("Expected a ',' inside function type () after argument, Instead Got: ");
+				}
 				Consume();
-				Node.Array = true;
 			}
 		}
 
-		while (At().Type == TokenType::Multiply) {
-			Consume();
-			Node.Pointer++;
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected ')' at the ending of a function type expression, Instead Got: ");
 		}
 
-		if (
-			At().Type == TokenType::Period &&
-			At(1).Type == TokenType::Period &&
-			At(2).Type == TokenType::Period
-			) {
-
+		if (At().Type == TokenType::Comma) {
 			Consume();
-			Consume();
-			Consume();
-			Node.Variadic = true;
+			auto return_type = ParseTypeExpr();
+			Node.ReturnType = (TypeExpression*)return_type;
 		}
 
-		return Application::AllocateAstNode(Node);
+		Consume();
+		return AST(Node);
 	}
 
 	Statement* Parser::ParseVarDecl()
@@ -432,6 +439,38 @@ namespace Glass
 		return Application::AllocateAstNode(Node);
 	}
 
+
+	Statement* Parser::ParseArgument()
+	{
+		ArgumentNode Node;
+		Node.Type = (TypeExpression*)ParseTypeExpr();
+
+		if (At().Type == TokenType::Period) {
+			for (size_t i = 0; i < 3; i++)
+			{
+				if (ExpectedToken(TokenType::Period)) {
+					Abort("Expected '.', Instead Got");
+				}
+
+				Consume();
+			}
+
+			Node.Variadic = true;
+		}
+
+		if (ExpectedToken(TokenType::Symbol)) {
+			Abort("Expected a argument name after type Instead Got");
+		}
+
+		Node.Symbol = Consume();
+
+		if (At().Type == TokenType::Assign) {
+			Abort("Default arguments are not yet supported");
+		}
+
+		return Application::AllocateAstNode(Node);
+	}
+
 	Statement* Parser::ParseArgumentList()
 	{
 		ArgumentList Node;
@@ -440,7 +479,7 @@ namespace Glass
 
 		while (At().Type != TokenType::CloseParen) {
 
-			auto arg = ParseVarDecl();
+			auto arg = ParseArgument();
 
 			Node.PushArgument(arg);
 
@@ -472,7 +511,7 @@ namespace Glass
 
 		if (At().Type == TokenType::Bang) {
 			Consume();
-			Node.Variadic = true;
+			Node.CVariadic = true;
 		}
 
 		if (ExpectedToken(TokenType::OpenParen)) {
@@ -930,7 +969,9 @@ namespace Glass
 
 				if (
 					At().Type == TokenType::Symbol &&
-					At(1).Type == TokenType::Multiply) {
+					At(1).Type == TokenType::Multiply &&
+					At(2).Type != TokenType::Symbol
+					) {
 
 					return ParseTypeExpr();
 				}
