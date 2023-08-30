@@ -55,12 +55,16 @@ struct Application {
 Application a;
 
 fn Application_Init() : void {
-	//application.r = cast(Renderer2D*) null;
+	a.r = cast(Renderer2D*) null;
 	print("Inited Application\n");
 }
 
-fn main() : i32 {
+fn test() : i32 {
+	printf("Hello from pointer!!\n");
+	return 450;
+}
 
+fn main() : i32 {
 	i32 init_result = glfwInit();
 
 	Application_Init();

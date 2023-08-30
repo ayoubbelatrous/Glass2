@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Metadata.h"
+#include "Base/Assert.h"
 
 namespace Glass {
 
@@ -39,7 +40,7 @@ namespace Glass {
 	};
 	//////////////////////////////////////////////////////////////////////////
 	//Composite-Types-----------------------------------------//////////////////
-	struct TSFunction : public TypeStorage {
+	struct TSFunc : public TypeStorage {
 		TypeStorage* ReturnType = nullptr;
 		std::vector<TypeStorage*> Arguments;
 	};
@@ -55,6 +56,22 @@ namespace Glass {
 
 	inline u64 DynArrayHash(u64 element_hash) {
 		return Combine2Hashes(element_hash, std::hash<std::string>{}("dyn array hash"));
+	}
+
+	inline u64 FunctionArgumentsHash(const std::vector<TypeStorage*>& argument_hashes, TypeStorage* return_type_hash) {
+		u64 hash = std::hash<std::string>{}("func type hash base");
+
+		for (auto argument_hash : argument_hashes) {
+			GS_CORE_ASSERT(argument_hash);
+			hash = Combine2Hashes(hash, argument_hash->Hash);
+		}
+
+		if (return_type_hash) {
+			return Combine2Hashes(hash, return_type_hash->Hash);
+		}
+		else {
+			return hash;
+		}
 	}
 
 	struct TypeSystem {
@@ -138,6 +155,28 @@ namespace Glass {
 			new_type->BaseID = (u32)type_id;
 			new_type->Kind = TypeStorageKind::Base;
 			new_type->Hash = hash;
+
+			m_Instance->m_Types.emplace(hash, new_type);
+
+			return new_type;
+		}
+
+		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type) {
+
+			u64 hash = FunctionArgumentsHash(arguments, return_type);
+
+			auto it = m_Instance->m_Types.find(hash);
+
+			if (it != m_Instance->m_Types.end()) {
+				return it->second;
+			}
+
+			TSFunc* new_type = TYPE(TSFunc());
+			new_type->BaseID = -1;
+			new_type->Kind = TypeStorageKind::Function;
+			new_type->Hash = hash;
+			new_type->Arguments = arguments;
+			new_type->ReturnType = return_type;
 
 			m_Instance->m_Types.emplace(hash, new_type);
 

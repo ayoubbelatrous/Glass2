@@ -18,7 +18,6 @@ namespace Glass
 			break;
 		case TokenType::StringLiteral:
 		case TokenType::NumericLiteral:
-		case TokenType::OpenParen:
 			return ParseExpression();
 			break;
 		case TokenType::Symbol:
@@ -68,7 +67,6 @@ namespace Glass
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
 				var_decl |= At().Type == TokenType::Dollar && At(1).Type == TokenType::Symbol;
-
 
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(3).Type == TokenType::Period; // i32[..]
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::OpenBracket; // i32[..]
@@ -256,13 +254,14 @@ namespace Glass
 			Abort("Expected ')' at the ending of a function type expression, Instead Got: ");
 		}
 
-		if (At().Type == TokenType::Comma) {
+		Consume();
+
+		if (At().Type == TokenType::Colon) {
 			Consume();
 			auto return_type = ParseTypeExpr();
 			Node.ReturnType = (TypeExpression*)return_type;
 		}
 
-		Consume();
 		return AST(Node);
 	}
 
@@ -940,6 +939,31 @@ namespace Glass
 		break;
 		case TokenType::OpenParen:
 		{
+			bool var_decl = false;
+
+			//check if a function type
+			if (At().Type == TokenType::OpenParen) {
+
+				u32 i = 1;
+				while (true) {
+					if (At(i).Type == TokenType::CloseParen) {
+						if (At(i + 1).Type == TokenType::Colon) {
+							var_decl = true;
+						}
+						if (At(i + 1).Type == TokenType::Symbol) {
+							var_decl = true;
+						}
+						break;
+					}
+
+					i++;
+				}
+			}
+
+			if (var_decl) {
+				return ParseVarDecl();
+			}
+
 			Consume();
 			auto expr = ParseExpression();
 

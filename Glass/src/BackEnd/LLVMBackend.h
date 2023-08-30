@@ -61,6 +61,10 @@ namespace Glass {
 		llvm::Value* TypeValueCodeGen(const IRTypeValue* type_value);
 		/////////////////////////
 
+		llvm::Value* FuncRefCodeGen(const IRFuncRef* func_ref);
+
+		llvm::Value* CallFuncRefCodeGen(const IRCallFuncRef* func_ref);
+
 		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Constant* arraySize = nullptr);
 
 	private:
@@ -145,6 +149,52 @@ namespace Glass {
 			return full_type;
 		}
 
+		llvm::Type* GetLLVMType(TypeStorage* type) {
+
+			llvm::Type* llvm_Type = nullptr;
+
+			if (type->Kind == TypeStorageKind::Pointer) {
+
+				auto type_as_pointer = (TSPtr*)type;
+
+				llvm_Type = GetLLVMType(type_as_pointer->Pointee);
+
+				for (size_t i = 0; i < type_as_pointer->Indirection; i++)
+				{
+					llvm_Type = llvm::PointerType::get(llvm_Type, (unsigned)0);
+				}
+				return llvm_Type;
+			}
+
+			if (type->Kind == TypeStorageKind::Base) {
+
+				if (type->BaseID == IR_void) {
+					return GetLLVMType(IR_u8);
+				}
+				else {
+					return GetLLVMType(type->BaseID);
+				}
+			}
+
+			if (type->Kind == TypeStorageKind::Function) {
+
+				auto type_as_func = (TSFunc*)type;
+
+				std::vector<llvm::Type*> llvm_Arguments;
+				llvm::Type* llvm_ReturnType = nullptr;
+
+				for (auto type_arg : type_as_func->Arguments) {
+					llvm_Arguments.push_back(GetLLVMType(type_arg));
+				}
+
+				llvm_ReturnType = GetLLVMType(type_as_func->ReturnType);
+
+				return llvm::FunctionType::get(llvm_ReturnType, llvm_Arguments, false)->getPointerTo();
+			}
+
+			return nullptr;
+		}
+
 		void InsertLLVMFunction(u64 function_id, llvm::Function* function) {
 			m_LLVMFunctions[function_id] = function;
 		}
@@ -216,6 +266,27 @@ namespace Glass {
 				llvm::DIType* pointer_type = it->second;
 
 				for (size_t i = 0; i < type.Pointer; i++) {
+					pointer_type = m_DBuilder->createPointerType(pointer_type, 64);
+				}
+
+				return pointer_type;
+			}
+			return nullptr;
+		}
+
+		llvm::DIType* GetLLVMDebugType(TypeStorage* type) {
+
+			if (type->Kind == TypeStorageKind::Function) {
+				return GetLLVMDebugType({ 0,0,1 });
+			}
+
+			auto it = m_LLVMDebugTypes.find(type->BaseID);
+
+			if (it != m_LLVMDebugTypes.end()) {
+
+				llvm::DIType* pointer_type = it->second;
+
+				for (size_t i = 0; i < TypeSystem::IndirectionCount(type); i++) {
 					pointer_type = m_DBuilder->createPointerType(pointer_type, 64);
 				}
 

@@ -14,12 +14,9 @@ namespace Glass
 		StringLiteral,
 		BinaryExpression,
 
-		TypeExpression,
-
 		TE_TypeName,
 		TE_Pointer,
 		TE_Array,
-		TE_What,
 
 		TE_Func,
 
@@ -225,7 +222,7 @@ namespace Glass
 		Token Symbol;
 
 		std::vector<TypeExpression*> Arguments;
-		TypeExpression* ReturnType;
+		TypeExpression* ReturnType = nullptr;
 
 		virtual NodeType GetType() const override {
 			return NodeType::TE_Func;

@@ -32,7 +32,6 @@ namespace Glass
 		case NodeType::NumericLiteral:
 		case NodeType::StringLiteral:
 		case NodeType::BinaryExpression:
-		case NodeType::TypeExpression:
 		case NodeType::MemberAccess:
 		case NodeType::ArrayAccess:
 		case NodeType::Reference:
@@ -90,9 +89,6 @@ namespace Glass
 		break;
 		case NodeType::BinaryExpression:
 			PolyBinaryExpression((BinaryExpression*)expr);
-			break;
-		case NodeType::TypeExpression:
-			PolyTypeExpr((TypeExpression*)expr);
 			break;
 		case NodeType::MemberAccess:
 			PolyMemberAccess((MemberAccess*)expr);

@@ -105,8 +105,8 @@ namespace Glass {
 	struct VariableMetadata
 	{
 		Token Name;
-		TypeStorage* Type = nullptr;
-		Glass::Type Tipe;
+		TypeStorage* Tipe = nullptr;
+
 		bool IsArg = false;
 		bool Global = false;
 

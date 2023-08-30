@@ -473,9 +473,6 @@ namespace Glass
 
 			RegisterVariable(arg_address_ssa, arg->Symbol.Symbol);
 
-			arg_address_ssa->Type = IR_u64;
-			arg_address_ssa->Pointer = false;
-
 			IRAddressOf address_of;
 
 			{
@@ -485,14 +482,17 @@ namespace Glass
 			arg_address_ssa->Value = IR(address_of);
 
 			TypeStorage* argument_type = TypeExpressionGetType(arg->Type);
+			TypeStorage* argument_variable_type = nullptr;
 			Glass::Type legacy_argument_type;
 
 			if (!arg->Variadic) {
 
 				legacy_argument_type = TSToLegacy(argument_type);
+				argument_variable_type = argument_type;
 			}
 			else {
 				legacy_argument_type.ID = IR_array;
+				argument_variable_type = TypeSystem::GetBasic(IR_array);
 			}
 
 			if (!argument_type)
@@ -506,20 +506,8 @@ namespace Glass
 
 			VariableMetadata var_metadata = {
 				arg->Symbol,
-				nullptr,
-				legacy_argument_type,
+				argument_variable_type,
 			};
-
-			if (!arg->Variadic)
-			{
-				arg_ssa->Type = var_metadata.Tipe.ID;
-			}
-			else
-			{
-				arg_ssa->Type = IR_array;
-			}
-
-			arg_ssa->Pointer = legacy_argument_type.Pointer;
 
 			m_Metadata.RegisterVariableMetadata(arg_address_ssa->ID, var_metadata);
 
@@ -600,16 +588,12 @@ namespace Glass
 
 		IRSSAValue* value = nullptr;
 
-		TypeStorage* Type = nullptr;
-
-		u64 allocation_type = 0;
-		u64 allocation_pointer = 0;
+		TypeStorage* VariableType = nullptr;
 
 		if (variableNode->Type != nullptr) {
-			Type = TypeExpressionGetType(variableNode->Type);
-			u64 assignment_type_id = Type->BaseID;
+			VariableType = TypeExpressionGetType(variableNode->Type);
+			u64 assignment_type_id = VariableType->BaseID;
 			SetLikelyConstantType(assignment_type_id);
-
 		}
 
 		if (variableNode->Assignment != nullptr)
@@ -624,47 +608,32 @@ namespace Glass
 
 		if (variableNode->Type == nullptr) {
 			TypeStorage* assignment_type = m_Metadata.GetExprType(value->SSA);
-			Type = assignment_type;
+			VariableType = assignment_type;
 		}
 
-		if (!Type) {
+		if (!VariableType) {
 			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
 			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '@TODO'"), MessageType::Warning });
 			return nullptr;
 		}
 
-
-		if (Type->Kind == TypeStorageKind::Array)
-		{
-			allocation_type = IR_array;
-		}
-		else {
-			allocation_type = Type->BaseID;
-		}
-
-		allocation_pointer = TypeSystem::IndirectionCount(Type);
-
-		auto alloca = IR(IRAlloca((u32)allocation_type, (u32)allocation_pointer));
+		auto alloca = IR(IRAlloca(VariableType));
 
 		IRSSA* variable_address_ssa = CreateIRSSA();
-		variable_address_ssa->Type = Type->BaseID;
-		variable_address_ssa->Pointer = 1;
-
 		variable_address_ssa->Value = alloca;
 
 		RegisterVariable(variable_address_ssa, variableNode->Symbol.Symbol);
 
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
-			Type,
-			TSToLegacy(Type),
+			VariableType,
 			false,
 			false,
 			nullptr,
 			variable_address_ssa };
 
 		m_Metadata.RegisterVariableMetadata(variable_address_ssa->ID, var_metadata);
-		m_Metadata.RegExprType(variable_address_ssa->ID, Type);
+		m_Metadata.RegExprType(variable_address_ssa->ID, VariableType);
 
 		//@Debugging
 		alloca->VarMetadata = m_Metadata.GetVariableMetadata(variable_address_ssa->ID);
@@ -675,8 +644,7 @@ namespace Glass
 
 			assignment_store->AddressSSA = variable_address_ssa->ID;
 			assignment_store->Data = value;
-			assignment_store->Pointer = TSToLegacy(Type).Pointer;
-			assignment_store->Type = TSToLegacy(Type).ID;
+			assignment_store->Type = VariableType;
 
 			return assignment_store;
 		}
@@ -710,9 +678,7 @@ namespace Glass
 
 		TypeStorage* Type = TypeExpressionGetType(variableNode->Type);
 
-		StorageSSA->Type = Type->BaseID;
-
-		if (StorageSSA->Type == NULL_ID) {
+		if (Type == nullptr) {
 			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
 			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '@TODO'"), MessageType::Warning });
 			return nullptr;
@@ -723,7 +689,6 @@ namespace Glass
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
 			Type,
-			TSToLegacy(Type),
 			false,
 			true,
 			StorageSSA,
@@ -886,7 +851,7 @@ namespace Glass
 
 		if (condition_type->BaseID != IR_bool)
 		{
-			SetLikelyConstantType(m_Metadata.GetSSA(cond->SSA)->Type);
+			SetLikelyConstantType(condition_type->BaseID);
 
 			//@Hack
 			NumericLiteral lit;
@@ -900,7 +865,6 @@ namespace Glass
 			auto greater = IR(IRGreater(cond, zero));
 
 			auto convert_to_bool = CreateIRSSA();
-			convert_to_bool->Type = IR_bool;
 			convert_to_bool->Value = greater;
 
 			condition = IR(IRSSAValue(convert_to_bool->ID));
@@ -1022,7 +986,10 @@ namespace Glass
 		case NodeType::SizeOf:
 			return SizeOfCodeGen((SizeOfNode*)expression);
 			break;
-		case NodeType::TypeExpression:
+		case NodeType::TE_TypeName:
+		case NodeType::TE_Pointer:
+		case NodeType::TE_Func:
+		case NodeType::TE_Array:
 			return TypeExpressionCodeGen((TypeExpression*)expression);
 			break;
 		}
@@ -1063,7 +1030,7 @@ namespace Glass
 
 			ssa_val.SSA = GetVariableSSA(identifier->Symbol.Symbol);
 
-			m_Metadata.RegExprType(ssa_val.SSA, LegacyToTS(metadata->Tipe));
+			m_Metadata.RegExprType(ssa_val.SSA, metadata->Tipe);
 
 			return (IRInstruction*)IR(ssa_val);
 		}
@@ -1072,14 +1039,14 @@ namespace Glass
 			u64 glob_id = m_Metadata.GetGlobalVariable(identifier->Symbol.Symbol);
 
 			auto ssa = CreateIRSSA();
-			ssa->Type = IR_u64;
+
 			IRGlobalAddress* glob_address = IR(IRGlobalAddress(glob_id));
 
 			ssa->Value = glob_address;
 
 			const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(glob_id);
 
-			m_Metadata.RegExprType(ssa->ID, metadata->Type);
+			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
 			return IR(IRSSAValue(ssa->ID));
 		}
@@ -1093,32 +1060,22 @@ namespace Glass
 
 		IRssa->Value = IR(IRCONSTValue());
 
-		IRCONSTValue* Value = (IRCONSTValue*)IRssa->Value;
+		IRCONSTValue* Constant = (IRCONSTValue*)IRssa->Value;
 
 		if (numericLiteral->type == NumericLiteral::Type::Float)
 		{
-			IRssa->Type = GetLikelyConstantFloatType();
-			memcpy(&Value->Data, &numericLiteral->Val.Float, sizeof(double));
+			Constant->Type = GetLikelyConstantFloatType();
+			memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
 		}
 		if (numericLiteral->type == NumericLiteral::Type::Int)
 		{
-			IRssa->Type = GetLikelyConstantIntegerType();
-			memcpy(&Value->Data, &numericLiteral->Val.Int, sizeof(i64));
+			Constant->Type = GetLikelyConstantIntegerType();
+			memcpy(&Constant->Data, &numericLiteral->Val.Int, sizeof(i64));
 		}
 
-		Value->Type = IRssa->Type;
+		m_Metadata.RegExprType(IRssa->ID, TypeSystem::GetBasic(Constant->Type));
 
-		IRSSAValue* ssa_value = IR(IRSSAValue());
-
-		ssa_value->SSA = IRssa->ID;
-
-		{
-			Type type;
-			type.ID = IRssa->Type;
-			m_Metadata.RegExprType(ssa_value->SSA, TypeSystem::GetBasic(Value->Type));
-		}
-
-		return ssa_value;
+		return IR(IRSSAValue(IRssa->ID));
 	}
 
 	IRInstruction* Compiler::StringLiteralCodeGen(const StringLiteral* stringLiteral)
@@ -1131,9 +1088,6 @@ namespace Glass
 		}
 
 		auto ir_ssa = CreateIRSSA();
-
-		ir_ssa->Type = IR_u8;
-		ir_ssa->Pointer = true;
 		ir_ssa->Value = IR(IRDataValue(0, data->ID));
 
 		IRSSAValue ssa_val;
@@ -1165,6 +1119,7 @@ namespace Glass
 
 		if (!A || !B)
 		{
+			//@Todo: log error here
 			return nullptr;
 		}
 
@@ -1172,8 +1127,6 @@ namespace Glass
 		TypeStorage* right_type = m_Metadata.GetExprType(B->SSA);
 
 		IRSSA* IRssa = CreateIRSSA();
-
-		IRssa->Type = left_type->BaseID;
 
 		if ((left_type->Kind != TypeStorageKind::Pointer) && (right_type->Kind != TypeStorageKind::Pointer))
 		{
@@ -1414,17 +1367,15 @@ namespace Glass
 				u64 glob_id = m_Metadata.GetGlobalVariable(identifier_left->Symbol.Symbol);
 
 				auto ssa = CreateIRSSA();
-				ssa->Type = IR_u64;
 				ssa->Value = IR(IRGlobalAddress(glob_id));
 
-				const Glass::Type& type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
+				auto type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
 
 				IRStore* store = IR(IRStore());
 				{
 					store->Data = right_val;
 					store->AddressSSA = ssa->ID;
-					store->Type = type.ID;
-					store->Pointer = type.Pointer;
+					store->Type = type;
 				}
 
 				return store;
@@ -1437,7 +1388,7 @@ namespace Glass
 
 				const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
 
-				SetLikelyConstantIntegerType(metadata->Tipe.ID);
+				SetLikelyConstantIntegerType(metadata->Tipe->BaseID);
 
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
@@ -1445,8 +1396,7 @@ namespace Glass
 				{
 					store->Data = right_val;
 					store->AddressSSA = var_ssa_id;
-					store->Type = metadata->Tipe.ID;
-					store->Pointer = metadata->Tipe.Pointer;
+					store->Type = metadata->Tipe;
 				}
 
 				ResetLikelyConstantType();
@@ -1457,6 +1407,10 @@ namespace Glass
 		if (left->GetType() == NodeType::MemberAccess)
 		{
 			IRSSAValue* member_access = (IRSSAValue*)ExpressionCodeGen(left);
+
+			if (!member_access)
+				return nullptr;
+
 			TypeStorage* member_access_expr_type = m_Metadata.GetExprType(member_access->SSA);
 
 			SetLikelyConstantIntegerType(member_access_expr_type->BaseID);
@@ -1471,8 +1425,7 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = member_access->SSA;
-				store->Type = member_access_expr_type->BaseID;
-				store->Pointer = TSToLegacy(member_access_expr_type).Pointer;
+				store->Type = member_access_expr_type;
 			}
 
 			ResetLikelyConstantType();
@@ -1488,7 +1441,7 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = left_ssa->SSA;
-				store->Type = m_Metadata.GetExprType(right_ssa->SSA)->BaseID;
+				store->Type = m_Metadata.GetExprType(right_ssa->SSA);
 			}
 			return store;
 		}
@@ -1507,8 +1460,7 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = left_ssa->SSA;
-				store->Type = expr_type->BaseID;
-				store->Pointer = TypeSystem::IndirectionCount(expr_type) - 1;
+				store->Type = expr_type;
 			}
 			return store;
 		}
@@ -1519,6 +1471,12 @@ namespace Glass
 	{
 		if (call->Function.Symbol == "type_info") {
 			return TypeInfoCodeGen(call);
+		}
+
+		SymbolType callee_symbol_type = m_Metadata.GetSymbolType(call->Function.Symbol);
+
+		if (callee_symbol_type == SymbolType::Variable || callee_symbol_type == SymbolType::GlobVariable) {
+			return FuncRefCallCodeGen(call);
 		}
 
 		u64 IRF = m_Metadata.GetFunctionMetadata(call->Function.Symbol);
@@ -1688,10 +1646,7 @@ namespace Glass
 		if (has_return)
 		{
 			auto ir_ssa = CreateIRSSA();
-
-			ir_ssa->Type = metadata->ReturnType.ID;
 			ir_ssa->Value = IR(ir_call);
-			ir_ssa->Pointer = metadata->ReturnType.Pointer;
 
 			IRSSAValue* ir_ssa_val = IR(IRSSAValue(ir_ssa->ID));
 
@@ -1701,7 +1656,6 @@ namespace Glass
 		}
 		else {
 			auto void_ssa = CreateIRSSA();
-			void_ssa->Type = IR_void;
 			void_ssa->Value = IR(ir_call);
 			return nullptr;
 		}
@@ -1746,9 +1700,8 @@ namespace Glass
 				//Handle temporaries that are not pointers
 				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
 				if (obj_expr_type.Pointer == 0) {
+
 					auto temporary_reference = CreateIRSSA();
-					temporary_reference->Type = obj_expr_type.ID;
-					temporary_reference->Pointer = 1;
 					temporary_reference->Value = IR(IRAddressOf(obj_ssa_value));
 
 					object_ssa_id = temporary_reference->ID;
@@ -1806,7 +1759,6 @@ namespace Glass
 			auto address_ssa = CreateIRSSA();
 
 			address_ssa->Value = IR(ir_mem_access);
-			address_ssa->Type = IR_u64;
 
 			m_Metadata.RegExprType(address_ssa->ID, LegacyToTS(result_type));
 
@@ -1914,11 +1866,36 @@ namespace Glass
 		GS_CORE_ASSERT(func_id != NULL_ID, "Function must exist at this point");
 
 		auto ssa = CreateIRSSA();
-		ssa->Value = IR(IRFuncPtr(func_id));
-		ssa->Type = IR_void;
-		ssa->Pointer = 1;
+		ssa->Value = IR(IRFuncRef(func_id));
 
 		return IR(IRSSAValue(ssa->ID));
+	}
+
+
+	IRInstruction* Compiler::FuncRefCallCodeGen(const FunctionCall* call)
+	{
+		//We only support function calls as variables for now
+
+		Identifier* function_as_identifier = AST(Identifier());
+		function_as_identifier->Symbol = call->Function;
+
+		auto callee_ssa = GetExpressionByValue(function_as_identifier);
+		if (!callee_ssa)
+			return nullptr;
+		auto callee_type = m_Metadata.GetExprType(callee_ssa->SSA);
+
+		std::vector<u64> argument_SSAs;
+
+		for (auto arg : call->Arguments) {
+			argument_SSAs.push_back(GetExpressionByValue(arg)->SSA);
+		}
+
+		auto return_ssa = CreateIRSSA();
+		return_ssa->Value = IR(IRCallFuncRef(callee_ssa->SSA, argument_SSAs, callee_type));
+
+		m_Metadata.RegExprType(return_ssa->ID, ((TSFunc*)callee_type)->ReturnType);
+
+		return IR(IRSSAValue(return_ssa->ID));
 	}
 
 	std::vector<IRInstruction*> Compiler::ScopeCodeGen(const ScopeNode* scope)
@@ -1986,7 +1963,6 @@ namespace Glass
 			ir_array_Access->ElementSSA = index->SSA;
 			ir_array_Access->Type = obj_expr_type->BaseID;
 
-			array_access_ssa->Type = obj_expr_type->BaseID;
 			array_access_ssa->Value = ir_array_Access;
 
 			obj_expr_type = TypeSystem::ReduceIndirection((TSPtr*)obj_expr_type);
@@ -2003,13 +1979,10 @@ namespace Glass
 	{
 		u64 GlobalTypeInfoArrayIndex = -1;
 
-		u64 type_id = -1;
-		u64 pointer = -1;
-		u64 array = -1;
+		TypeStorage* type_of_type = nullptr;
 
 		if (typeof->What->GetType() == NodeType::Identifier)
 		{
-
 			Identifier* type_ident = (Identifier*)typeof->What;
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(type_ident->Symbol.Symbol);
@@ -2022,21 +1995,18 @@ namespace Glass
 
 			if (symbol_type == SymbolType::Type)
 			{
-				type_id = m_Metadata.GetType(type_ident->Symbol.Symbol);
+				type_of_type = TypeSystem::GetBasic(type_ident->Symbol.Symbol);
 			}
 
 			if (symbol_type == SymbolType::Variable)
 			{
 				const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariableSSA(type_ident->Symbol.Symbol));
-				type_id = metadata->Tipe.ID;
-				pointer = metadata->Tipe.Pointer;
+				type_of_type = metadata->Tipe;
 			}
 
 			if (symbol_type == SymbolType::Enum)
 			{
 				const auto metadata = m_Metadata.GetEnum(type_ident->Symbol.Symbol);
-				type_id = m_Metadata.GetType(type_ident->Symbol.Symbol);
-				pointer = 0;
 			}
 
 			if (symbol_type == SymbolType::Function)
@@ -2048,22 +2018,15 @@ namespace Glass
 		else
 		{
 			IRSSAValue* code = (IRSSAValue*)ExpressionCodeGen(typeof->What);
-			type_id = m_Metadata.GetExprType(code->SSA)->BaseID;
+			type_of_type = m_Metadata.GetExprType(code->SSA);
 		}
 
 		IRSSA* ssa = CreateIRSSA();
 
 		IRTypeOf type_of;
-
-		Glass::Type type_info_query;
-		type_info_query.ID = type_id;
-
-		type_of.Type = LegacyToTS(type_info_query);
+		type_of.Type = type_of_type;
 
 		ssa->Value = IR(type_of);
-
-		ssa->Type = IR_typeinfo;
-		ssa->Pointer = true;
 
 		Type type;
 		type.ID = IR_typeinfo;
@@ -2084,22 +2047,16 @@ namespace Glass
 		auto new_ssa = CreateIRSSA();
 
 		auto cast_type = TypeExpressionGetType(cast->Type);
-
-		new_ssa->Type = cast_type->BaseID;
-		new_ssa->Pointer = TypeSystem::IndirectionCount(cast_type);
-		new_ssa->Value = IR(IRPointerCast(new_ssa->Type, new_ssa->Pointer, expr_value->SSA));
+		new_ssa->Value = IR(IRPointerCast(cast_type, expr_value->SSA));
 
 		m_Metadata.RegExprType(new_ssa->ID, cast_type);
 
 		return IR(IRSSAValue(new_ssa->ID));
 	}
 
-
 	IRInstruction* Compiler::NullCodeGen()
 	{
 		auto null_ptr_ssa = CreateIRSSA();
-		null_ptr_ssa->Type = IR_void;
-		null_ptr_ssa->Pointer = 30;
 		null_ptr_ssa->Value = IR(IRNullPtr(IR_void, 1));
 
 		m_Metadata.RegExprType(null_ptr_ssa->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
@@ -2141,7 +2098,6 @@ namespace Glass
 		auto result_type = TypeSystem::GetPtr(TypeSystem::GetBasic(IR_typeinfo), 1);
 
 		IRSSA* type_info_ssa = CreateIRSSA();
-		type_info_ssa->Type = result_type->BaseID;
 		type_info_ssa->Value = IR(IRTypeInfo(type_arg_value->SSA));
 
 		m_Metadata.RegExprType(type_info_ssa->ID, result_type);
@@ -2161,8 +2117,6 @@ namespace Glass
 		TSPtr* result_type = (TSPtr*)TypeSystem::IncreaseIndirection(referee_type);
 
 		IRSSA* rvalue_ptr_storage = CreateIRSSA();
-		rvalue_ptr_storage->Type = result_type->BaseID;
-		rvalue_ptr_storage->Pointer = result_type->Indirection;
 		rvalue_ptr_storage->Value = referee;
 
 		m_Metadata.RegExprType(rvalue_ptr_storage->ID, result_type);
@@ -2230,16 +2184,9 @@ namespace Glass
 
 			IRLoad load;
 			load.SSAddress = ir_address->SSA;
-			load.Type = expr_type->BaseID;
-
-			if (TypeSystem::IsPointer(expr_type))
-			{
-				load.Pointer = true;
-			}
+			load.Type = expr_type;
 
 			value_ssa->Value = IR(load);
-			value_ssa->Type = load.Type;
-			value_ssa->Pointer = TypeSystem::IsPointer(m_Metadata.GetExprType(ir_address->SSA));
 
 			m_Metadata.RegExprType(value_ssa->ID, m_Metadata.GetExprType(ir_address->SSA));
 
@@ -2263,11 +2210,9 @@ namespace Glass
 				IRLoad load;
 
 				load.SSAddress = ir_address->SSA;
-				load.Type = expr_type->BaseID;
+				load.Type = expr_type;
 
 				value_ssa->Value = IR(load);
-				value_ssa->Type = load.Type;
-				value_ssa->Pointer = TSToLegacy(expr_type).Pointer;
 
 				m_Metadata.RegExprType(value_ssa->ID, expr_type);
 
@@ -2305,30 +2250,18 @@ namespace Glass
 				}
 
 				const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
-				if (!metadata->Tipe.Array)
-				{
-					IRLoad load;
-					load.SSAddress = ir_address->SSA;
-					load.Pointer = metadata->Tipe.Pointer > 0;
 
-					IRSSA* ssa = CreateIRSSA();
+				IRLoad load;
+				load.SSAddress = ir_address->SSA;
+				load.Type = metadata->Tipe;
 
-					IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
+				IRSSA* ssa = CreateIRSSA();
+				IRSSA* var_ssa = m_Metadata.GetSSA(load.SSAddress);
+				ssa->Value = IR(load);
 
-					load.Type = metadata->Tipe.ID;
+				m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
-					ssa->Type = metadata->Tipe.ID;
-					ssa->Value = IR(load);
-					ssa->Pointer = metadata->Tipe.Pointer > 0;
-
-					m_Metadata.RegExprType(ssa->ID, LegacyToTS(metadata->Tipe));
-
-					return IR(IRSSAValue(ssa->ID));
-				}
-				else
-				{
-					return ir_address;
-				}
+				return IR(IRSSAValue(ssa->ID));
 			}
 			else {
 
@@ -2344,12 +2277,9 @@ namespace Glass
 
 				IRSSA* ssa = CreateIRSSA();
 
-				load.Type = expr_type->BaseID;
-				load.Pointer = TypeSystem::IsPointer(expr_type);
+				load.Type = expr_type;
 
-				ssa->Type = expr_type->BaseID;
 				ssa->Value = IR(load);
-				ssa->Pointer = TypeSystem::IndirectionCount(expr_type);
 
 				m_Metadata.RegExprType(ssa->ID, expr_type);
 
@@ -2370,14 +2300,11 @@ namespace Glass
 			u16 new_type_ind_count = (u64)TypeSystem::IndirectionCount(new_type);
 
 			IRLoad* ir_load = IR(IRLoad());
-			ir_load->Type = expr_type->BaseID;
-			ir_load->Pointer = new_type_ind_count;
+			ir_load->Type = new_type;
 			ir_load->SSAddress = ir_address->SSA;
 
 			auto load_ssa = CreateIRSSA();
 
-			load_ssa->Type = expr_type->BaseID;
-			load_ssa->Pointer = new_type_ind_count;
 			load_ssa->Value = ir_load;
 
 			m_Metadata.RegExprType(load_ssa->ID, new_type);
@@ -2406,8 +2333,6 @@ namespace Glass
 		}
 
 		IRSSA* any_ssa = CreateIRSSA();
-		any_ssa->Type = m_Metadata.GetType("Any");
-
 		any_ssa->Value = IR(IRAny(expr_result->SSA, expr_type));
 
 		m_Metadata.RegExprType(any_ssa->ID, expr_type);
@@ -2416,10 +2341,9 @@ namespace Glass
 
 		IRLoad* ir_load = IR(IRLoad());
 		ir_load->SSAddress = any_ssa->ID;
-		ir_load->Type = IR_any;
+		ir_load->Type = TypeSystem::GetBasic(IR_any);
 
 		ir_load_ssa->Value = ir_load;
-		ir_load_ssa->Type = IR_any;
 
 		m_Metadata.RegExprType(ir_load_ssa->ID, expr_type);
 
@@ -2447,7 +2371,6 @@ namespace Glass
 			}
 
 			auto any_array_ir_ssa = CreateIRSSA();
-			any_array_ir_ssa->Type = IR_array;
 			any_array_ir_ssa->Value = IR(IRAnyArray(anys));;
 
 			m_Metadata.RegExprType(any_array_ir_ssa->ID, TypeSystem::GetBasic(IR_array));
@@ -2473,7 +2396,6 @@ namespace Glass
 
 		auto type_expr_value_ssa = CreateIRSSA();
 
-		type_expr_value_ssa->Type = expr_type->BaseID;
 		type_expr_value_ssa->Value = IR(IRTypeValue(type));
 
 		m_Metadata.RegExprType(type_expr_value_ssa->ID, expr_type);
@@ -2567,6 +2489,27 @@ namespace Glass
 
 		if (type_expr->GetType() == NodeType::TE_TypeName) {
 			type = TypeSystem::GetBasic(((TypeExpressionTypeName*)type_expr)->Symbol.Symbol);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Func) {
+			TypeExpressionFunc* type_func = (TypeExpressionFunc*)type_expr;
+
+			std::vector<TypeStorage*> arguments;
+
+			for (auto arg : type_func->Arguments) {
+				GS_CORE_ASSERT(arg);
+				arguments.push_back(TypeExpressionGetType(arg));
+			}
+
+			TypeStorage* return_type = nullptr;
+			if (type_func->ReturnType) {
+				return_type = TypeExpressionGetType(type_func->ReturnType);
+			}
+			else {
+				return_type = TypeSystem::GetBasic(IR_void);
+			}
+
+			type = TypeSystem::GetFunction(arguments, return_type);
 		}
 
 		if (indirection) {

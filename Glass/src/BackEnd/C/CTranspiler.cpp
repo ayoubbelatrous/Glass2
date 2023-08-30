@@ -5,8 +5,11 @@
 //#define DBG_COMMENT(x) x
 #define DBG_COMMENT(x)
 
+//@Deprecated
+
 namespace Glass
 {
+	/*
 	CTranspiler::CTranspiler(IRTranslationUnit* program, const std::vector<std::string>& includes, const MetaData* metadata)
 		:m_Program(program), m_Includes(includes), m_Metadata(metadata)
 	{
@@ -53,7 +56,7 @@ namespace Glass
 
 		header += R"(
 typedef struct Array
-{	
+{
 	u64 count;
 	u64 data;
 } Array;
@@ -65,7 +68,7 @@ typedef struct Array
 
 		header += R"(
 typedef struct TypeInfo
-{	
+{
 	const u64 id;
 	const bool pointer;
 	const char* const name;
@@ -77,13 +80,13 @@ typedef struct TypeInfo
 
 		header += R"(
 typedef struct TypeInfo_Struct
-{	
+{
 	const u64 id;
 	bool pointer;
 	const char* const name;
 	const u64 size;
 	const TypeInfo_Flags flags;
-	
+
 	const Array members;
 } TypeInfo_Struct;
 			)";
@@ -107,7 +110,7 @@ typedef struct TypeInfo_Member
 
 		header += R"(
 typedef struct Any
-{	
+{
 	u64 type;
 	u64* data;
 } Any;
@@ -261,28 +264,28 @@ typedef struct Any
 				code += IRCodeGen(inst) + ";";
 			}
 		}
-		// 
+		//
 		// 		std::string type_info_code;
 		// 		std::string type_info_struct_member_data;
-		// 
+		//
 		// 		//Type Info
 		// 		{
 		// 			{//Base Type Info
 		// 				std::string var_type_table;
-		// 
+		//
 		// 				if (m_VariableTypeInfo.size() > 0)
 		// 				{
 		// 					var_type_table += "\n";
-		// 
+		//
 		// 					{
 		// 						var_type_table += fmt::format("static const TypeInfo __var_type_info_table[{}] = ", m_VariableTypeInfo.size());
 		// 						var_type_table += "{\n";
-		// 
+		//
 		// 						u64 i = 0;
-		// 
+		//
 		// 						for (const auto [id, type] : m_VariableTypeInfo) {
 		// 							m_TypeInfoTable[id] = i;
-		// 
+		//
 		// 							var_type_table += "{";
 		// 							//var_type_table += fmt::format(".id={},", type.id);
 		// 							//var_type_table += fmt::format(".pointer={},", (u64)type.pointer);
@@ -291,78 +294,78 @@ typedef struct Any
 		// 							//
 		// 							//var_type_table += fmt::format(".flags={},", type.flags);
 		// 							var_type_table += "},";
-		// 
+		//
 		// 							i++;
 		// 						}
-		// 
+		//
 		// 						var_type_table += "};\n";
 		// 					}
 		// 					var_type_table += "\n";
 		// 				}
-		// 
+		//
 		// 				type_info_code += var_type_table;
 		// 			}
-		// 
+		//
 		// 			{//Struct Type Info
 		// 				std::string var_struct_type_table;
-		// 
+		//
 		// 				if (m_VariableStructTypeInfo.size() > 0)
 		// 				{
 		// 					var_struct_type_table += "\n";
-		// 
+		//
 		// 					{
 		// 						var_struct_type_table += fmt::format("static const TypeInfo_Struct __var_type_info_struct_table[{}] = ", m_VariableStructTypeInfo.size());
 		// 						var_struct_type_table += "{\n";
-		// 
+		//
 		// 						u64 i = 0;
-		// 
+		//
 		// 						for (const auto [id, type] : m_VariableStructTypeInfo) {
 		// 							m_TypeInfoTable[id] = i;
-		// 
+		//
 		// 							var_struct_type_table += "{";
 		// 							//var_struct_type_table += fmt::format(".id={},", type.id);
 		// 							//var_struct_type_table += fmt::format(".pointer={},", (u64)type.pointer);
 		// 							//var_struct_type_table += fmt::format(".name=\"{}\",", type.name);
 		// 							//var_struct_type_table += fmt::format(".size={},", type.size);
 		// 							//var_struct_type_table += fmt::format(".flags={},", type.flags);
-		// 
+		//
 		// 							std::string member_type_info_name = fmt::format("__struct_{}_members", id);
-		// 
+		//
 		// 							type_info_struct_member_data += fmt::format("static const TypeInfo_Member {} [{}]", member_type_info_name, type.members.size());
 		// 							type_info_struct_member_data += "= { \n";
 		// 							for (const TypeInfoMember& member : type.members) {
 		// 								type_info_struct_member_data += "{";
-		// 
+		//
 		// 								//type_info_struct_member_data += fmt::format(".id={},", member.id);
 		// 								//type_info_struct_member_data += fmt::format(".pointer={},", (u64)member.pointer);
 		// 								//type_info_struct_member_data += fmt::format(".name=\"{}\",", m_Metadata->GetType(member.id));
 		// 								//type_info_struct_member_data += fmt::format(".size={},", m_Metadata->GetTypeSize(member.id));
 		// 								//type_info_struct_member_data += fmt::format(".flags={},", member.flags);
-		// 
+		//
 		// 								type_info_struct_member_data += fmt::format(".member_name=\"{}\",", member.member_name);
-		// 
+		//
 		// 								type_info_struct_member_data += "},";
 		// 							}
 		// 							type_info_struct_member_data += "};\n";
-		// 
+		//
 		// 							var_struct_type_table += "\n.members = {";
 		// 							var_struct_type_table += fmt::format(".data = &{},", member_type_info_name);
 		// 							var_struct_type_table += fmt::format(".count = {}", type.members.size());
 		// 							var_struct_type_table += "}\n";
-		// 
+		//
 		// 							var_struct_type_table += "},";
-		// 
+		//
 		// 							i++;
 		// 						}
-		// 
+		//
 		// 						var_struct_type_table += "};\n";
 		// 					}
 		// 					var_struct_type_table += "\n";
 		// 				}
-		// 
+		//
 		// 				type_info_code += var_struct_type_table;
 		// 			}
-		// 
+		//
 		// 		}
 
 		//return fmt::format("{}{}{}{}{}", header, type_info_struct_member_data, type_info_code, forward_declaration, code);
@@ -424,10 +427,10 @@ typedef struct Any
 
 			std::string ptr = "";
 
-			for (u64 i = 0; i < store->Pointer; i++)
-			{
-				ptr += "*";
-			}
+			// 			for (u64 i = 0; i < store->Pointer; i++)
+			// 			{
+			// 				ptr += "*";
+			// 			}
 
 
 			std::string code;
@@ -618,9 +621,9 @@ typedef struct Any
 			return data_str;
 		}
 		break;
-		case IRNodeType::FuncPtr:
+		case IRNodeType::FuncRef:
 		{
-			IRFuncPtr* func_ptr = (IRFuncPtr*)inst;
+			IRFuncRef* func_ptr = (IRFuncRef*)inst;
 			return fmt::format("&{}", m_Metadata->GetFunctionMetadata(func_ptr->FunctionID)->Name);
 		}
 		break;
@@ -633,9 +636,9 @@ typedef struct Any
 		case IRNodeType::GlobDecl:
 		{
 			IRGlobalDecl* global_decl = (IRGlobalDecl*)inst;
-			// 
+			//
 			// 			std::string type = m_Metadata->GetType(global_decl->Type);
-			// 
+			//
 			// 			for (u64 i = 0; i < global_decl->Pointer; i++)
 			// 			{
 			// 				type.push_back('*');
@@ -653,12 +656,12 @@ typedef struct Any
 	{
 		// 		if (type_of->typeInfoType == TypeInfoType::Base) {
 		// 			m_VariableTypeInfo[m_VariableTypeInfo.size()] = *type_of->Type;
-		// 
+		//
 		// 			return fmt::format("(&__var_type_info_table[{}])", m_VariableTypeInfo.size() - 1);
 		// 		}
 		// 		else if (type_of->typeInfoType == TypeInfoType::Struct) {
 		// 			m_VariableStructTypeInfo[m_VariableStructTypeInfo.size()] = *(TypeInfoStruct*)type_of->Type;
-		// 
+		//
 		// 			return fmt::format("(&__var_type_info_struct_table[{}])", m_VariableStructTypeInfo.size() - 1);
 		// 		}
 
@@ -914,4 +917,5 @@ typedef struct Any
 	{
 		return m_TypeMap[ID];
 	}
+	*/
 }

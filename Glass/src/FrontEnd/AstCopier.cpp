@@ -26,7 +26,6 @@ namespace Glass
 		case NodeType::NumericLiteral:
 		case NodeType::StringLiteral:
 		case NodeType::BinaryExpression:
-		case NodeType::TypeExpression:
 		case NodeType::MemberAccess:
 		case NodeType::ArrayAccess:
 		case NodeType::Reference:
@@ -186,9 +185,6 @@ namespace Glass
 		break;
 		case NodeType::BinaryExpression:
 			return CopyBinaryExpression((BinaryExpression*)expr);
-			break;
-		case NodeType::TypeExpression:
-			return CopyTypeExpr((TypeExpression*)expr);
 			break;
 		case NodeType::MemberAccess:
 			return CopyMemberAccess((MemberAccess*)expr);

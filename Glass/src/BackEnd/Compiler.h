@@ -46,6 +46,7 @@ namespace Glass
 		IRInstruction* SizeOfCodeGen(const SizeOfNode* size_of);
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
+		IRInstruction* FuncRefCallCodeGen(const FunctionCall* call);
 
 		std::vector<IRInstruction*> ScopeCodeGen(const ScopeNode* scope);
 

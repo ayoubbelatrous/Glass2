@@ -111,7 +111,8 @@ namespace Glass
 
 		Function,
 		ForeignFunction,
-		FuncPtr,
+		FuncRef,
+		CallFuncRef,
 
 		ARGValue,
 		Call,
@@ -391,15 +392,9 @@ namespace Glass
 		u64 ID = 0;
 		IRInstruction* Value = nullptr;
 
-		u64 Type;
-		u64 Pointer = false;
-		bool Array = false;
-
 		virtual std::string ToString() const override {
 			std::string str = "$ ";
 
-			str += std::to_string(Type);
-			str += " : ";
 			str += std::to_string(ID);
 			str += " = ";
 			if (Value) {
@@ -429,17 +424,16 @@ namespace Glass
 	struct IRAlloca : public IRInstruction {
 		u64 ID = 0;
 
-		u64 Type;
-		u32 Pointer = 0;
+		TypeStorage* Type = nullptr;
 
 		const VariableMetadata* VarMetadata = nullptr;
 
-		IRAlloca(u64 type, u32 pointer)
-			:Type(type), Pointer(pointer)
+		IRAlloca(TypeStorage* type)
+			:Type(type)
 		{}
 
-		IRAlloca(u64 type, u32 pointer, const VariableMetadata* var_metadata)
-			:Type(type), Pointer(pointer), VarMetadata(var_metadata)
+		IRAlloca(TypeStorage* type, const VariableMetadata* var_metadata)
+			:Type(type), VarMetadata(var_metadata)
 		{}
 
 		virtual std::string ToString() const override {
@@ -486,7 +480,6 @@ namespace Glass
 			for (auto a : Arguments) {
 				IRSSA* arg = (IRSSA*)a;
 				str += "$ ";
-				str += std::to_string(arg->Type);
 				str += " : ";
 				str += std::to_string(arg->ID);
 				str += ", ";
@@ -566,10 +559,11 @@ namespace Glass
 
 	struct IRStore : public IRInstruction {
 		u64 ID = 0;
-		u64 Type = 0;
-		u64 Pointer = 0;
+
 		u64 AddressSSA = 0;
 		IRInstruction* Data = nullptr;
+
+		TypeStorage* Type;
 
 		virtual std::string ToString() const override {
 			return fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
@@ -583,8 +577,8 @@ namespace Glass
 	struct IRLoad : public IRInstruction {
 		u64 ID = 0;
 		u64 SSAddress = 0;
-		u64 Type = 0;
-		u64 Pointer = false;
+
+		TypeStorage* Type;
 
 		virtual std::string ToString() const override {
 			return 	fmt::format("LOAD ${}", SSAddress);
@@ -1021,11 +1015,11 @@ namespace Glass
 		}
 	};
 
-	struct IRFuncPtr : public IRInstruction {
+	struct IRFuncRef : public IRInstruction {
 		u64 ID = 0;
 		u64 FunctionID = 0;
 
-		IRFuncPtr(u64 functionID)
+		IRFuncRef(u64 functionID)
 			:FunctionID(functionID) {}
 
 		virtual std::string ToString() const override
@@ -1034,7 +1028,27 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const {
-			return IRNodeType::FuncPtr;
+			return IRNodeType::FuncRef;
+		}
+	};
+
+	struct IRCallFuncRef : public IRInstruction {
+		u64 ID = 0;
+
+		u64 PtrSSA = 0;
+		std::vector<u64> Arguments;
+		TypeStorage* Signature = 0;
+
+		IRCallFuncRef(u64 ptrSSA, const std::vector<u64>& arguments, TypeStorage* signature)
+			:PtrSSA(ptrSSA), Arguments(arguments), Signature(signature) {}
+
+		virtual std::string ToString() const override
+		{
+			return "void*()";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::CallFuncRef;
 		}
 	};
 
@@ -1074,13 +1088,11 @@ namespace Glass
 	struct IRPointerCast : public IRInstruction {
 		u64 ID = 0;
 
-		u64 Type = 0;
-		u64 Pointer = 0;
-
+		TypeStorage* Type = 0;
 		u64 PointerSSA = 0;
 
-		IRPointerCast(u64 type, u64 pointer, u64 pointer_ssa)
-			:Type(type), Pointer(pointer), PointerSSA(pointer_ssa)
+		IRPointerCast(TypeStorage* type, u64 pointer_ssa)
+			:Type(type), PointerSSA(pointer_ssa)
 		{}
 
 		virtual std::string ToString() const override {

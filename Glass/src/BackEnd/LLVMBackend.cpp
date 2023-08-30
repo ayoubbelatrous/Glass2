@@ -412,9 +412,18 @@ namespace Glass
 
 			u64 struct_id = m_Metadata->GetStructIDFromType(typeinfo->BaseID);
 
-			TypeInfoFlags type_info_flags = m_Metadata->GetTypeInfoFlags(typeinfo->BaseID);
+			if (typeinfo->Kind == TypeStorageKind::Function) {
+				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+					, {
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+					});
+			}
+			else if (struct_id == -1) {
 
-			if (struct_id == -1) {
+				TypeInfoFlags type_info_flags = m_Metadata->GetTypeInfoFlags(typeinfo->BaseID);
 
 				llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(
 					m_Metadata->GetType(typeinfo->BaseID), "", 0, m_LLVMModule);
@@ -428,6 +437,9 @@ namespace Glass
 					});
 			}
 			else if (struct_id != -1) {
+
+				TypeInfoFlags type_info_flags = m_Metadata->GetTypeInfoFlags(typeinfo->BaseID);
+
 				const StructMetadata* struct_metadata = m_Metadata->GetStructMetadata(struct_id);
 
 				llvm::Constant* ti_elem_name =
@@ -504,7 +516,30 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::TypeValueCodeGen(const IRTypeValue* type_value)
 	{
-		return llvm::ConstantInt::get(GetLLVMType(IR_type), (TypeSystem::GetTypeInfoIndex(type_value->Type)));
+		auto type_table_index = TypeSystem::GetTypeInfoIndex(type_value->Type);
+		return llvm::ConstantInt::get(GetLLVMType(IR_type), type_table_index);
+	}
+
+	llvm::Value* LLVMBackend::FuncRefCodeGen(const IRFuncRef* func_ref)
+	{
+		auto llvm_Func = GetLLVMFunction(func_ref->FunctionID);
+		return llvm_Func;
+	}
+
+
+	llvm::Value* LLVMBackend::CallFuncRefCodeGen(const IRCallFuncRef* func_ref)
+	{
+		auto llvm_FuncPtr = GetName(func_ref->PtrSSA);
+
+		auto llvm_FuncType = GetLLVMType(func_ref->Signature);
+
+		std::vector<llvm::Value*> llvm_Arguments;
+
+		for (auto arg : func_ref->Arguments) {
+			llvm_Arguments.push_back(GetName(arg));
+		}
+
+		return m_LLVMBuilder->CreateCall((llvm::FunctionType*)llvm_FuncType->getPointerElementType(), llvm_FuncPtr, llvm_Arguments, "ptrcall");
 	}
 
 	llvm::Value* LLVMBackend::CodeGen(const IRInstruction* instruction)
@@ -566,6 +601,10 @@ namespace Glass
 		case IRNodeType::TypeOf: return TypeOfCodeGen((IRTypeOf*)instruction);
 		case IRNodeType::TypeInfo: return TypeInfoCodeGen((IRTypeInfo*)instruction);
 		case IRNodeType::TypeValue: return TypeValueCodeGen((IRTypeValue*)instruction);
+
+
+		case IRNodeType::FuncRef: return FuncRefCodeGen((IRFuncRef*)instruction);
+		case IRNodeType::CallFuncRef: return CallFuncRefCodeGen((IRCallFuncRef*)instruction);
 
 		default:
 			return 0;
@@ -821,8 +860,10 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::AllocaCodeGen(const IRAlloca* aloca)
 	{
+		//make it work with function types
+
 		llvm::AllocaInst* llvm_alloca =
-			CreateEntryBlockAlloca(GetLLVMTypeFull(aloca->Type, aloca->Pointer));
+			CreateEntryBlockAlloca(GetLLVMType(aloca->Type));
 
 		//@Debugging
 		if (aloca->VarMetadata)
@@ -850,21 +891,15 @@ namespace Glass
 
 	void LLVMBackend::GlobalVariableCodeGen(const IRGlobalDecl* global_decl)
 	{
-		u64 indirection = 0;
-		if (global_decl->Type->Kind == TypeStorageKind::Pointer) {
-			indirection = ((TSPtr*)global_decl->Type)->Indirection;
-		}
-
-		auto type = GetLLVMTypeFull(global_decl->Type->BaseID, indirection);
-
-		auto llvm_GlobalVar = new llvm::GlobalVariable(*m_LLVMModule, type, false, llvm::GlobalVariable::LinkageTypes::CommonLinkage, llvm::ConstantAggregateZero::get(type));
+		auto llvm_Type = GetLLVMType(global_decl->Type);
+		auto llvm_GlobalVar = new llvm::GlobalVariable(*m_LLVMModule, llvm_Type, false, llvm::GlobalVariable::LinkageTypes::CommonLinkage, llvm::ConstantAggregateZero::get(llvm_Type));
 
 		InsertGlobalVariable(global_decl->GlobID, llvm_GlobalVar);
 	}
 
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
-		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMTypeFull(load->Type, load->Pointer), GetName(load->SSAddress));
+		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMType(load->Type), GetName(load->SSAddress));
 		return ld;
 	}
 
@@ -986,7 +1021,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
 	{
-		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMTypeFull(ptr_cast->Type, ptr_cast->Pointer));
+		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMType(ptr_cast->Type));
 	}
 
 	llvm::Value* LLVMBackend::NullPtrCodeGen(const IRNullPtr* null_ptr)
@@ -1071,8 +1106,10 @@ namespace Glass
 			llvm_Struct,
 			1);
 
+		auto type_table_index = TypeSystem::GetTypeInfoIndex(any->Type);
+
 		m_LLVMBuilder->CreateStore(any_Data, llvm_any_data_ptr);
-		m_LLVMBuilder->CreateStore(llvm::ConstantInt::get(GetLLVMType(IR_i64), TypeSystem::GetTypeInfoIndex(any->Type)), llvm_any_type_ptr);
+		m_LLVMBuilder->CreateStore(llvm::ConstantInt::get(GetLLVMType(IR_i64), type_table_index), llvm_any_type_ptr);
 
 		return llvm_Struct;
 	}
