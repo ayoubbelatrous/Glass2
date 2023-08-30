@@ -1074,6 +1074,7 @@ namespace Glass
 		u64 GlobID = 0;
 
 		TypeStorage* Type = nullptr;
+		IRCONSTValue* Initializer = nullptr;
 
 		virtual std::string ToString() const override
 		{

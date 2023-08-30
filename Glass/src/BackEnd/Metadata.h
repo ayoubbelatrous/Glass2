@@ -109,6 +109,7 @@ namespace Glass {
 
 		bool IsArg = false;
 		bool Global = false;
+		bool Foreign = false;
 
 		IRSSA* DataSSA = nullptr;
 		IRSSA* AddressSSA = nullptr;

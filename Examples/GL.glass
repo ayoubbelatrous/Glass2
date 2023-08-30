@@ -1,0 +1,36 @@
+//	Opengl32.lib
+#foreign fn glClear(i32 buffer) : void {};
+#foreign fn glClearColor(f32 r, f32 g, f32 b, f32 a) : void {};
+
+#foreign fn glVertex2f(f32 x, f32 y) : void {};
+
+#foreign fn glBegin(i32 mode) : void {};
+#foreign fn glEnd() : void {};
+
+#foreign fn wglGetProcAddress(u8* gl_proc) : void* {};
+
+fn GL_load_Func(void** ptr, u8* func_name){
+	*ptr = wglGetProcAddress(func_name);
+	if *ptr == null {
+		printf("GL ERROR: could not load: %s\n", func_name);
+	}
+}
+
+// constants
+
+u32 GL_ARRAY_BUFFER				= 34962;
+u32 GL_ELEMENT_ARRAY_BUFFER		= 34963;
+
+(i32, u32*) 					glGenBuffers;
+(i32, u32*) 					glDeleteBuffers;
+
+(u32, u32) 						glBindBuffer;
+
+fn InitGL() {
+
+	printf("Initilizing Gl\n");
+
+	GL_load_Func(cast(void**) &glGenBuffers, "glGenBuffers");
+	GL_load_Func(cast(void**) &glBindBuffer, "glBindBuffer");
+	GL_load_Func(cast(void**) &glDeleteBuffers, "glDeleteBuffers");
+}

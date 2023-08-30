@@ -135,11 +135,6 @@ namespace Glass {
 			llvm::Type* full_type = GetLLVMType(type);
 
 			if (pointer) {
-				if (type == IR_void)
-					return Opaque_Type;
-			}
-
-			if (pointer) {
 				for (size_t i = 0; i < pointer; i++)
 				{
 					full_type = llvm::PointerType::get(full_type, (unsigned)0);
@@ -167,13 +162,7 @@ namespace Glass {
 			}
 
 			if (type->Kind == TypeStorageKind::Base) {
-
-				if (type->BaseID == IR_void) {
-					return GetLLVMType(IR_u8);
-				}
-				else {
-					return GetLLVMType(type->BaseID);
-				}
+				return GetLLVMType(type->BaseID);
 			}
 
 			if (type->Kind == TypeStorageKind::Function) {

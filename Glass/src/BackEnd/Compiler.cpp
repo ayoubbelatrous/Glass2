@@ -358,6 +358,7 @@ namespace Glass
 
 			FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(ID);
 			metadata->Foreign = true;
+			return nullptr;
 		}
 		else if (tipe == NodeType::StructNode)
 		{
@@ -374,7 +375,14 @@ namespace Glass
 			struct_metadata.Foreign = true;
 
 			m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
+			return nullptr;
 		}
+		else if (tipe == NodeType::Variable) {
+			return GlobalVariableCodeGen((VariableNode*)frn->statement, true);
+		}
+
+		GS_CORE_ASSERT(0, "Un-supported foreign entity");
+
 		return nullptr;
 	}
 
@@ -652,8 +660,9 @@ namespace Glass
 		return nullptr;
 	}
 
-	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode)
+	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode, bool foreign /*= false*/)
 	{
+
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
 
 		if (metadata != nullptr)
@@ -667,15 +676,6 @@ namespace Glass
 
 		u64 glob_id = GetGlobalID();
 
-		if (variableNode->Assignment != nullptr)
-		{
-			MSG_LOC(variableNode->Assignment);
-			FMT_WARN("assignment for global variables is not supported yet");
-			return nullptr;
-		}
-
-		IRSSA* StorageSSA = CreateIRSSA();
-
 		TypeStorage* Type = TypeExpressionGetType(variableNode->Type);
 
 		if (Type == nullptr) {
@@ -684,14 +684,13 @@ namespace Glass
 			return nullptr;
 		}
 
-		StorageSSA->Value = nullptr;
-
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
 			Type,
 			false,
 			true,
-			StorageSSA,
+			foreign,
+			nullptr,
 			nullptr };
 
 		m_Metadata.RegisterGlobalVariable(glob_id, variableNode->Symbol.Symbol);
@@ -700,6 +699,34 @@ namespace Glass
 		IRGlobalDecl* global = IR(IRGlobalDecl());
 		global->GlobID = glob_id;
 		global->Type = Type;
+
+		if (variableNode->Assignment != nullptr)
+		{
+			if (variableNode->Assignment->GetType() != NodeType::NumericLiteral) {
+				MSG_LOC(variableNode->Assignment);
+				FMT_WARN("const expression are not suppoerted yet you can only use numeric literals as an initializer for global variables");
+				return nullptr;
+			}
+
+			if (foreign) {
+				MSG_LOC(variableNode->Assignment);
+				FMT_WARN("foreign global variables cannot have initializers");
+				return nullptr;
+			}
+
+			auto as_numeric_literal = (NumericLiteral*)variableNode->Assignment;
+
+			global->Initializer = IR(IRCONSTValue());
+
+			if (as_numeric_literal->type == NumericLiteral::Type::Int) {
+				memcpy(&global->Initializer->Data, &as_numeric_literal->Val.Int, sizeof(i64));
+			}
+			else if (as_numeric_literal->type == NumericLiteral::Type::Float) {
+				memcpy(&global->Initializer->Data, &as_numeric_literal->Val.Int, sizeof(double));
+			}
+
+			global->Initializer->Type = Type->BaseID;
+		}
 
 		return global;
 	}

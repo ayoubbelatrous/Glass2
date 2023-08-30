@@ -23,7 +23,7 @@ namespace Glass
 		IRInstruction* FunctionCodeGen(FunctionNode* functionNode);
 
 		IRInstruction* VariableCodeGen(const VariableNode* variableNode);
-		IRInstruction* GlobalVariableCodeGen(const VariableNode* variableNode);
+		IRInstruction* GlobalVariableCodeGen(const VariableNode* variableNode, bool foreign = false);
 
 		IRInstruction* ReturnCodeGen(const ReturnNode* returnNode);
 		IRInstruction* StructCodeGen(const StructNode* structNode);

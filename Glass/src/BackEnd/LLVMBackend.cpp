@@ -412,7 +412,15 @@ namespace Glass
 
 			u64 struct_id = m_Metadata->GetStructIDFromType(typeinfo->BaseID);
 
-			if (typeinfo->Kind == TypeStorageKind::Function) {
+			bool function_ptr = false;
+
+			if (typeinfo->Kind == TypeStorageKind::Pointer) {
+				if (((TSPtr*)typeinfo)->Pointee->Kind == TypeStorageKind::Function) {
+					function_ptr = true;
+				}
+			}
+
+			if (typeinfo->Kind == TypeStorageKind::Function || function_ptr) {
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
@@ -660,7 +668,6 @@ namespace Glass
 			if (!arg_metadata.Variadic) {
 
 				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe));
-
 			}
 			else {
 				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array));
@@ -891,8 +898,31 @@ namespace Glass
 
 	void LLVMBackend::GlobalVariableCodeGen(const IRGlobalDecl* global_decl)
 	{
+		const VariableMetadata* global_metadata = m_Metadata->GetVariableMetadataRecursive(1, global_decl->GlobID);
+
+		llvm::Constant* initilizer = nullptr;
 		auto llvm_Type = GetLLVMType(global_decl->Type);
-		auto llvm_GlobalVar = new llvm::GlobalVariable(*m_LLVMModule, llvm_Type, false, llvm::GlobalVariable::LinkageTypes::CommonLinkage, llvm::ConstantAggregateZero::get(llvm_Type));
+
+		std::string external_Name;
+
+		if (!global_metadata->Foreign) {
+			initilizer = llvm::ConstantAggregateZero::get(llvm_Type);
+			if (global_decl->Initializer) {
+				initilizer = (llvm::Constant*)CodeGen(global_decl->Initializer);
+			}
+		}
+		else {
+			external_Name = global_metadata->Name.Symbol;
+		}
+
+		auto llvm_GlobalVar =
+			new llvm::GlobalVariable(
+				*m_LLVMModule,
+				llvm_Type,
+				false,
+				llvm::GlobalVariable::LinkageTypes::ExternalLinkage,
+				initilizer,
+				external_Name);
 
 		InsertGlobalVariable(global_decl->GlobID, llvm_GlobalVar);
 	}
