@@ -54,6 +54,45 @@ fn test() : i32 {
 	return 450;
 }
 
+enum ShaderDataType {
+	Float	;
+	Float2	;
+	Float3	;
+	Float4	;
+};
+
+struct VertexBufferElement {
+	ShaderDataType type;
+	u32 offset;
+};
+
+struct VertexBufferLayout {
+	VertexBufferElement[..] elements;
+	u32 stride;
+};
+
+fn GetComponentCount(ShaderDataType shader_data_type) : u32 {
+
+	i32 component_type = 0;
+
+	if ShaderDataType.Float == shader_data_type {
+		component_type = 1;
+	}
+	if ShaderDataType.Float2 == shader_data_type {
+		component_type = 2;
+	}
+	if ShaderDataType.Float3 == shader_data_type {
+		component_type = 3;
+	}
+	if ShaderDataType.Float4 == shader_data_type {
+		component_type = 4;
+	}
+
+	assert(component_type, "un-reachable");
+
+	return component_type;
+}
+
 fn main() : i32 {
 
 	i32 init_result = glfwInit();

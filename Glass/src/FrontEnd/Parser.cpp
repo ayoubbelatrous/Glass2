@@ -224,6 +224,37 @@ namespace Glass
 				continue;
 			}
 
+			if (tk_type == TokenType::OpenBracket) {
+
+				Consume();
+
+				TypeExpressionArray array;
+				array.ElementType = current;
+
+				if (At().Type == TokenType::Period) {
+					Consume();
+					if (ExpectedToken(TokenType::Period)) {
+						Abort("Expected another '.' in array type expression, Instead Got: ");
+					}
+					Consume();
+
+					if (ExpectedToken(TokenType::CloseBracket)) {
+						Abort("Expected ']' in array type expression, Instead Got: ");
+					}
+					Consume();
+				}
+				else {
+
+					if (ExpectedToken(TokenType::CloseBracket)) {
+						Abort("Expected ']' in array type expression, Instead Got: ");
+					}
+					Consume();
+				}
+
+				current = AST(array);
+				continue;
+			}
+
 			break;
 		}
 

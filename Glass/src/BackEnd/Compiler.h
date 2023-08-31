@@ -67,6 +67,8 @@ namespace Glass
 		IRSSAValue* TypeExpressionCodeGen(TypeExpression* type_expr);
 		IRSSAValue* TypeValueCodeGen(TypeStorage* type);
 
+		IRSSAValue* CreateLoad(TypeStorage* type, u64 address);
+
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
 		IRData* CreateIRData();

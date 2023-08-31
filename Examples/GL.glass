@@ -21,10 +21,10 @@ fn GL_load_Func(void** ptr, u8* func_name){
 u32 GL_ARRAY_BUFFER				= 34962;
 u32 GL_ELEMENT_ARRAY_BUFFER		= 34963;
 
-(i32, u32*) 					glGenBuffers;
-(i32, u32*) 					glDeleteBuffers;
+(i32, u32*)	glGenBuffers;
+(i32, u32*) glDeleteBuffers;
 
-(u32, u32) 						glBindBuffer;
+(u32, u32) 	glBindBuffer;
 
 fn InitGL() {
 

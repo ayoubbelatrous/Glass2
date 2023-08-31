@@ -1,6 +1,0 @@
-fn assert(i32 condition, u8* message) {
-    if condition == 0 {
-        log_error("[ASSERT] :: %\n", message);
-        abort();
-    }
-}

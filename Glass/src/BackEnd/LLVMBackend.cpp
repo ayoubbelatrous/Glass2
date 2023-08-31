@@ -124,7 +124,7 @@ namespace Glass
 			InsertLLVMDebugType(IR_type, m_DBuilder->createBasicType("Type", 64, llvm::dwarf::DW_ATE_unsigned));
 		}
 
-		Opaque_Type = llvm::Type::getInt8PtrTy(*m_LLVMContext);
+		//Opaque_Type = llvm::Type::getInt8PtrTy(*m_LLVMContext);
 	}
 
 	void LLVMBackend::Compile()
@@ -216,7 +216,7 @@ namespace Glass
 			llvm_Members_Types.reserve(struct_metadata.Members.size());
 
 			for (const MemberMetadata& member_metadata : struct_metadata.Members) {
-				llvm_Members_Types.push_back(GetLLVMTypeFull(member_metadata.Tipe));
+				llvm_Members_Types.push_back(GetLLVMType(member_metadata.Type));
 			}
 
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
@@ -231,7 +231,7 @@ namespace Glass
 
 				for (const MemberMetadata& member_metadata : struct_metadata.Members) {
 
-					llvm::Type* llvm_MemberType = GetLLVMTypeFull(member_metadata.Tipe);
+					llvm::Type* llvm_MemberType = GetLLVMType(member_metadata.Type);
 
 					u64 type_size = llvm_DataLayout.getTypeSizeInBits(llvm_MemberType);
 					u32 offset_bits = (u32)llvm_StructLayout->getElementOffsetInBits(elem);
@@ -246,7 +246,7 @@ namespace Glass
 						align_bits,
 						offset_bits,
 						llvm::DINode::DIFlags::FlagZero,
-						GetLLVMDebugType(member_metadata.Tipe)
+						GetLLVMDebugType(member_metadata.Type)
 					);
 
 					llvm_Field_Types.push_back(llvm_MemberDebugType);
@@ -309,7 +309,7 @@ namespace Glass
 			std::vector<llvm::Type*> Parameters;
 
 			for (const ArgumentMetadata& arg_metadata : metadata->Arguments) {
-				Parameters.push_back(GetLLVMTypeFull(arg_metadata.Tipe));
+				Parameters.push_back(GetLLVMType(arg_metadata.Type));
 			}
 
 			llvm::FunctionType* Function_Type =
@@ -374,7 +374,7 @@ namespace Glass
 						(llvm::StructType*)GetLLVMType(IR_typeinfo_member)
 						, {
 							ti_elem_member_name,
-							llvm::ConstantInt::get(GetLLVMType(IR_type), TypeSystem::GetTypeInfoIndex(TypeSystem::GetBasic(member.Tipe.ID))),
+							llvm::ConstantInt::get(GetLLVMType(IR_type), TypeSystem::GetTypeInfoIndex(member.Type)),
 							llvm::ConstantInt::get(GetLLVMType(IR_u32),ti_elem_offset),
 						});
 
@@ -629,7 +629,7 @@ namespace Glass
 
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
 			if (!arg_metadata.Variadic) {
-				Parameters.push_back(GetLLVMTypeFull(arg_metadata.Tipe));
+				Parameters.push_back(GetLLVMType(arg_metadata.Type));
 			}
 			else {
 				Parameters.push_back(GetLLVMType(IR_array));
@@ -666,12 +666,13 @@ namespace Glass
 			llvm::AllocaInst* argument_Alloca = nullptr;
 
 			if (!arg_metadata.Variadic) {
-
-				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMTypeFull(arg_metadata.Tipe));
+				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(arg_metadata.Type));
 			}
 			else {
 				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array));
 			}
+
+
 
 			InsertName(arg_metadata.SSAID, argument_Alloca);
 
@@ -687,7 +688,7 @@ namespace Glass
 					(u32)argument_id,
 					(llvm::DIFile*)mDContext,
 					line_number,
-					GetLLVMDebugType(arg_metadata.Tipe),
+					GetLLVMDebugType(arg_metadata.Type),
 					true);
 
 				m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
@@ -929,7 +930,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
-		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMType(load->Type), GetName(load->SSAddress));
+		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMType(load->Type), GetName(load->AddressSSA));
 		return ld;
 	}
 

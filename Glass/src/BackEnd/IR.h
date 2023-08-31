@@ -576,12 +576,18 @@ namespace Glass
 
 	struct IRLoad : public IRInstruction {
 		u64 ID = 0;
-		u64 SSAddress = 0;
 
+		u64 AddressSSA = 0;
 		TypeStorage* Type;
 
+		IRLoad() = default;
+
+		IRLoad(u64 address_ssa, TypeStorage* type)
+			:AddressSSA(address_ssa), Type(type)
+		{}
+
 		virtual std::string ToString() const override {
-			return 	fmt::format("LOAD ${}", SSAddress);
+			return 	fmt::format("LOAD ${}", AddressSSA);
 		}
 
 		virtual IRNodeType GetType() const {

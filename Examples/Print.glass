@@ -116,7 +116,7 @@ fn print_any(Any any) : i32 {
 	return 0;
 }
 
-fn print(Any... args) : i32 {
+fn print(Any... args) {
 
 	Any* arguments = cast(Any*) args.data;
 
@@ -150,6 +150,19 @@ fn print(Any... args) : i32 {
 
 		format_it = format_it + 1;
 	}
+}
 
-	return 0;
+// This is very very buggy
+//fn print(Any... args) : i32 {
+//	print_any_array(args);
+//	return 0;
+//}
+
+#foreign fn abort() : void {};
+
+fn assert(i32 condition, u8* message) {
+    if condition == 0 {
+        print("[ASSERT] Failed :: %\n", message);
+        abort();
+    }
 }

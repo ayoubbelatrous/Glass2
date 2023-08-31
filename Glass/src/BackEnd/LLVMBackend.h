@@ -181,6 +181,10 @@ namespace Glass {
 				return llvm::FunctionType::get(llvm_ReturnType, llvm_Arguments, false)->getPointerTo();
 			}
 
+			if (type->Kind == TypeStorageKind::DynArray) {
+				return GetLLVMType(IR_array);
+			}
+
 			return nullptr;
 		}
 
@@ -266,21 +270,38 @@ namespace Glass {
 		llvm::DIType* GetLLVMDebugType(TypeStorage* type) {
 
 			if (type->Kind == TypeStorageKind::Function) {
-				return GetLLVMDebugType({ 0,0,1 });
+				return GetLLVMDebugType(TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
 			}
 
-			auto it = m_LLVMDebugTypes.find(type->BaseID);
+			if (type->Kind == TypeStorageKind::DynArray) {
+				return GetLLVMDebugType(TypeSystem::GetBasic(IR_array));
+			}
 
-			if (it != m_LLVMDebugTypes.end()) {
+			if (type->Kind == TypeStorageKind::Base) {
 
-				llvm::DIType* pointer_type = it->second;
+				auto it = m_LLVMDebugTypes.find(type->BaseID);
 
-				for (size_t i = 0; i < TypeSystem::IndirectionCount(type); i++) {
-					pointer_type = m_DBuilder->createPointerType(pointer_type, 64);
+				if (it != m_LLVMDebugTypes.end()) {
+					return it->second;
+				}
+				else {
+					return nullptr;
+				}
+			}
+
+			if (type->Kind == TypeStorageKind::Pointer) {
+				auto as_pointer_type = (TSPtr*)type;
+
+				llvm::DIType* debug_type = GetLLVMDebugType(as_pointer_type->Pointee);
+
+				for (u16 i = 0; i < as_pointer_type->Indirection; i++)
+				{
+					debug_type = m_DBuilder->createPointerType(debug_type, 64);
 				}
 
-				return pointer_type;
+				return debug_type;
 			}
+
 			return nullptr;
 		}
 
@@ -294,7 +315,7 @@ namespace Glass {
 			dbg_param_types.push_back(GetLLVMDebugType(func_metadata->ReturnType));
 
 			for (auto& argument_metadata : func_metadata->Arguments) {
-				dbg_param_types.push_back(GetLLVMDebugType(argument_metadata.Tipe));
+				dbg_param_types.push_back(GetLLVMDebugType(argument_metadata.Type));
 			}
 
 			llvm::DISubroutineType* func_dbg_type = m_DBuilder->createSubroutineType(

@@ -9,7 +9,6 @@ namespace Glass {
 		Base,
 		Pointer,
 
-		Array,
 		StaticArray,
 		DynArray,
 
@@ -215,7 +214,15 @@ namespace Glass {
 		}
 
 		static bool IsArray(TypeStorage* type) {
-			return type->Kind == TypeStorageKind::Array;
+			return type->Kind == TypeStorageKind::DynArray;
+		}
+
+		static TypeStorage* GetArrayElementTy(TypeStorage* type) {
+			if (type->Kind == TypeStorageKind::DynArray) {
+				auto as_dyn_array = (TSDynArray*)type;
+				return as_dyn_array->ElementType;
+			}
+			return nullptr;
 		}
 
 		static std::unordered_map<u64, TypeStorage*>& GetTypeMap() {

@@ -1,4 +1,4 @@
-#include "Type.h"
+#pragma once
 #include "Base/Types.h"
 #include "FrontEnd/Ast.h"
 #include "FrontEnd/Parser.h"
@@ -12,6 +12,7 @@
 namespace Glass {
 
 	struct TypeStorage;
+	enum class TypeStorageKind : u32;
 
 	using TypeFlags = u64;
 	using TypeInfoFlags = u64;
@@ -118,7 +119,7 @@ namespace Glass {
 	struct MemberMetadata
 	{
 		Token Name;
-		Type Tipe;
+		TypeStorage* Type = nullptr;
 	};
 
 	struct StructMetadata
@@ -148,7 +149,7 @@ namespace Glass {
 
 		ArgumentMetadata(
 			std::string name,
-			Type type,
+			TypeStorage* type,
 			u64 ssa_id = 0,
 			bool variadic = false,
 			bool polyMorphic = false,
@@ -157,7 +158,7 @@ namespace Glass {
 		{}
 
 		std::string Name;
-		Type Tipe;
+		TypeStorage* Type = nullptr;
 		bool Variadic = false;
 
 		bool PolyMorphic = false;
@@ -626,20 +627,14 @@ namespace Glass {
 			m_TypeFlags[ID] = 0;
 		}
 
+		const u64 GetTypeSize(TypeStorage* type) const;
+
 		u64 ComputeStructSize(const StructMetadata* metadata) {
 
 			u64 size = 0;
 
 			for (const MemberMetadata& member : metadata->Members) {
-				if (!member.Tipe.Pointer && !member.Tipe.Array) {
-					size += GetTypeSize(member.Tipe.ID);
-				}
-				else if (member.Tipe.Pointer) {
-					size += 8;
-				}
-				else if (member.Tipe.Array) {
-					size += 16;
-				}
+				size += GetTypeSize(member.Type);
 			}
 
 			return size;
