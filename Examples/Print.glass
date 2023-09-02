@@ -1,6 +1,3 @@
-#foreign fn printf!(u8* fmt) : i32 {};
-#foreign fn strlen(u8* str) : i32 {};
-#foreign fn putchar(u8 c) : void {};
 
 fn ansi_red() {
 	printf("\e[1;31m");
@@ -138,7 +135,9 @@ fn print(Any... args) {
 
 		current_char = fmt_string[format_it];
 
-		if current_char == "%"[0] {
+		u8 modulo = "%"[0];
+
+		if current_char == modulo {
 			argument_it = argument_it + 1;
 			current_argument = arguments[argument_it];
 			print_any(current_argument);
@@ -157,8 +156,6 @@ fn print(Any... args) {
 //	print_any_array(args);
 //	return 0;
 //}
-
-#foreign fn abort() : void {};
 
 fn assert(i32 condition, u8* message) {
     if condition == 0 {

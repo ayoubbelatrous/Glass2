@@ -19,6 +19,81 @@ struct vec4
 	f32 w;
 };
 
+struct mat4
+{
+	f32 x0;
+	f32 y0;
+	f32 z0;
+	f32 w0;
+
+	f32 x1;
+	f32 y1;
+	f32 z1;
+	f32 w1;
+
+	f32 x2;
+	f32 y2;
+	f32 z2;
+	f32 w2;
+
+	f32 x3;
+	f32 y3;
+	f32 z3;
+	f32 w3;
+};
+
+//@Hypatia Math
+
+#foreign fn matrix4_multiplyv3(mat4* m, vec3* v, vec3* r) : vec3* {};
+#foreign fn matrix4_multiplyv2(mat4* m, vec2* v, vec2* r) : vec2* {};
+#foreign fn matrix4_identity(mat4* m) : mat4* {};
+
+#foreign fn matrix4_translatev3(mat4* self, vec3* translation) : mat4* {};
+
+
+#foreign fn matrix4_projection_ortho3d_rh_EXP(mat4* self,
+	f32 xmin, f32 xmax,
+	f32 ymin, f32 ymax,
+	f32 zNear, f32 zFar) : mat4* {};
+
+fn Mat4() : mat4 {
+	mat4 r;
+	matrix4_identity(&r);
+	return r;
+}
+
+fn translate(mat4 m, vec3 t) : mat4 {
+	mat4 r;
+	matrix4_translatev3(&r, &t);
+	return r;
+}
+
+fn translation(vec3 t) : mat4 {
+	mat4 r;
+	r = Mat4();
+	matrix4_translatev3(&r, &t);
+	return r;
+}
+
+fn ortho(f32 xmin, f32 xmax, f32 ymin, f32 ymax, f32 near, f32 far) : mat4 {
+	mat4 r;
+	matrix4_projection_ortho3d_rh_EXP(&r,xmin,xmax,ymin,ymax,near,far);
+	return r;
+}
+
+#operator* fn m4_m_v3(mat4 m, vec3 v) : vec3 {
+	vec3 r;
+	matrix4_multiplyv3(&m, &v, &r);
+	return r;
+}
+
+#operator* fn m4_m_v2(mat4 m, vec2 v) : vec2 {
+	vec2 r;
+	matrix4_multiplyv2(&m, &v, &r);
+	return r;
+}
+
+//@Vec3
 fn add_vec3(vec3 lhs, vec3 rhs) : vec3
 {
 	vec3 result;
@@ -64,6 +139,7 @@ fn add_vec3_f32(vec3 lhs, f32 rhs) : vec3
 	return result;
 }
 
+//@Vec4
 fn add_vec4(vec4 lhs, vec4 rhs) : vec4
 {
 	vec4 result;
@@ -114,6 +190,39 @@ fn add_vec4_f32(vec4 lhs, f32 rhs) : vec4
 	return result;
 }
 
+//@Vec2
+fn add_vec2(vec2 lhs, vec2 rhs) : vec2
+{
+	vec2 result;
+	result.x = lhs.x + rhs.x;
+	result.y = lhs.y + rhs.y;
+	return result;
+}
+
+fn sub_vec2(vec2 lhs, vec2 rhs) : vec2
+{
+	vec2 result;
+	result.x = lhs.x - rhs.x;
+	result.y = lhs.y - rhs.y;
+	return result;
+}
+
+fn mul_vec2(vec2 lhs, vec2 rhs) : vec2
+{
+	vec2 result;
+	result.x = lhs.x * rhs.x;
+	result.y = lhs.y * rhs.y;
+	return result;
+}
+
+fn div_vec2(vec2 lhs, vec2 rhs) : vec2
+{
+	vec2 result;
+	result.x = lhs.x / rhs.x;
+	result.y = lhs.y / rhs.y;
+	return result;
+}
+
 #operator+ add_vec3;
 #operator- sub_vec3;
 #operator* mul_vec3;
@@ -125,6 +234,11 @@ fn add_vec4_f32(vec4 lhs, f32 rhs) : vec4
 #operator- sub_vec4;
 #operator* mul_vec4;
 #operator/ div_vec4;
+
+#operator+ add_vec2;
+#operator- sub_vec2;
+#operator* mul_vec2;
+#operator/ div_vec2;
 
 #operator+ add_vec4_f32;
 

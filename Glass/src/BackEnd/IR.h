@@ -82,6 +82,8 @@ namespace Glass
 
 	enum class IRNodeType
 	{
+		Invalid,
+
 		SSA,
 		SSAValue,
 
@@ -103,6 +105,9 @@ namespace Glass
 		LesserThan,
 		BitAnd,
 		BitOr,
+
+		And,
+		Or,
 
 		If,
 		While,
@@ -143,6 +148,21 @@ namespace Glass
 		GlobDecl,
 
 		PointerCast,
+
+		Int2PtrCast,
+		Ptr2IntCast,
+
+		SExtCast,
+		ZExtCast,
+
+		IntTrunc,
+
+		Int2FP,
+		FP2Int,
+
+		FPExt,
+		FPTrunc,
+
 		NullPtr,
 
 		TranslationUnit,
@@ -564,6 +584,11 @@ namespace Glass
 		IRInstruction* Data = nullptr;
 
 		TypeStorage* Type;
+
+		IRStore() = default;
+
+		IRStore(u64 addressSSA, IRInstruction* data, TypeStorage* type)
+			:AddressSSA(addressSSA), Data(data), Type(type) {}
 
 		virtual std::string ToString() const override {
 			return fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
@@ -989,6 +1014,60 @@ namespace Glass
 		}
 	};
 
+	struct IRAnd : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IRAnd() = default;
+		IRAnd(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "And ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::And;
+		}
+	};
+
+	struct IROr : public IRInstruction {
+		IRSSAValue* SSA_A = nullptr;
+		IRSSAValue* SSA_B = nullptr;
+
+		IROr() = default;
+		IROr(IRSSAValue* A, IRSSAValue* B)
+			:SSA_A(A), SSA_B(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Or ";
+
+			str += SSA_A->ToString();
+			str += " : ";
+			str += SSA_B->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Or;
+		}
+	};
+
 	struct IRArrayAllocate : public IRInstruction {
 
 		u64 ID;
@@ -1092,10 +1171,25 @@ namespace Glass
 		}
 	};
 
+	struct IRCast : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 SSA = 0;
+
+		virtual std::string ToString() const override {
+			return 	"(invalid cast) ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Invalid;
+		}
+	};
+
 	struct IRPointerCast : public IRInstruction {
 		u64 ID = 0;
 
-		TypeStorage* Type = 0;
+		TypeStorage* Type = nullptr;
 		u64 PointerSSA = 0;
 
 		IRPointerCast(TypeStorage* type, u64 pointer_ssa)
@@ -1108,6 +1202,179 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::PointerCast;
+		}
+	};
+
+	struct IRInt2PtrCast : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+
+		IRInt2PtrCast(TypeStorage* type, u64 integer_ssa)
+			:Type(type), IntegerSSA(integer_ssa)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"(int 2 ptr) ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Int2PtrCast;
+		}
+	};
+
+	struct IRPtr2IntCast : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 PointerSSA = 0;
+
+		IRPtr2IntCast(TypeStorage* type, u64 pointer_ssa)
+			:Type(type), PointerSSA(pointer_ssa)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"(ptr2 int) ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Ptr2IntCast;
+		}
+	};
+
+	struct IRZExtCast : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+
+		IRZExtCast(TypeStorage* type, u64 integerSSA)
+			:Type(type), IntegerSSA(integerSSA)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"zext() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::ZExtCast;
+		}
+	};
+
+	struct IRSExtCast : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+
+		IRSExtCast(TypeStorage* type, u64 integerSSA)
+			:Type(type), IntegerSSA(integerSSA)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"zext() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::SExtCast;
+		}
+	};
+
+	struct IRIntTrunc : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+
+		IRIntTrunc(TypeStorage* type, u64 integerSSA)
+			:Type(type), IntegerSSA(integerSSA)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"itrunc() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::IntTrunc;
+		}
+	};
+
+	struct IRInt2FP : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+		bool Signed = false;
+
+		IRInt2FP(TypeStorage* type, u64 integerSSA, bool _signed)
+			:Type(type), IntegerSSA(integerSSA), Signed(_signed)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"itrunc() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Int2FP;
+		}
+	};
+
+	struct IRFP2Int : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 IntegerSSA = 0;
+		bool Signed = false;
+
+		IRFP2Int(TypeStorage* type, u64 integerSSA, bool _signed)
+			:Type(type), IntegerSSA(integerSSA), Signed(_signed)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"itrunc() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::FP2Int;
+		}
+	};
+
+	struct IRFPExt : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 FloatSSA = 0;
+
+		IRFPExt(TypeStorage* type, u64 floatSSA)
+			:Type(type), FloatSSA(floatSSA)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"fpext() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::FPExt;
+		}
+	};
+
+	struct IRFPTrunc : public IRInstruction {
+		u64 ID = 0;
+
+		TypeStorage* Type = nullptr;
+		u64 FloatSSA = 0;
+
+		IRFPTrunc(TypeStorage* type, u64 floatSSA)
+			:Type(type), FloatSSA(floatSSA)
+		{}
+
+		virtual std::string ToString() const override {
+			return 	"ftrunc() ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::FPTrunc;
 		}
 	};
 

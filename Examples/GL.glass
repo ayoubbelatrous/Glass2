@@ -7,6 +7,12 @@
 #foreign fn glBegin(i32 mode) : void {};
 #foreign fn glEnd() : void {};
 
+#foreign fn glEnable(i32 mode) : void {};
+
+#foreign fn glViewport(i32 x, i32 y, i32 width, i32 height) : void {};
+
+#foreign fn glDrawArrays(i32 a, u32 b, u32 c) : void {};
+
 #foreign fn wglGetProcAddress(u8* gl_proc) : void* {};
 
 fn GL_load_Func(void** ptr, u8* func_name){
@@ -18,19 +24,119 @@ fn GL_load_Func(void** ptr, u8* func_name){
 
 // constants
 
-u32 GL_ARRAY_BUFFER				= 34962;
-u32 GL_ELEMENT_ARRAY_BUFFER		= 34963;
+i32 GL_DYNAMIC_DRAW				= 35048;
+i32 GL_ARRAY_BUFFER				= 34962;
+i32 GL_ELEMENT_ARRAY_BUFFER		= 34963;
+
+i32 GL_FLOAT 					= 5126;
+
+i32 COLOR_BUF_BIT 				= 16384;
+i32 GL_TRIANGLES 				= 	4;
+
+i32 GL_DEBUG_OUTPUT				= 37600;
+i32 GL_DEBUG_OUTPUT_SYNCHRONOUS	= 33346;
+
+i32 GL_DONT_CARE				= 4352;
+i32 GL_DEBUG_SEVERITY_NOTIFICATION	= 33387;
 
 (i32, u32*)	glGenBuffers;
 (i32, u32*) glDeleteBuffers;
+(i32, u32) 	glBindBuffer;
 
-(u32, u32) 	glBindBuffer;
+(i32,u64,void*,u32) glBufferData;
+
+//void glNamedBufferData(	GLuint buffer,
+//	GLsizeiptr size,
+//	const void *data,
+//	GLenum usage);
+(u32,u64,void*,i32) glNamedBufferData;
+
+
+//void glBufferSubData(GLenum target,
+//		GLintptr offset,
+//		GLsizeiptr size,
+//		const void * data);
+(i32,i32,u64,void*) glBufferSubData;
+
+//void glBufferSubData(u32 buffer,
+//		GLintptr offset,
+//		GLsizeiptr size,
+//		const void * data);
+(u32,i32,u64,void*) glNamedBufferSubData;
+
+(i32,u32*) 	glGenVertexArrays;
+(i32) 		glBindVertexArray;
+(i32) 		glEnableVertexAttribArray;
+
+//void glVertexAttribPointer(GLuint index,
+//	GLint size,
+//	GLenum type,
+//	GLboolean normalized,
+//	GLsizei stride,
+//	const void * pointer);
+(u32,i32,i32,bool,u32,u32) glVertexAttribPointer;
+
+//(i32,i32,i32) 	glDrawArrays;
+//(i32,i32,i32,i32) 	glDrawElements;
+
+((u32,u32,u32,u32,i32,u8*,void*):void, void*) glDebugMessageCallback;
+
+(i32,i32,i32,u32,u32*,i32) glDebugMessageControl;
+
+
+fn OpenGLMessageCallback(
+	u32 source,
+	u32 type,
+	u32 id,
+	u32 severity,
+	i32 length,
+	u8* message,
+	void* userParam)
+	: void
+{
+	print(
+		"[OpenGL] :: [ERROR] % :::: % :: % :: % :: % \n",
+		message,
+		severity,
+		type,
+		id,
+		source
+	);
+}
+
+fn InitOpenGLDebugging() {
+	glEnable(GL_DEBUG_OUTPUT);
+	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+	glDebugMessageCallback(OpenGLMessageCallback, null);
+
+	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, cast(i32*) null, 0);
+}
 
 fn InitGL() {
 
 	printf("Initilizing Gl\n");
 
-	GL_load_Func(cast(void**) &glGenBuffers, "glGenBuffers");
-	GL_load_Func(cast(void**) &glBindBuffer, "glBindBuffer");
-	GL_load_Func(cast(void**) &glDeleteBuffers, "glDeleteBuffers");
+	GL_load_Func(cast(void**) &glGenBuffers, 				"glGenBuffers");
+
+	GL_load_Func(cast(void**) &glBufferData, 				"glBufferData");
+	GL_load_Func(cast(void**) &glNamedBufferData, 			"glNamedBufferData");
+
+	GL_load_Func(cast(void**) &glBindBuffer, 				"glBindBuffer");
+	GL_load_Func(cast(void**) &glDeleteBuffers, 			"glDeleteBuffers");
+
+	GL_load_Func(cast(void**) &glGenVertexArrays, 			"glGenVertexArrays");
+
+	GL_load_Func(cast(void**) &glBindVertexArray, 			"glBindVertexArray");
+	GL_load_Func(cast(void**) &glVertexAttribPointer, 		"glVertexAttribPointer");
+
+	GL_load_Func(cast(void**) &glEnableVertexAttribArray, 	"glEnableVertexAttribArray");
+
+	GL_load_Func(cast(void**) &glBufferSubData, 			"glBufferSubData");
+
+	GL_load_Func(cast(void**) &glNamedBufferSubData, 		"glNamedBufferSubData");
+
+	GL_load_Func(cast(void**) &glDebugMessageCallback, 		"glDebugMessageCallback");
+	GL_load_Func(cast(void**) &glDebugMessageControl, 		"glDebugMessageControl");
+
+	InitOpenGLDebugging();
 }

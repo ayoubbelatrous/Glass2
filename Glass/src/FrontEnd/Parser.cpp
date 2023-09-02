@@ -71,12 +71,18 @@ namespace Glass
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(3).Type == TokenType::Period; // i32[..]
 				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::OpenBracket; // i32[..]
 
-				i32 star_counter = 1;
+				u64 star_counter = 1;
 
 				if (At().Type == TokenType::Symbol) {
 					while (At(star_counter).Type == TokenType::Multiply) {
 						if (At(star_counter + 1).Type == TokenType::Symbol) {
-							var_decl |= true;
+							if (At(star_counter + 2).Type == TokenType::SemiColon) {
+								var_decl |= true;
+							}
+
+							if (At(star_counter + 2).Type == TokenType::Assign) {
+								var_decl |= true;
+							}
 						}
 						star_counter++;
 					}
@@ -515,10 +521,8 @@ namespace Glass
 
 			if (At().Type == TokenType::Comma) {
 				Consume();
-				if (At().Type != TokenType::Dollar) {
-					if (ExpectedToken(TokenType::Symbol)) {
-						Abort("Expected symbol after ',' Instead Got");
-					}
+				if (At().Type == TokenType::CloseParen) {
+					Abort("Expected argument after, Instead Got: ");
 				}
 			}
 		}
@@ -553,14 +557,11 @@ namespace Glass
 		if (At().Type == TokenType::Colon) {
 			Consume();
 
-			if (At().Type != TokenType::Dollar) {
-
-				if (ExpectedToken(TokenType::Symbol)) {
-					Abort("Expected a type after ':' in function definition");
-				}
-			}
-
 			Node.ReturnType = (TypeExpression*)ParseTypeExpr();
+
+			if (!Node.ReturnType) {
+				Abort("Expected a type after ':' in function definition, Instead Got: ");
+			}
 		}
 
 		if (ExpectedToken(TokenType::OpenCurly)) {
@@ -579,7 +580,7 @@ namespace Glass
 
 	Expression* Parser::ParseAssignExpr()
 	{
-		Expression* left = ParseAddExpr();
+		Expression* left = ParseBitLogiExpr();
 
 		auto is_assignment_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
@@ -592,7 +593,7 @@ namespace Glass
 
 		while (is_assignment_op(GetOperator(At()))) {
 			Token Op = Consume();
-			auto right = ParseAddExpr();
+			auto right = ParseBitLogiExpr();
 
 			BinaryExpression binExpr;
 
@@ -609,20 +610,57 @@ namespace Glass
 		return left;
 	}
 
-	Expression* Parser::ParseAddExpr()
+	Expression* Parser::ParseBitLogiExpr()
 	{
-		Expression* left = ParseCompExpr();
+		Expression* left = ParseLogiExpr();
 
-		auto is_additive_op = [](Operator op) -> bool {
+		auto is_logical_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
 				return false;
-			if (op == Operator::Add || op == Operator::Subtract)
+
+			if (op == Operator::BitAnd || op == Operator::BitOr)
 				return true;
 
 			return false;
 		};
 
-		while (is_additive_op(GetOperator(At()))) {
+		while (is_logical_op(GetOperator(At()))) {
+
+			Token Op = Consume();
+			auto right = ParseLogiExpr();
+
+			BinaryExpression binExpr;
+
+			binExpr.Left = left;
+			binExpr.Right = right;
+
+			binExpr.OPerator = GetOperator(Op);
+
+			binExpr.OperatorToken = Op;
+
+			left = Application::AllocateAstNode(binExpr);
+		}
+
+		return left;
+	}
+
+
+	Expression* Parser::ParseLogiExpr()
+	{
+		Expression* left = ParseCompExpr();
+
+		auto is_logical_op = [](Operator op) -> bool {
+			if (op == Operator::Invalid)
+				return false;
+
+			if (op == Operator::And || op == Operator::Or)
+				return true;
+
+			return false;
+		};
+
+		while (is_logical_op(GetOperator(At()))) {
+
 			Token Op = Consume();
 			auto right = ParseCompExpr();
 
@@ -643,7 +681,7 @@ namespace Glass
 
 	Expression* Parser::ParseCompExpr()
 	{
-		Expression* left = ParseLogiExpr();
+		Expression* left = ParseAddExpr();
 
 		auto is_comp_op = [](Operator op) -> bool {
 
@@ -662,7 +700,7 @@ namespace Glass
 
 		while (is_comp_op(GetOperator(At()))) {
 			Token Op = Consume();
-			auto right = ParseLogiExpr();
+			auto right = ParseAddExpr();
 
 			BinaryExpression binExpr;
 
@@ -679,22 +717,20 @@ namespace Glass
 		return left;
 	}
 
-	Expression* Parser::ParseLogiExpr()
+	Expression* Parser::ParseAddExpr()
 	{
 		Expression* left = ParseMulExpr();
 
-		auto is_logical_op = [](Operator op) -> bool {
+		auto is_additive_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
 				return false;
-
-			if (op == Operator::BitAnd || op == Operator::BitOr)
+			if (op == Operator::Add || op == Operator::Subtract)
 				return true;
 
 			return false;
 		};
 
-		while (is_logical_op(GetOperator(At()))) {
-
+		while (is_additive_op(GetOperator(At()))) {
 			Token Op = Consume();
 			auto right = ParseMulExpr();
 
@@ -1022,10 +1058,15 @@ namespace Glass
 			}
 			else {
 
+				auto third_type = At(2).Type;
+				auto third_correct =
+					third_type != TokenType::Symbol &&
+					third_type != TokenType::NumericLiteral &&
+					third_type != TokenType::OpenParen;
+
 				if (
-					At().Type == TokenType::Symbol &&
 					At(1).Type == TokenType::Multiply &&
-					At(2).Type != TokenType::Symbol
+					third_correct
 					) {
 
 					return ParseTypeExpr();

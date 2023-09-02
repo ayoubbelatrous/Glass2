@@ -122,6 +122,8 @@ namespace Glass
 			InsertLLVMDebugType(IR_void, m_DBuilder->createUnspecifiedType("void"));
 
 			InsertLLVMDebugType(IR_type, m_DBuilder->createBasicType("Type", 64, llvm::dwarf::DW_ATE_unsigned));
+
+			InsertLLVMDebugType(IR_bool, m_DBuilder->createBasicType("bool", 8, llvm::dwarf::DW_ATE_unsigned));
 		}
 
 		//Opaque_Type = llvm::Type::getInt8PtrTy(*m_LLVMContext);
@@ -313,7 +315,7 @@ namespace Glass
 			}
 
 			llvm::FunctionType* Function_Type =
-				llvm::FunctionType::get(GetLLVMTypeFull(metadata->ReturnType), Parameters, metadata->Variadic);
+				llvm::FunctionType::get(GetLLVMType(metadata->ReturnType), Parameters, metadata->Variadic);
 
 			llvm::Function* llvm_Func =
 				llvm::Function::Create(
@@ -547,7 +549,7 @@ namespace Glass
 			llvm_Arguments.push_back(GetName(arg));
 		}
 
-		return m_LLVMBuilder->CreateCall((llvm::FunctionType*)llvm_FuncType->getPointerElementType(), llvm_FuncPtr, llvm_Arguments, "ptrcall");
+		return m_LLVMBuilder->CreateCall((llvm::FunctionType*)llvm_FuncType->getPointerElementType(), llvm_FuncPtr, llvm_Arguments);
 	}
 
 	llvm::Value* LLVMBackend::CodeGen(const IRInstruction* instruction)
@@ -584,7 +586,20 @@ namespace Glass
 
 		case IRNodeType::SizeOf: return SizeOfCodeGen((IRSizeOF*)instruction);
 
-		case IRNodeType::PointerCast: return PointerCastCodeGen((IRPointerCast*)instruction);
+		case IRNodeType::PointerCast:
+		case IRNodeType::Int2PtrCast:
+		case IRNodeType::Ptr2IntCast:
+		case IRNodeType::SExtCast:
+		case IRNodeType::ZExtCast:
+		case IRNodeType::IntTrunc:
+		case IRNodeType::Int2FP:
+		case IRNodeType::FP2Int:
+		case IRNodeType::FPExt:
+		case IRNodeType::FPTrunc:
+		{
+			return CastCodeGen((IRCast*)instruction);
+		}
+		break;
 		case IRNodeType::NullPtr: return NullPtrCodeGen((IRNullPtr*)instruction);
 
 		case IRNodeType::If: return IfCodeGen((IRIf*)instruction);
@@ -600,6 +615,8 @@ namespace Glass
 		case IRNodeType::GreaterThan:
 		case IRNodeType::BitOr:
 		case IRNodeType::BitAnd:
+		case IRNodeType::And:
+		case IRNodeType::Or:
 			return OpCodeGen((IRBinOp*)instruction);
 			break;
 
@@ -625,6 +642,10 @@ namespace Glass
 
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
 
+		// 		if (func_metadata->Name == "key_cb") {
+		// 			__debugbreak();
+		// 		}
+
 		std::vector<llvm::Type*> Parameters;
 
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
@@ -637,7 +658,7 @@ namespace Glass
 		}
 
 		llvm::FunctionType* Function_Type =
-			llvm::FunctionType::get(GetLLVMTypeFull(func_metadata->ReturnType), Parameters, false);
+			llvm::FunctionType::get(GetLLVMType(func_metadata->ReturnType), Parameters, false);
 
 		llvm::Function* llvm_Func =
 			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Name, m_LLVMModule);
@@ -704,7 +725,7 @@ namespace Glass
 			CodeGen(inst);
 		}
 
-		if (func_metadata->ReturnType.ID == IR_void) {
+		if (func_metadata->ReturnType->BaseID == IR_void) {
 			m_LLVMBuilder->CreateRet(nullptr);
 		}
 
@@ -829,7 +850,7 @@ namespace Glass
 			}
 			break;
 		case IRNodeType::DIV:
-			if (m_Metadata->GetTypeFlags(op->Type) & TypeFlag::FLAG_FLOATING_TYPE) {
+			if (m_Metadata->GetTypeFlags(op->Type) & FLAG_FLOATING_TYPE) {
 				result = m_LLVMBuilder->CreateFDiv(lhs, rhs);
 			}
 			else
@@ -840,18 +861,22 @@ namespace Glass
 
 		case IRNodeType::Equal:
 			result = m_LLVMBuilder->CreateICmpEQ(lhs, rhs, "comp");
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
 			break;
 
 		case IRNodeType::NotEqual:
 			result = m_LLVMBuilder->CreateICmpNE(lhs, rhs, "comp");
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
 			break;
 
 		case IRNodeType::LesserThan:
 			result = m_LLVMBuilder->CreateICmpULT(lhs, rhs);
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
 			break;
 
 		case IRNodeType::GreaterThan:
 			result = m_LLVMBuilder->CreateICmpUGT(lhs, rhs);
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
 			break;
 
 		case IRNodeType::BitAnd:
@@ -860,6 +885,27 @@ namespace Glass
 
 		case IRNodeType::BitOr:
 			result = m_LLVMBuilder->CreateOr(lhs, rhs);
+			break;
+		case IRNodeType::And:
+		{
+			lhs = m_LLVMBuilder->CreateICmpUGT(lhs, llvm::ConstantInt::get(lhs->getType(), 0));
+			rhs = m_LLVMBuilder->CreateICmpUGT(rhs, llvm::ConstantInt::get(rhs->getType(), 0));
+
+			result = m_LLVMBuilder->CreateAnd(lhs, rhs);
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+		}
+		break;
+		case IRNodeType::Or:
+		{
+			lhs = m_LLVMBuilder->CreateICmpUGT(lhs, llvm::ConstantInt::get(lhs->getType(), 0));
+			rhs = m_LLVMBuilder->CreateICmpUGT(rhs, llvm::ConstantInt::get(rhs->getType(), 0));
+
+			result = m_LLVMBuilder->CreateOr(lhs, rhs);
+			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+		}
+		break;
+		default:
+			GS_CORE_ASSERT(0, "Unsupported Operator");
 			break;
 		}
 
@@ -967,10 +1013,22 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::ArrayAccessCodeGen(const IRArrayAccess* array_access)
 	{
+
+		auto llvm_type = GetLLVMType(array_access->Type);
+		auto llvm_pointer = GetName(array_access->ArrayAddress);
+		auto llvm_index = GetName(array_access->ElementSSA);
+
+		// 		llvm_type->print(llvm::errs(), true);
+		// 		llvm::errs() << "\n";
+		// 		llvm_pointer->print(llvm::errs(), true);
+		// 		llvm::errs() << "\n";
+		// 		llvm_index->print(llvm::errs(), true);
+		// 		llvm::errs() << "\n";
+
 		return m_LLVMBuilder->CreateGEP(
-			GetLLVMType(array_access->Type),
-			GetName(array_access->ArrayAddress),
-			GetName(array_access->ElementSSA),
+			llvm_type,
+			llvm_pointer,
+			llvm_index,
 			"array_access"
 		);
 	}
@@ -1050,10 +1108,55 @@ namespace Glass
 		return llvm::ConstantInt::get(GetLLVMType(IR_i64), m_Metadata->GetTypeSize(size_of->Type));
 	}
 
-	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
+	llvm::Value* LLVMBackend::CastCodeGen(const IRCast* ptr_cast)
 	{
-		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMType(ptr_cast->Type));
+		llvm::Value* value = GetName(ptr_cast->SSA);
+		llvm::Type* cast_type = GetLLVMType(ptr_cast->Type);
+
+		switch (ptr_cast->GetType()) {
+		case IRNodeType::PointerCast:
+			return m_LLVMBuilder->CreateBitCast(value, cast_type);
+		case IRNodeType::ZExtCast:
+			return m_LLVMBuilder->CreateZExt(value, cast_type);
+		case IRNodeType::SExtCast:
+			return m_LLVMBuilder->CreateSExt(value, cast_type);
+		case IRNodeType::Int2PtrCast:
+			return m_LLVMBuilder->CreateIntToPtr(value, cast_type);
+		case IRNodeType::Ptr2IntCast:
+			return m_LLVMBuilder->CreatePtrToInt(value, cast_type);
+		case IRNodeType::IntTrunc:
+			return m_LLVMBuilder->CreateTrunc(value, cast_type);
+		case IRNodeType::Int2FP:
+		{
+			auto as_int_2_float = (IRInt2FP*)ptr_cast;
+			if (as_int_2_float->Signed)
+				return m_LLVMBuilder->CreateSIToFP(value, cast_type);
+			else
+				return m_LLVMBuilder->CreateUIToFP(value, cast_type);
+		}
+		break;
+		case IRNodeType::FP2Int:
+		{
+			auto as_float_2_int = (IRFP2Int*)ptr_cast;
+			if (as_float_2_int->Signed)
+				return m_LLVMBuilder->CreateFPToSI(value, cast_type);
+			else
+				return m_LLVMBuilder->CreateFPToUI(value, cast_type);
+		}
+		break;
+		case IRNodeType::FPExt:
+			return m_LLVMBuilder->CreateFPExt(value, cast_type);
+		case IRNodeType::FPTrunc:
+			return m_LLVMBuilder->CreateFPTrunc(value, cast_type);
+		}
+
+		GS_CORE_ASSERT(0, "Unknown Cast");
 	}
+
+	// 	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
+	// 	{
+	// 		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMType(ptr_cast->Type));
+	// 	}
 
 	llvm::Value* LLVMBackend::NullPtrCodeGen(const IRNullPtr* null_ptr)
 	{
@@ -1067,11 +1170,11 @@ namespace Glass
 		llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*m_LLVMContext, "then", function);
 		llvm::BasicBlock* contBlock = llvm::BasicBlock::Create(*m_LLVMContext, "cont", function);
 
-		// 		llvm::Value* condition =
-		// 			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, GetName(_if->SSA),
-		// 				llvm::ConstantInt::get(GetLLVMType(IR_i64), 0));
-
 		llvm::Value* condition = GetName(_if->SSA);
+
+		condition =
+			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, condition,
+				llvm::ConstantInt::get(condition->getType(), 0));
 
 		m_LLVMBuilder->CreateCondBr(condition, thenBlock, contBlock);
 		m_LLVMBuilder->SetInsertPoint(thenBlock);
@@ -1102,6 +1205,10 @@ namespace Glass
 		}
 
 		llvm::Value* condition = GetName(_while->SSA);
+
+		condition =
+			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, condition,
+				llvm::ConstantInt::get(condition->getType(), 0));
 
 		m_LLVMBuilder->CreateCondBr(condition, loopBodyBlock, afterLoopBlock);
 

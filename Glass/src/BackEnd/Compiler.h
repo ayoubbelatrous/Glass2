@@ -61,13 +61,14 @@ namespace Glass
 		IRInstruction* RefCodeGen(const RefNode* refNode);
 		IRInstruction* DeRefCodeGen(const DeRefNode* deRefNode);
 
-		IRSSAValue* GetExpressionByValue(const Expression* expr);
+		IRSSAValue* GetExpressionByValue(const Expression* expr, IRSSAValue* generated_code = nullptr);
 		IRSSAValue* PassAsAny(const Expression* expr);
 		IRSSAValue* PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg);
 		IRSSAValue* TypeExpressionCodeGen(TypeExpression* type_expr);
 		IRSSAValue* TypeValueCodeGen(TypeStorage* type);
 
 		IRSSAValue* CreateLoad(TypeStorage* type, u64 address);
+		IRSSAValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
@@ -227,6 +228,49 @@ namespace Glass
 			}
 
 			return fmt::format("{}{}", m_Metadata.GetType(type.ID), arr_ptr);
+		}
+
+		std::string PrintType(TypeStorage* type)
+		{
+			if (type->Kind == TypeStorageKind::Pointer) {
+				auto as_pointer = (TSPtr*)type;
+				std::string stars;
+
+				for (size_t i = 0; i < as_pointer->Indirection; i++) {
+					stars.push_back('*');
+				}
+
+				return fmt::format("{}{}", PrintType(as_pointer->Pointee), stars);
+			}
+
+			if (type->Kind == TypeStorageKind::DynArray) {
+				auto as_array = (TSDynArray*)type;
+				return fmt::format("{}[..]", PrintType(as_array->ElementType));
+			}
+
+			if (type->Kind == TypeStorageKind::Base) {
+				return m_Metadata.GetType(type->BaseID);
+			}
+
+			if (type->Kind == TypeStorageKind::Function) {
+				auto as_func = (TSFunc*)type;
+
+				std::string arguments;
+				std::string return_type;
+
+				for (size_t i = 0; i < as_func->Arguments.size(); i++) {
+					if (i != 0) {
+						arguments.append(",");
+					}
+					arguments.append(PrintType(as_func->Arguments[i]));
+				}
+
+				if (as_func->ReturnType) {
+					return_type = ": " + PrintType(as_func->ReturnType);
+				}
+
+				return fmt::format("({}){}", arguments, return_type);
+			}
 		}
 
 		u64 GetTypeID() {

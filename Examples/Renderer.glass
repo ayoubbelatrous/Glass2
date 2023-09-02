@@ -1,0 +1,189 @@
+enum ShaderDataType {
+	Invalid	;
+	Float	;
+	Float2	;
+	Float3	;
+	Float4	;
+};
+
+struct VertexBufferElement {
+	ShaderDataType type;
+	u32 offset;
+};
+
+struct BufferLayout {
+	VertexBufferElement[..] elements;
+	u32 stride;
+};
+
+fn GetShaderDataType(Type type) : ShaderDataType {
+	t := ShaderDataType.Invalid;
+	if type == f32 {
+		t = ShaderDataType.Float;
+	}
+	if type == vec2 {
+		t = ShaderDataType.Float2;
+	}
+	if type == vec3 {
+		t = ShaderDataType.Float3;
+	}
+	if type == vec4 {
+		t = ShaderDataType.Float4;
+	}
+	return t;
+}
+
+fn GetComponentCount(ShaderDataType shader_data_type) : u32 {
+	u32 component_type = 0;
+	if ShaderDataType.Float == shader_data_type {
+		component_type = 1;
+	}
+	if ShaderDataType.Float2 == shader_data_type {
+		component_type = 2;
+	}
+	if ShaderDataType.Float3 == shader_data_type {
+		component_type = 3;
+	}
+	if ShaderDataType.Float4 == shader_data_type {
+		component_type = 4;
+	}
+	return component_type;
+}
+
+fn BufferLayout_Create(Type type, u64 type_size)
+	: BufferLayout {
+
+	BufferLayout layout;
+
+	layout.elements.data = malloc(sizeof(VertexBufferElement) * 64);
+
+	struct_info := cast(TypeInfo_Struct*) type_info(type);
+
+	u64 i = 0;
+	u32 offset = 0;
+
+	while i < struct_info.member_count {
+
+		current := *struct_info.members;
+
+		element_type_type_info := type_info(current.type);
+
+		VertexBufferElement element;
+		element.type = GetShaderDataType(current.type);
+		element.offset = offset;
+
+		if element.type == ShaderDataType.Invalid {
+
+			print("Element of type '%' :: '%.%'\n",
+				element_type_type_info.name, struct_info.name, current.name);
+
+			assert(0," BufferLayout_Create() :: un-supported layout element type");
+		}
+
+		layout.elements[i] = element;
+
+		element_size := GetComponentCount(element.type) * 4;
+		offset = offset + element_size;
+
+		i = i + 1;
+	}
+
+	layout.elements.count = i;
+
+	layout.stride = offset;
+
+	return layout;
+}
+
+fn BufferLayout_Free(BufferLayout layout) {
+	free(layout.elements.data);
+	layout.elements.data = null;
+	layout.elements.count = 0;
+}
+
+struct VertexBuffer {
+	BufferLayout layout;
+	u32 renderer_id;
+	u64 size;
+};
+
+struct VertexArray {
+	VertexBuffer vertex_buffer;
+	u32	vertex_buffer_index;
+	u32 renderer_id;
+};
+
+fn VertexArray_Create() : VertexArray {
+
+	VertexArray va;
+
+	va.vertex_buffer_index 		= 0;
+	va.renderer_id				= 0;
+
+	glGenVertexArrays(1, &va.renderer_id);
+
+	if va.renderer_id == 0 {
+		assert(0, " :: VertexArray_Create() :: Failed to create gl VertexArray")
+	}
+
+	return va;
+}
+
+fn VertexBuffer_Create(void* data, u64 size) : VertexBuffer {
+
+	VertexBuffer vb;
+	vb.renderer_id = 0;
+	vb.size = size;
+
+	printf("Size :: %i\n", vb.size);
+
+	glGenBuffers(1, &vb.renderer_id);
+
+	if vb.renderer_id == 0 {
+		assert(0, " :: VertexBuffer_Create() :: Failed to create gl vertex buffer");
+	}
+
+	glNamedBufferData(vb.renderer_id, size, data, GL_DYNAMIC_DRAW);
+
+	return vb;
+}
+
+fn VertexArray_AddVertexBuffer(VertexArray* va, VertexBuffer* vb, BufferLayout* ly) {
+
+	glBindVertexArray(va.renderer_id);
+	glBindBuffer(GL_ARRAY_BUFFER, vb.renderer_id);
+
+	u64 i = 0;
+
+	while i < ly.elements.count {
+
+		element := ly.elements[i];
+
+		bool normalized = 0;
+
+		glEnableVertexAttribArray(va.vertex_buffer_index);
+
+		print("Test");
+
+		glVertexAttribPointer(
+			va.vertex_buffer_index,
+			GetComponentCount(element.type),
+			GL_FLOAT,
+			normalized,
+			ly.stride,
+			element.offset
+		);
+
+		//print("Elem :: \n%\n", element);
+
+		vertex_buffer_index = vertex_buffer_index + 1;
+		i = i + 1;
+	}
+
+	va.vertex_buffer = *vb;
+}
+
+fn VertexArray_Bind(VertexArray* va) {
+	glBindVertexArray(va.renderer_id);
+	glBindBuffer(GL_ARRAY_BUFFER, va.vertex_buffer.renderer_id);
+}

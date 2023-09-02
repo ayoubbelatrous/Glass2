@@ -51,6 +51,7 @@ namespace Glass
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
 		Expression* ParseCompExpr();
+		Expression* ParseBitLogiExpr();
 		Expression* ParseLogiExpr();
 		Expression* ParseMulExpr();
 		Expression* ParseCallExpr();
@@ -106,6 +107,19 @@ namespace Glass
 			case TokenType::Pipe:
 				return Operator::BitOr;
 				break;
+			case TokenType::Symbol:
+			{
+				if (token.Symbol == "and") {
+					return Operator::And;
+				}
+				else if (token.Symbol == "or") {
+					return Operator::Or;
+				}
+				else {
+					return Operator::Invalid;
+				}
+			}
+			break;
 			default:
 				return Operator::Invalid;
 				break;

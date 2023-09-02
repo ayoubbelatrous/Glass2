@@ -225,9 +225,9 @@ namespace Glass {
 		Token Symbol;
 
 		std::vector<ArgumentMetadata> Arguments;
+		TypeStorage* ReturnType = nullptr;
 
-		Type ReturnType;
-		TypeStorage* ReturnTypeNew = nullptr;
+		TypeStorage* Signature = nullptr;
 
 		bool Variadic = false;
 		bool Foreign = false;
@@ -608,17 +608,14 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		void RegisterFunction(u64 ID, const std::string& name, Type returnType = {}, std::vector<ArgumentMetadata> args = {}, bool variadic = false, const Token& symbol = {}, TypeStorage* ret_t_new = nullptr) {
-			FunctionMetadata func;
-			func.Name = name;
-			func.ReturnType = returnType;
-			func.Arguments = args;
-			func.Variadic = variadic;
-			func.Symbol = symbol;
-
-			m_Functions[ID] = func;
-			m_FunctionNames[name] = ID;
-		}
+		void RegisterFunction
+		(u64 ID,
+			const std::string& name,
+			TypeStorage* returnType = nullptr,
+			std::vector<ArgumentMetadata> args = {},
+			bool variadic = false, const Token& symbol = {},
+			TypeStorage* signature = nullptr
+		);
 
 		void RegisterType(u64 ID, const std::string& name, u64 size) {
 			m_Types[ID] = name;
@@ -712,6 +709,7 @@ namespace Glass {
 			//@TODO: Set correct enum size
 			RegisterType(TypeID, metadata.Name.Symbol, 8);
 			m_TypeFlags[TypeID] |= FLAG_NUMERIC_TYPE;
+			m_TypeFlags[TypeID] |= FLAG_ENUM_TYPE;
 		}
 
 		const EnumMetadata* GetEnumFromType(u64 type_id) const {

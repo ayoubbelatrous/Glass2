@@ -334,9 +334,7 @@ namespace Glass
 
 			u64 ID = GetFunctionID();
 
-			auto return_type_ts = TypeExpressionGetType(fn_decl->ReturnType);
-
-			Type return_type = TSToLegacy(return_type_ts);
+			TypeStorage* return_type = TypeExpressionGetType(fn_decl->ReturnType);
 
 			std::vector<ArgumentMetadata> args;
 
@@ -443,18 +441,19 @@ namespace Glass
 	{
 		ResetSSAIDCounter();
 
-		u64 poly_func_id = GetFunctionID();
-
-		Type return_type;
-		return_type.ID = IR_void;
+		TypeStorage* return_type;
+		return_type = TypeSystem::GetBasic(IR_void);
 
 		if (functionNode->ReturnType)
 		{
-			auto return_type_ts = TypeExpressionGetType(functionNode->ReturnType);
-			return_type = TSToLegacy(return_type_ts);
-		}
+			return_type = TypeExpressionGetType(functionNode->ReturnType);
 
-		m_Metadata.RegisterFunction(poly_func_id, functionNode->Symbol.Symbol, return_type);
+			if (!return_type) {
+				MSG_LOC(functionNode);
+				MSG_LOC(functionNode->ReturnType);
+				FMT_WARN("function '{}' has undefined return type", functionNode->Symbol.Symbol);
+			}
+		}
 
 		std::vector<ArgumentMetadata> args_metadata;
 
@@ -488,16 +487,14 @@ namespace Glass
 			arg_address_ssa->Value = IR(address_of);
 
 			TypeStorage* argument_type = TypeExpressionGetType(arg->Type);
+
 			TypeStorage* argument_variable_type = nullptr;
-			Glass::Type legacy_argument_type;
 
 			if (!arg->Variadic) {
 
-				legacy_argument_type = TSToLegacy(argument_type);
 				argument_variable_type = argument_type;
 			}
 			else {
-				legacy_argument_type.ID = IR_array;
 				argument_variable_type = TypeSystem::GetBasic(IR_array);
 			}
 
@@ -505,7 +502,7 @@ namespace Glass
 			{
 				PushMessage(CompilerMessage{ PrintTokenLocation(arg->Type->GetLocation()), MessageType::Error });
 				PushMessage(CompilerMessage{ fmt::format("argument '{}' is of undefined type '{}', at '{}' function definition",
-														arg->Symbol.Symbol, PrintType(legacy_argument_type), functionNode->DefinitionTk.Symbol),
+														arg->Symbol.Symbol, PrintType(argument_type), functionNode->DefinitionTk.Symbol),
 											MessageType::Warning });
 				return nullptr;
 			}
@@ -537,15 +534,15 @@ namespace Glass
 		{
 			IRInstruction* code = StatementCodeGen(stmt);
 
-			if (!code)
-				continue;
-
 			auto SSAs = PoPIRSSA();
 
 			for (auto ssa : SSAs)
 			{
 				IRF->Instructions.push_back(ssa);
 			}
+
+			if (!code)
+				continue;
 
 			if (code->GetType() != IRNodeType::SSAValue) {
 				//We Discard function scope level r values
@@ -756,7 +753,7 @@ namespace Glass
 
 			if (!member_metadata.Type) {
 				MSG_LOC(member_node);
-				FMT_WARN("struct '{}' member '{}' is of undefined type '{}'", struct_name.Symbol, member_node->Symbol.Symbol);
+				FMT_WARN("struct '{}' member '{}' is of undefined type 'TODO'", struct_name.Symbol, member_node->Symbol.Symbol);
 				return nullptr;
 			}
 
@@ -864,41 +861,17 @@ namespace Glass
 
 	IRInstruction* Compiler::IfCodeGen(const IfNode* ifNode)
 	{
-		IRSSAValue* condition = nullptr;
-
-		auto cond = GetExpressionByValue(ifNode->Condition);
-
-		if (!cond)
-			return nullptr;
-
-		auto condition_type = m_Metadata.GetExprType(cond->SSA);
-
-		if (condition_type->BaseID != IR_bool)
-		{
-			SetLikelyConstantType(condition_type->BaseID);
-
-			//@Hack
-			NumericLiteral lit;
-			lit.Val.Int = 0;
-			lit.type = NumericLiteral::Type::Int;
-
-			auto zero = (IRSSAValue*)NumericLiteralCodeGen(IR(lit));
-
-			ResetLikelyConstantType();
-
-			auto greater = IR(IRGreater(cond, zero));
-
-			auto convert_to_bool = CreateIRSSA();
-			convert_to_bool->Value = greater;
-
-			condition = IR(IRSSAValue(convert_to_bool->ID));
-		}
-		else {
-			condition = cond;
-		}
+		auto condition = GetExpressionByValue(ifNode->Condition);
 
 		if (!condition)
 			return nullptr;
+
+		auto condition_type = m_Metadata.GetExprType(condition->SSA);
+
+		// 			MSG_LOC(ifNode);
+		// 			FMT_WARN(
+		// 				"Expected if condition type to be a type convertable to 'bool' but instead its: {}", PrintType(condition_type));
+		// 		}
 
 		IRIf IF;
 		IF.SSA = condition->SSA;
@@ -936,7 +909,7 @@ namespace Glass
 		PopScope();
 
 		if (!condition)
-			return false;
+			return nullptr;
 
 		IRWhile WHILE;
 		WHILE.SSA = condition->SSA;
@@ -1023,6 +996,10 @@ namespace Glass
 
 	IRInstruction* Compiler::IdentifierCodeGen(const Identifier* identifier)
 	{
+		if (identifier->Symbol.Symbol == "null") {
+			return NullCodeGen();
+		}
+
 		SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
 
 		if (symbol_type == SymbolType::Function) {
@@ -1142,17 +1119,39 @@ namespace Glass
 		IRSSAValue* A = nullptr;
 		IRSSAValue* B = nullptr;
 
-		A = GetExpressionByValue(binaryExpr->Left);
-		B = GetExpressionByValue(binaryExpr->Right);
+		TypeStorage* left_type = nullptr;
+		TypeStorage* right_type = nullptr;
+
+		if (binaryExpr->Left->GetType() != NodeType::NumericLiteral) {
+			A = GetExpressionByValue(binaryExpr->Left);
+			left_type = m_Metadata.GetExprType(A->SSA);
+
+			SetLikelyConstantType(left_type->BaseID);
+		}
+
+		if (binaryExpr->Right->GetType() != NodeType::NumericLiteral) {
+			B = GetExpressionByValue(binaryExpr->Right);
+			right_type = m_Metadata.GetExprType(B->SSA);
+
+			SetLikelyConstantType(right_type->BaseID);
+		}
+
+		if (left_type == nullptr) {
+			A = GetExpressionByValue(binaryExpr->Left);
+			left_type = m_Metadata.GetExprType(A->SSA);
+		}
+		if (right_type == nullptr) {
+			B = GetExpressionByValue(binaryExpr->Right);
+			right_type = m_Metadata.GetExprType(B->SSA);
+		}
+
+		ResetLikelyConstantType();
 
 		if (!A || !B)
 		{
 			//@Todo: log error here
 			return nullptr;
 		}
-
-		TypeStorage* left_type = m_Metadata.GetExprType(A->SSA);
-		TypeStorage* right_type = m_Metadata.GetExprType(B->SSA);
 
 		IRSSA* IRssa = CreateIRSSA();
 
@@ -1186,6 +1185,8 @@ namespace Glass
 				case Operator::LesserThan:
 				case Operator::GreaterThanEq:
 				case Operator::LesserThanEq:
+				case Operator::And:
+				case Operator::Or:
 					return "Comparisons";
 					break;
 				default:
@@ -1200,7 +1201,7 @@ namespace Glass
 				PushMessage(CompilerMessage{
 					fmt::format(
 						"No {} were defined between '{}' and '{}'",
-						op_to_word(binaryExpr->OPerator), PrintType(TSToLegacy(left_type)), PrintType(TSToLegacy(right_type))),
+						op_to_word(binaryExpr->OPerator), PrintType(left_type), PrintType(right_type)),
 					MessageType::Warning });
 			};
 
@@ -1361,7 +1362,20 @@ namespace Glass
 			IRssa->Value = IR(IRBitOr(A, B));
 		}
 		break;
+		case Operator::And:
+		{
+			IRssa->Value = IR(IRAnd(A, B));
+			result_type = IR_bool;
+		}
+		break;
+		case Operator::Or:
+		{
+			IRssa->Value = IR(IROr(A, B));
+			result_type = IR_bool;
+		}
+		break;
 		default:
+			GS_CORE_ASSERT(0, "Unsuppoerted operator");
 			return nullptr;
 			break;
 		}
@@ -1464,6 +1478,12 @@ namespace Glass
 		{
 			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
 			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+
+			if (!right_ssa)
+				return nullptr;
+
+			if (!left_ssa)
+				return nullptr;
 
 			IRStore* store = IR(IRStore());
 			{
@@ -1640,8 +1660,8 @@ namespace Glass
 							PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()), MessageType::Error });
 							PushMessage(CompilerMessage{ "type mismatch in function call", MessageType::Warning });
 							PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
-																	PrintType(TSToLegacy(decl_arg->Type)),
-																	PrintType(TSToLegacy(type))),
+																	PrintType(decl_arg->Type),
+																	PrintType(type)),
 
 														MessageType::Info });
 							PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
@@ -1667,9 +1687,8 @@ namespace Glass
 			}
 		}
 
-		bool has_return = metadata->ReturnType.Pointer;
-
-		has_return |= metadata->ReturnType.ID != IR_void;
+		bool has_return = metadata->ReturnType->Kind == TypeStorageKind::Pointer;
+		has_return |= metadata->ReturnType->BaseID != IR_void;
 
 		if (has_return)
 		{
@@ -1678,7 +1697,7 @@ namespace Glass
 
 			IRSSAValue* ir_ssa_val = IR(IRSSAValue(ir_ssa->ID));
 
-			m_Metadata.RegExprType(ir_ssa_val->SSA, LegacyToTS(metadata->ReturnType));
+			m_Metadata.RegExprType(ir_ssa_val->SSA, metadata->ReturnType);
 
 			return ir_ssa_val;
 		}
@@ -1890,15 +1909,17 @@ namespace Glass
 	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)
 	{
 		u64 func_id = m_Metadata.GetFunctionMetadata(func->Symbol.Symbol);
-
 		GS_CORE_ASSERT(func_id != NULL_ID, "Function must exist at this point");
+
+		const FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(func_id);
 
 		auto ssa = CreateIRSSA();
 		ssa->Value = IR(IRFuncRef(func_id));
 
+		m_Metadata.RegExprType(ssa->ID, metadata->Signature);
+
 		return IR(IRSSAValue(ssa->ID));
 	}
-
 
 	IRInstruction* Compiler::FuncRefCallCodeGen(const FunctionCall* call)
 	{
@@ -1915,15 +1936,27 @@ namespace Glass
 		std::vector<u64> argument_SSAs;
 
 		for (auto arg : call->Arguments) {
-			argument_SSAs.push_back(GetExpressionByValue(arg)->SSA);
+
+			auto argument_code = GetExpressionByValue(arg);
+
+			if (!argument_code) {
+				return nullptr;
+			}
+
+			argument_SSAs.push_back(argument_code->SSA);
 		}
 
-		auto return_ssa = CreateIRSSA();
-		return_ssa->Value = IR(IRCallFuncRef(callee_ssa->SSA, argument_SSAs, callee_type));
+		auto ir_call = IR(IRCallFuncRef(callee_ssa->SSA, argument_SSAs, callee_type));
 
-		m_Metadata.RegExprType(return_ssa->ID, ((TSFunc*)callee_type)->ReturnType);
-
-		return IR(IRSSAValue(return_ssa->ID));
+		if (((TSFunc*)callee_type)->ReturnType != TypeSystem::GetBasic(IR_void)) {
+			auto return_ssa = CreateIRSSA();
+			return_ssa->Value = ir_call;
+			m_Metadata.RegExprType(return_ssa->ID, ((TSFunc*)callee_type)->ReturnType);
+			return IR(IRSSAValue(return_ssa->ID));
+		}
+		else {
+			return ir_call;
+		}
 	}
 
 	std::vector<IRInstruction*> Compiler::ScopeCodeGen(const ScopeNode* scope)
@@ -2003,7 +2036,7 @@ namespace Glass
 			obj_expr_type = element_ty;
 		}
 		else {
-			object = CreateLoad(obj_expr_type, object->SSA);
+			object = GetExpressionByValue(arrayAccess->Object, object);
 		}
 
 		//@Todo add support for non pointer arrays
@@ -2097,11 +2130,82 @@ namespace Glass
 		auto new_ssa = CreateIRSSA();
 
 		auto cast_type = TypeExpressionGetType(cast->Type);
-		new_ssa->Value = IR(IRPointerCast(cast_type, expr_value->SSA));
+		auto castee_type = m_Metadata.GetExprType(expr_value->SSA);
+
+		auto castee_size = m_Metadata.GetTypeSize(castee_type->BaseID);
+		auto cast_size = m_Metadata.GetTypeSize(cast_type->BaseID);
+
+		auto castee_flags = m_Metadata.GetTypeFlags(castee_type->BaseID);
+		auto cast_flags = m_Metadata.GetTypeFlags(cast_type->BaseID);
+
+		if (cast_type == castee_type) {
+			m_Metadata.RegExprType(new_ssa->ID, cast_type);
+			return expr_value;
+		}
+
+		IRCast* cast_ir_node = nullptr;
+
+
+		if (TypeSystem::IsPointer(castee_type) && TypeSystem::IsPointer(cast_type)) {
+			cast_ir_node = (IRCast*)IR(IRPointerCast(cast_type, expr_value->SSA));
+		}
+		else if (TypeSystem::IsPointer(castee_type) && !TypeSystem::IsPointer(cast_type)) {
+			cast_ir_node = (IRCast*)IR(IRPtr2IntCast(cast_type, expr_value->SSA));
+		}
+		else if (!TypeSystem::IsPointer(castee_type) && TypeSystem::IsPointer(cast_type)) {
+			cast_ir_node = (IRCast*)IR(IRInt2PtrCast(cast_type, expr_value->SSA));
+		}
+		else {
+
+			if (castee_flags & FLAG_NUMERIC_TYPE && cast_flags & FLAG_NUMERIC_TYPE) {
+
+				if (!(castee_flags & FLAG_FLOATING_TYPE) && !(cast_flags & FLAG_FLOATING_TYPE)) {
+
+					if (castee_size < cast_size) {
+						if (
+							castee_flags & FLAG_UNSIGNED_TYPE &&
+							cast_flags & FLAG_UNSIGNED_TYPE
+							) {
+							cast_ir_node = (IRCast*)IR(IRZExtCast(cast_type, expr_value->SSA));
+						}
+						else {
+							cast_ir_node = (IRCast*)IR(IRSExtCast(cast_type, expr_value->SSA));
+						}
+					}
+					else {
+						cast_ir_node = (IRCast*)IR(IRIntTrunc(cast_type, expr_value->SSA));
+					}
+				}
+				else {
+					if (castee_flags & FLAG_FLOATING_TYPE && cast_flags & FLAG_FLOATING_TYPE) {
+						if (castee_size < cast_size) {
+							cast_ir_node = (IRCast*)IR(IRFPExt(cast_type, expr_value->SSA));
+						}
+						else {
+							cast_ir_node = (IRCast*)IR(IRFPTrunc(cast_type, expr_value->SSA));
+						}
+					}
+					else {
+						if (!(castee_flags & FLAG_FLOATING_TYPE)) {
+							cast_ir_node = (IRCast*)IR(IRInt2FP(cast_type, expr_value->SSA, !(cast_flags & FLAG_UNSIGNED_TYPE)));
+						}
+						else if (!(cast_flags & FLAG_FLOATING_TYPE)) {
+							cast_ir_node = (IRCast*)IR(IRFP2Int(cast_type, expr_value->SSA, !(castee_flags & FLAG_UNSIGNED_TYPE)));
+						}
+					}
+				}
+			}
+			else {
+				MSG_LOC(cast);
+				FMT_WARN("Invalid cast from type '{}' to type '{}'", PrintType(castee_type), PrintType(cast_type));
+				return nullptr;
+			}
+		}
 
 		m_Metadata.RegExprType(new_ssa->ID, cast_type);
 
-		return IR(IRSSAValue(new_ssa->ID));
+		new_ssa->Value = cast_ir_node;
+		return IR(IRSSAValue(new_ssa->ID), cast_ir_node);
 	}
 
 	IRInstruction* Compiler::NullCodeGen()
@@ -2141,7 +2245,7 @@ namespace Glass
 		if (type_arg_type != TypeSystem::GetBasic(IR_type)) {
 			MSG_LOC(type_info_call);
 			FMT_WARN("'type_info' type argument type mismatch");
-			FMT_WARN("'type_info' needed a 'Type' instead got a {}", PrintType(TSToLegacy(type_arg_type)));
+			FMT_WARN("'type_info' needed a 'Type' instead got a {}", PrintType(type_arg_type));
 			return nullptr;
 		}
 
@@ -2193,7 +2297,7 @@ namespace Glass
 
 		if (indirection_count == 0) {
 			MSG_LOC(deRefNode);
-			FMT_WARN("trying to dereference a non pointer value, the type of said value is '{}'", PrintType(TSToLegacy(exprType)));
+			FMT_WARN("trying to dereference a non pointer value, the type of said value is '{}'", PrintType(exprType));
 			return nullptr;
 		}
 
@@ -2202,8 +2306,12 @@ namespace Glass
 		return expr_value;
 	}
 
-	IRSSAValue* Compiler::GetExpressionByValue(const Expression* expr)
+	IRSSAValue* Compiler::GetExpressionByValue(const Expression* expr, IRSSAValue* generated_code)
 	{
+		if (!generated_code) {
+			generated_code = (IRSSAValue*)ExpressionCodeGen(expr);
+		}
+
 		switch (expr->GetType())
 		{
 		case NodeType::MemberAccess:
@@ -2219,7 +2327,7 @@ namespace Glass
 				}
 			}
 
-			auto ir_address = (IRSSAValue*)MemberAccessCodeGen(member_access);
+			auto ir_address = generated_code;
 
 			if (ir_address == nullptr)
 				return nullptr;
@@ -2245,7 +2353,7 @@ namespace Glass
 		break;
 		case NodeType::ArrayAccess:
 		{
-			auto ir_address = (IRSSAValue*)ArrayAccessCodeGen((ArrayAccess*)expr);
+			auto ir_address = generated_code;
 
 			if (!ir_address) {
 				return nullptr;
@@ -2277,13 +2385,13 @@ namespace Glass
 			Identifier* identifier = (Identifier*)expr;
 
 			if (identifier->Symbol.Symbol == "null") {
-				return (IRSSAValue*)NullCodeGen();
+				return generated_code;
 			}
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier->Symbol.Symbol);
 
 			if (symbol_type == SymbolType::Function) {
-				return (IRSSAValue*)ExpressionCodeGen(expr);
+				return generated_code;
 			}
 
 			if (symbol_type == SymbolType::Type)
@@ -2292,7 +2400,7 @@ namespace Glass
 			}
 			else if (symbol_type == SymbolType::Variable)
 			{
-				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
+				auto ir_address = generated_code;
 
 				if (!ir_address)
 				{
@@ -2315,7 +2423,7 @@ namespace Glass
 			}
 			else {
 
-				auto ir_address = (IRSSAValue*)IdentifierCodeGen(identifier);
+				auto ir_address = generated_code;
 
 				if (!ir_address)
 					return nullptr;
@@ -2339,7 +2447,7 @@ namespace Glass
 		break;
 		case NodeType::DeReference:
 		{
-			auto ir_address = (IRSSAValue*)ExpressionCodeGen(expr);
+			auto ir_address = generated_code;
 
 			if (!ir_address)
 				return nullptr;
@@ -2363,7 +2471,7 @@ namespace Glass
 		}
 		break;
 		default:
-			return (IRSSAValue*)ExpressionCodeGen(expr);
+			return generated_code;
 			break;
 		}
 	}
@@ -2458,6 +2566,15 @@ namespace Glass
 	{
 		auto load_ssa = CreateIRSSA();
 		load_ssa->Value = IR(IRLoad(address, type));
+
+		return IR(IRSSAValue(load_ssa->ID));
+	}
+
+
+	IRSSAValue* Compiler::CreateStore(TypeStorage* type, u64 address, IRInstruction* data)
+	{
+		auto load_ssa = CreateIRSSA();
+		load_ssa->Value = IR(IRStore(address, data, type));
 
 		return IR(IRSSAValue(load_ssa->ID));
 	}

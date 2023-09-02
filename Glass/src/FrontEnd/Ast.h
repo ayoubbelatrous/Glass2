@@ -68,6 +68,9 @@ namespace Glass
 
 		BitAnd,
 		BitOr,
+
+		And,
+		Or
 	};
 
 	class Statement

@@ -1,13 +1,13 @@
-#foreign fn printf!		(u8 * format) 									: i32{}
-#foreign fn sprintf!	(u8 * format, u8* buffer) 						: i32{}
+#foreign fn printf!		(u8* format) 									: i32{}
+#foreign fn sprintf!	(u8* format, u8* buffer) 						: i32{}
 
 #foreign fn fopen		(u8* path, u8* mode) 							: u64* {}
 #foreign fn fclose		(u64* file) 									: void{}
-#foreign fn malloc		(u64 size) 										: u64* {}
-#foreign fn free		(u64 ptr) 										: void{}
-#foreign fn strlen		(u8* ptr) 										: u64{}
+#foreign fn malloc		(u64 size) 										: void* {}
+#foreign fn free		(void* ptr) 									: void{}
+#foreign fn strlen		(u8* ptr) 										: i32{}
 #foreign fn memcpy		(u8* dst, u8* src, int count) 					: u64{}
-#foreign fn memset		(u64* buf, i32 c, int n) 						: u64{}
+#foreign fn memset		(void* buf, i32 c, int n) 						: u64{}
 
 #foreign fn putchar		(u8 c) 											: void {}
 #foreign fn abort		() : void {}

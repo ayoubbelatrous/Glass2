@@ -46,7 +46,8 @@ namespace Glass {
 
 		llvm::Value* SizeOfCodeGen(const IRSizeOF* size_of);
 
-		llvm::Value* PointerCastCodeGen(const IRPointerCast* ptr_cast);
+		llvm::Value* CastCodeGen(const IRCast* ptr_cast);
+		//llvm::Value* PointerCastCodeGen(const IRPointerCast* ptr_cast);
 		llvm::Value* NullPtrCodeGen(const IRNullPtr* null_ptr);
 
 		llvm::Value* IfCodeGen(const IRIf* _if);
