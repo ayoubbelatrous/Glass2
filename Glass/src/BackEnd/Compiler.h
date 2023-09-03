@@ -47,7 +47,10 @@ namespace Glass
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* SizeOfCodeGen(const SizeOfNode* size_of);
 
+		IRInstruction* NegateCodeGen(const NegateExpr* negateNode);
+
 		IRInstruction* RangeCodeGen(const RangeNode* rangeNode);
+
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
 		IRInstruction* FuncRefCallCodeGen(const FunctionCall* call);
@@ -75,6 +78,22 @@ namespace Glass
 		IRSSAValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
 		IRSSAValue* CreateConstantInteger(u64 integer_base_type, i64 value);
+
+		IRSSAValue* CreateConstant(u64 base_type, i64 value_integer, double value_float)
+		{
+			IRCONSTValue* Constant = IR(IRCONSTValue());
+
+			Constant->Type = base_type;
+
+			if (m_Metadata.GetTypeFlags(base_type) & FLAG_FLOATING_TYPE) {
+				memcpy(&Constant->Data, &value_float, sizeof(double));
+			}
+			else {
+				memcpy(&Constant->Data, &value_integer, sizeof(i64));
+			}
+
+			return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+		}
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();

@@ -19,10 +19,10 @@
 #foreign fn glfwSetKeyCallback(GLFWwindow* window, (GLFWwindow*,i32,i32,i32,i32) callback) : void* {};
 
 struct Vertex {
-	vec2 position;
+	vec3 position;
 };
 
-fn _Vertex(vec2 pos) : Vertex {
+fn _Vertex(vec3 pos) : Vertex {
 	Vertex v;
 	v.position = pos;
 	return v;
@@ -72,15 +72,15 @@ fn Renderer2D_init(Renderer2D* r) {
 	r.quad_vertices.data 	= malloc(6 * sizeof(Vertex));
 	r.quad_vertices.count 	= 6;
 
-	f32 nh = 0.0-0.5;
+	f32 nh = -0.5;
 
-	r.quad_vertices[0] = _Vertex(Vec2(nh,	nh));
-	r.quad_vertices[1] = _Vertex(Vec2(0.5,	nh));
-	r.quad_vertices[2] = _Vertex(Vec2(nh,	0.5));
+	r.quad_vertices[0] = _Vertex(Vec3(nh,	nh,0.0));
+	r.quad_vertices[1] = _Vertex(Vec3(0.5,	nh,0.0));
+	r.quad_vertices[2] = _Vertex(Vec3(nh,	0.5,0.0));
 
-	r.quad_vertices[3] = _Vertex(Vec2(0.5,	nh));
-	r.quad_vertices[4] = _Vertex(Vec2(nh,	0.5));
-	r.quad_vertices[5] = _Vertex(Vec2(0.5,	0.5));
+	r.quad_vertices[3] = _Vertex(Vec3(0.5,	nh,0.0));
+	r.quad_vertices[4] = _Vertex(Vec3(nh,	0.5,0.0));
+	r.quad_vertices[5] = _Vertex(Vec3(0.5,	0.5,0.0));
 }
 
 fn Renderer2D_flush(Renderer2D* r) {
@@ -114,7 +114,7 @@ fn Renderer2D_flush(Renderer2D* r) {
 
 }
 
-fn Renderer2D_draw_quad(Renderer2D* r, vec2 position) {
+fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 
 	u32 i = 0;
 
@@ -126,7 +126,15 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position) {
 
 		//@Fix currently the left type dominates inference switch to result of op if overloaded
 		//p := r.projection * v.position;
-		vec2 p = r.projection * (v.position + position);
+		//vec2 p = r.projection * (v.position + position);
+
+		mat4 transform = scaling(Vec3(size.x,size.y,0.0)) * translation(Vec3(position.x,-position.y,0.0));
+
+		vec3 p = transform * v.position;
+		p = r.projection * p;
+
+		//print("P :: %\n", p);
+		//print("Transform :: %\n", transform);
 
 		v.position = p;
 
@@ -155,14 +163,18 @@ fn update() {
 	f32 width 		= cast(f32) a.WindowWidth;
 	f32 height 		= cast(f32) a.WindowHeight;
 
-	mat4 projection = ortho(0.0, width, 0.0, height,0.0 - 1.0, 1.0);
+	mat4 projection = ortho(-width*0.5, width*0.5, -height*0.5, height*0.5,0.0 - 1.0, 1.0);
+	projection = translation(Vec3(
+		-width * 0.5,height * 0.5,0.0
+	)) * projection;
+
 
 	Renderer2D_begin(&a.r, projection);
 
 	f32 posx = 0.1;
 	f32 posy = 0.1;
 
-	Renderer2D_draw_quad(&a.r, Vec2(10.0, 10.0));
+	Renderer2D_draw_quad(&a.r, Vec2(50.0, 50.0), Vec2(100.0, 100.0));
 
 	Renderer2D_flush(&a.r);
 }
@@ -191,11 +203,6 @@ fn main() : i32 {
 	i32 y = 31;
 
 	i32 i = 0;
-
-	for 8..y {
-		auto := it_index - 8;
-		print("Iterating: %,%\n", it, auto);
-	}
 
 	a.running = 1;
 

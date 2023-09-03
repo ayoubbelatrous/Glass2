@@ -322,6 +322,13 @@ namespace Glass
 		IRSSAValue* SSA_B = nullptr;
 		u64 Type;
 
+		IRSUB() = default;
+
+		IRSUB(IRSSAValue* a, IRSSAValue* b, u64 type)
+			: SSA_A(a), SSA_B(b), Type(type)
+		{
+		}
+
 		virtual std::string ToString() const override {
 			std::string str;
 

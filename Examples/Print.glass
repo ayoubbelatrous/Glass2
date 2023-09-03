@@ -39,7 +39,7 @@ fn print_string(u8* str) {
 	printf("%s", str);
 }
 
-fn print_any(Any any) : i32 {
+fn print_any(Any any, i32 indent) : i32 {
 
 	TypeInfo* typeinfo = type_info(any.type);
 
@@ -85,13 +85,9 @@ fn print_any(Any any) : i32 {
 
 		u64 member_it = 0;
 
-		printf("{:%s: ", type_info_struct.name);
+		printf("%s :: struct {\n", type_info_struct.name);
 
 		while member_it < type_info_struct.member_count {
-
-			if member_it != zero {
-				printf(", ");
-			}
 
 			TypeInfo_Member member = type_info_struct.members[member_it];
 
@@ -101,13 +97,24 @@ fn print_any(Any any) : i32 {
 			struct_any.data = cast(void*) member_ptr;
 			struct_any.type = member.type;
 
+			for 0..indent {
+				printf("  ");
+			}
+
 			printf("%s: ", member.name);
-			print_any(struct_any);
+			print_any(struct_any, indent + 1);
+			printf(";\n");
 
 			member_it = member_it + 1;
 		}
 
-		printf(" }");
+		if indent > 0 {
+			for 0..indent-1 {
+				printf("  ");
+			}
+		}
+
+		printf("}");
 	}
 
 	return 0;
@@ -140,7 +147,7 @@ fn print(Any... args) {
 		if current_char == modulo {
 			argument_it = argument_it + 1;
 			current_argument = arguments[argument_it];
-			print_any(current_argument);
+			print_any(current_argument, 0);
 		}
 
 		if current_char != "%"[0] {

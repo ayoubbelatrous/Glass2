@@ -285,6 +285,7 @@ namespace Glass
 		case NodeType::SizeOf:
 		case NodeType::DeReference:
 		case NodeType::Range:
+		case NodeType::NegateExpression:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -1128,6 +1129,9 @@ namespace Glass
 		case NodeType::Range:
 			return RangeCodeGen((RangeNode*)expression);
 			break;
+		case NodeType::NegateExpression:
+			return NegateCodeGen((NegateExpr*)expression);
+			break;
 		}
 
 		return nullptr;
@@ -1263,6 +1267,11 @@ namespace Glass
 
 		if (binaryExpr->Left->GetType() != NodeType::NumericLiteral) {
 			A = GetExpressionByValue(binaryExpr->Left);
+
+			if (!A) {
+				return nullptr;
+			}
+
 			left_type = m_Metadata.GetExprType(A->SSA);
 
 			SetLikelyConstantType(left_type->BaseID);
@@ -1270,6 +1279,9 @@ namespace Glass
 
 		if (binaryExpr->Right->GetType() != NodeType::NumericLiteral) {
 			B = GetExpressionByValue(binaryExpr->Right);
+			if (!B) {
+				return nullptr;
+			}
 			right_type = m_Metadata.GetExprType(B->SSA);
 
 			SetLikelyConstantType(right_type->BaseID);
@@ -2043,6 +2055,16 @@ namespace Glass
 		SizeNode.type = NumericLiteral::Type::Int;
 
 		return NumericLiteralCodeGen(AST(SizeNode));
+	}
+
+
+	IRInstruction* Compiler::NegateCodeGen(const NegateExpr* negateNode)
+	{
+		auto what_code = GetExpressionByValue(negateNode->What);
+		if (!what_code)
+			return nullptr;
+		auto what_type = m_Metadata.GetExprType(what_code->SSA);
+		return CreateIRSSA(IR(IRSUB(CreateConstant(what_type->BaseID, 0, 0.0), what_code, what_type->BaseID)), what_type);
 	}
 
 	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)

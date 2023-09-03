@@ -793,7 +793,7 @@ namespace Glass
 
 	Expression* Parser::ParseMulExpr()
 	{
-		Expression* left = ParseArrayAccessExpr();
+		Expression* left = ParseNegateExpr();
 
 		auto is_multiplicative_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
@@ -807,7 +807,7 @@ namespace Glass
 		while (is_multiplicative_op(GetOperator(At()))) {
 
 			Token Op = Consume();
-			auto right = ParseArrayAccessExpr();
+			auto right = ParseNegateExpr();
 
 			BinaryExpression binExpr;
 
@@ -822,6 +822,28 @@ namespace Glass
 		}
 
 		return left;
+	}
+
+	Expression* Parser::ParseNegateExpr()
+	{
+		Expression* what = nullptr;
+
+		if (At().Type == TokenType::Subtract) {
+
+			Consume();
+
+			what = ParseArrayAccessExpr();
+
+			NegateExpr Node;
+			Node.What = what;
+
+			what = (Expression*)AST(Node);
+		}
+		else {
+			what = ParseArrayAccessExpr();
+		}
+
+		return what;
 	}
 
 	Expression* Parser::ParseArrayAccessExpr()

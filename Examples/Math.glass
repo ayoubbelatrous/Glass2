@@ -49,6 +49,9 @@ struct mat4
 #foreign fn matrix4_identity(mat4* m) : mat4* {};
 
 #foreign fn matrix4_translatev3(mat4* self, vec3* translation) : mat4* {};
+#foreign fn matrix4_scalev3(mat4* self, vec3* scale) : mat4* {};
+
+#foreign fn matrix4_multiply(mat4* self, mat4* result) : mat4* {};
 
 
 #foreign fn matrix4_projection_ortho3d_rh_EXP(mat4* self,
@@ -65,6 +68,19 @@ fn Mat4() : mat4 {
 fn translate(mat4 m, vec3 t) : mat4 {
 	mat4 r;
 	matrix4_translatev3(&r, &t);
+	return r;
+}
+
+fn scale(mat4 m, vec3 t) : mat4 {
+	mat4 r;
+	matrix4_scalev3(&r, &t);
+	return r;
+}
+
+fn scaling(vec3 t) : mat4 {
+	mat4 r;
+	r = Mat4();
+	matrix4_scalev3(&r, &t);
 	return r;
 }
 
@@ -90,6 +106,12 @@ fn ortho(f32 xmin, f32 xmax, f32 ymin, f32 ymax, f32 near, f32 far) : mat4 {
 #operator* fn m4_m_v2(mat4 m, vec2 v) : vec2 {
 	vec2 r;
 	matrix4_multiplyv2(&m, &v, &r);
+	return r;
+}
+
+#operator* fn m4_m_m4(mat4 lhs, mat4 rhs) : mat4 {
+	r := lhs;
+	matrix4_multiply(&r , &rhs);
 	return r;
 }
 

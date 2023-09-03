@@ -57,6 +57,7 @@ namespace Glass
 		Expression* ParseMulExpr();
 		Expression* ParseCallExpr();
 		Expression* ParseMemberExpr();
+		Expression* ParseNegateExpr();
 		Expression* ParseArrayAccessExpr();
 		Expression* ParseRangeExpr();
 		Expression* ParseTypeOfExpr();
