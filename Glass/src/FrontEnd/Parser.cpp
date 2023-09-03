@@ -52,6 +52,10 @@ namespace Glass
 			{
 				return ParseWhile();
 			}
+			else if (At().Symbol == "for")
+			{
+				return ParseFor();
+			}
 			else if (At().Symbol == "break")
 			{
 				BreakNode Node;
@@ -190,6 +194,22 @@ namespace Glass
 
 		if (Node.Condition == nullptr) {
 			Abort("Expected Condition After 'while' Instead Got");
+		}
+
+		Node.Scope = (ScopeNode*)ParseScope();
+
+		return Application::AllocateAstNode(Node);
+	}
+
+	Statement* Parser::ParseFor()
+	{
+		Consume();
+
+		ForNode Node;
+		Node.Condition = ParseExpression();
+
+		if (Node.Condition == nullptr) {
+			Abort("Expected something After 'for', Instead Got: ");
 		}
 
 		Node.Scope = (ScopeNode*)ParseScope();
@@ -575,7 +595,29 @@ namespace Glass
 
 	Expression* Parser::ParseExpression()
 	{
-		return ParseAssignExpr();
+		return ParseRangeExpr();
+	}
+
+	Expression* Parser::ParseRangeExpr()
+	{
+		Expression* begin = ParseAssignExpr();
+
+		while (At().Type == TokenType::Period && At(1).Type == TokenType::Period) {
+
+			Token period = Consume();
+			period = Consume();
+
+			Expression* end = ParseAssignExpr();
+
+			RangeNode Node;
+
+			Node.Begin = begin;
+			Node.End = end;
+
+			begin = Application::AllocateAstNode(Node);
+		}
+
+		return begin;
 	}
 
 	Expression* Parser::ParseAssignExpr()
@@ -805,91 +847,11 @@ namespace Glass
 		return object;
 	}
 
-	Expression* Parser::ParseTypeOfExpr()
-	{
-		TypeOfNode Node;
-
-		if (ExpectedToken(TokenType::OpenParen)) {
-			Abort("Expected '(' after 'typeof'");
-		}
-
-		Consume();
-
-		Node.What = ParseExpression();
-
-		if (!Node.What) {
-			Abort("Expected something inside parenthesis '()' of 'typeof'");
-		}
-
-		if (ExpectedToken(TokenType::CloseParen)) {
-			Abort("Expected ')' after 'typeof' contents");
-		}
-
-		Consume();
-
-		return Application::AllocateAstNode(Node);
-	}
-
-	Expression* Parser::ParseCastExpr()
-	{
-		CastNode Node;
-
-		if (ExpectedToken(TokenType::Symbol)) {
-			return ParseExpression();
-		}
-
-		Consume();
-
-		if (ExpectedToken(TokenType::OpenParen)) {
-			Abort("Expected '(' on cast expression");
-		}
-
-		Consume();
-
-		Node.Type = (TypeExpression*)ParseTypeExpr();
-
-		if (ExpectedToken(TokenType::CloseParen)) {
-			Abort("Expected '(' on cast expression");
-		}
-
-		Consume();
-
-		Node.Expr = ParseExpression();
-
-		return AST(Node);
-	}
-
-	Expression* Parser::ParseSizeOfExpr()
-	{
-		SizeOfNode Node;
-		Consume();
-
-		if (ExpectedToken(TokenType::OpenParen)) {
-			Abort("Expected '(' after sizeof, Instead Got:");
-		}
-
-		Consume();
-
-		Node.Expr = ParseExpression();
-
-		if (Node.Expr == nullptr) {
-			Abort("Expected something after 'sizeof(', Instead Got:");
-		}
-
-		if (ExpectedToken(TokenType::CloseParen)) {
-			Abort("Expected ')' after sizeof(..., Instead Got:");
-		}
-
-		Consume();
-
-		return AST(Node);
-	}
-
 	Expression* Parser::ParseMemberExpr()
 	{
 		Expression* left = ParseDeRefExpr();
 
-		while (At().Type == TokenType::Period) {
+		while (At().Type == TokenType::Period && At(1).Type != TokenType::Period) {
 
 			Token period = Consume();
 
@@ -996,6 +958,7 @@ namespace Glass
 	Statement* Parser::ParsePrimaryExpr()
 	{
 		TokenType Type = At().Type;
+
 		switch (Type)
 		{
 		case TokenType::SemiColon:
@@ -1128,6 +1091,86 @@ namespace Glass
 		}
 
 		return nullptr;
+	}
+
+	Expression* Parser::ParseTypeOfExpr()
+	{
+		TypeOfNode Node;
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' after 'typeof'");
+		}
+
+		Consume();
+
+		Node.What = ParseExpression();
+
+		if (!Node.What) {
+			Abort("Expected something inside parenthesis '()' of 'typeof'");
+		}
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected ')' after 'typeof' contents");
+		}
+
+		Consume();
+
+		return Application::AllocateAstNode(Node);
+	}
+
+	Expression* Parser::ParseCastExpr()
+	{
+		CastNode Node;
+
+		if (ExpectedToken(TokenType::Symbol)) {
+			return ParseExpression();
+		}
+
+		Consume();
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' on cast expression");
+		}
+
+		Consume();
+
+		Node.Type = (TypeExpression*)ParseTypeExpr();
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected '(' on cast expression");
+		}
+
+		Consume();
+
+		Node.Expr = ParseExpression();
+
+		return AST(Node);
+	}
+
+	Expression* Parser::ParseSizeOfExpr()
+	{
+		SizeOfNode Node;
+		Consume();
+
+		if (ExpectedToken(TokenType::OpenParen)) {
+			Abort("Expected '(' after sizeof, Instead Got:");
+		}
+
+		Consume();
+
+		Node.Expr = ParseExpression();
+
+		if (Node.Expr == nullptr) {
+			Abort("Expected something after 'sizeof(', Instead Got:");
+		}
+
+		if (ExpectedToken(TokenType::CloseParen)) {
+			Abort("Expected ')' after sizeof(..., Instead Got:");
+		}
+
+		Consume();
+
+		return AST(Node);
 	}
 
 	ModuleFile* Parser::CreateAST()

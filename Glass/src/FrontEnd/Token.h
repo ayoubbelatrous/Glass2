@@ -60,6 +60,8 @@ namespace Glass
 
 		Symbol,
 
+		Range,			// '..'
+
 		E_OF,
 		BOL,
 	};

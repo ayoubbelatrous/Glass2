@@ -27,6 +27,7 @@ namespace Glass
 		bool GenerateDebugInfo = false;
 		bool Verbose = true;
 		bool DumpIR = false;
+		bool NoLink = false;
 
 		bool Run = false;
 

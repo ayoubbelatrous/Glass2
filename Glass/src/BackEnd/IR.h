@@ -165,6 +165,9 @@ namespace Glass
 
 		NullPtr,
 
+		Label,
+		Iterator,
+
 		TranslationUnit,
 		File,
 	};
@@ -290,6 +293,10 @@ namespace Glass
 		IRADD() = default;
 		IRADD(IRSSAValue* A, IRSSAValue* B)
 			:SSA_A(A), SSA_B(B)
+		{
+		}
+		IRADD(IRSSAValue* A, IRSSAValue* B, u64 type)
+			:SSA_A(A), SSA_B(B), Type(type)
 		{
 		}
 
@@ -1414,6 +1421,42 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::AnyArray;
+		}
+	};
+
+	struct IRLabel : public IRInstruction {
+
+		u64 LabelID = 0;
+		std::vector<IRInstruction*> Instructions;
+
+		virtual std::string ToString() const override {
+			return "label:";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Label;
+		}
+	};
+
+	struct IRIterator : public IRInstruction {
+		u64 ID = 0;
+
+		std::vector<IRSSA*> ConditionBlock;
+		std::vector<IRSSA*> IncrementorBlock;
+		u64 ConditionSSA;
+
+		IRSSAValue* IteratorIndex;
+		IRSSAValue* IteratorIt;
+
+		TypeStorage* IndexTy = nullptr;
+		TypeStorage* ItTy = nullptr;
+
+		virtual std::string ToString() const override {
+			return "Iterator + ";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Iterator;
 		}
 	};
 }

@@ -158,22 +158,25 @@ namespace Glass
 			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
 			linker_cmd = fmt::format("clang.exe -g {} {} -o a.exe", input_name, libraries_cmd);
 
-			GS_CORE_WARN("Running: {}", linker_cmd);
+			if (!m_Options.NoLink)
+			{
+				GS_CORE_WARN("Running: {}", linker_cmd);
 
-			int lnk_result = system(linker_cmd.c_str());
+				int lnk_result = system(linker_cmd.c_str());
 
-			if (lnk_result != 0) {
-				GS_CORE_ERROR("Error: During Execution of Command");
-			}
-			else {
-				GS_CORE_WARN("CodeGen Done: {}", linker_cmd);
-				if (m_Options.Run) {
+				if (lnk_result != 0) {
+					GS_CORE_ERROR("Error: During Execution of Command");
+				}
+				else {
+					GS_CORE_WARN("CodeGen Done: {}", linker_cmd);
+					if (m_Options.Run) {
 
-					GS_CORE_INFO("Running: {}", exe_name);
-					int run_result = system(exe_name.c_str());
+						GS_CORE_INFO("Running: {}", exe_name);
+						int run_result = system(exe_name.c_str());
 
-					if (run_result != 0) {
-						GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
+						if (run_result != 0) {
+							GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
+						}
 					}
 				}
 			}
@@ -254,9 +257,13 @@ namespace Glass
 					options.Run = true;
 					modal = false;
 				}
-
 				if (arg == "-ir") {
 					options.DumpIR = true;
+					modal = false;
+				}
+				if (arg == "-no-link") {
+					options.NoLink = true;
+					modal = false;
 				}
 
 				continue;

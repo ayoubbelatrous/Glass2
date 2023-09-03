@@ -66,6 +66,8 @@ namespace Glass
 		m_DCU = m_DBuilder->createCompileUnit(
 			llvm::dwarf::DW_LANG_C, m_DBuilder->createFile("Main.glass", "."),
 			"Glass Compiler", false, "", 0);
+
+		//m_LLVMModule->addModuleFlag(llvm::Module::Warning, "CodeView", 8);
 	}
 
 	void LLVMBackend::DumpDebugInfo()
@@ -124,6 +126,8 @@ namespace Glass
 			InsertLLVMDebugType(IR_type, m_DBuilder->createBasicType("Type", 64, llvm::dwarf::DW_ATE_unsigned));
 
 			InsertLLVMDebugType(IR_bool, m_DBuilder->createBasicType("bool", 8, llvm::dwarf::DW_ATE_unsigned));
+
+			InsertLLVMDebugType(IR_int, m_DBuilder->createBasicType("int", 32, llvm::dwarf::DW_ATE_signed));
 		}
 
 		//Opaque_Type = llvm::Type::getInt8PtrTy(*m_LLVMContext);

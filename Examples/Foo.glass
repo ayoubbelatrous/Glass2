@@ -1,0 +1,11 @@
+#foreign fn printf!(u8* fmt) : i32 {};
+
+fn main() : i32 {
+	i32 i = 0;
+	for 0..10 + 1 {
+		printf("I: %i\n",i);
+		i = i + 1;
+	}
+
+	return 0;
+}

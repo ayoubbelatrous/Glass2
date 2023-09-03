@@ -33,6 +33,8 @@ namespace Glass
 		IRInstruction* IfCodeGen(const IfNode* ifNode);
 		IRInstruction* WhileCodeGen(const WhileNode* ifNode);
 
+		IRInstruction* ForCodeGen(const ForNode* forNode);
+
 		IRInstruction* ExpressionCodeGen(const Expression* expression);
 
 		IRInstruction* IdentifierCodeGen(const Identifier* identifier);
@@ -44,6 +46,8 @@ namespace Glass
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* SizeOfCodeGen(const SizeOfNode* size_of);
+
+		IRInstruction* RangeCodeGen(const RangeNode* rangeNode);
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
 		IRInstruction* FuncRefCallCodeGen(const FunctionCall* call);
@@ -70,8 +74,12 @@ namespace Glass
 		IRSSAValue* CreateLoad(TypeStorage* type, u64 address);
 		IRSSAValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
+		IRSSAValue* CreateConstantInteger(u64 integer_base_type, i64 value);
+
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
+		IRSSAValue* CreateIRSSA(IRInstruction* value);
+		IRSSAValue* CreateIRSSA(IRInstruction* value, TypeStorage* semantic_type);
 		IRData* CreateIRData();
 
 		IRFunction* CreatePolyMorhOverload(u64 ID, const PolyMorphOverloads& overloads);
@@ -80,6 +88,8 @@ namespace Glass
 
 		Glass::Type TSToLegacy(TypeStorage* type);
 		TypeStorage* LegacyToTS(const Glass::Type& type);
+
+		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRSSAValue** A, IRSSAValue** B);
 
 		const IRFunction* GetPolyMorphOverLoad(u64 ID, const PolyMorphOverloads& overloads)
 		{

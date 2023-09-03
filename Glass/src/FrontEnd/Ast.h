@@ -41,6 +41,9 @@ namespace Glass
 		Cast,
 		ArrayAccess,
 		SizeOf,
+
+		Range,
+
 		Enum,
 	};
 
@@ -734,6 +737,27 @@ namespace Glass
 		}
 	};
 
+	class ForNode : public Statement
+	{
+	public:
+
+		Expression* Condition = nullptr;
+		ScopeNode* Scope = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::For;
+		}
+
+		virtual std::string ToString() const {
+			return "for " + Condition->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Condition->GetLocation();
+		}
+	};
+
 	class BreakNode : public Statement
 	{
 	public:
@@ -896,6 +920,27 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Expr->GetLocation();
+		}
+	};
+
+	class RangeNode : public Expression
+	{
+	public:
+
+		Expression* Begin = nullptr;
+		Expression* End = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Range;
+		}
+
+		virtual std::string ToString() const {
+			return "range .. ";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Begin->GetLocation();
 		}
 	};
 }

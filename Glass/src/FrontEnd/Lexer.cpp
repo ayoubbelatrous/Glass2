@@ -45,6 +45,17 @@ namespace Glass
 				}
 			}
 
+			if (c == '.') {
+				if (counter + 1 < token.size()) {
+					if (token[counter + 1] == '.') {
+						return false;
+					}
+				}
+				else {
+					return false;
+				}
+			}
+
 			if (std::isalpha(c)) {
 				return false;
 			}
@@ -71,28 +82,6 @@ namespace Glass
 		u64 line = 0;
 
 		std::string accumulator;
-
-		const std::array<char, 23> splitters =
-		{
-			'!',
-			'#',
-			'.',';',',',':',
-
-			'&','|',
-
-			'"','\'',
-
-			'+','-',
-			'*','/',
-
-			'{','}',
-
-			'(',')',
-			'[',']',
-
-			'=',
-			'<', '>',
-		};
 
 		const std::unordered_map<char, TokenType> token_to_type =
 		{
@@ -315,7 +304,7 @@ namespace Glass
 				string_collection_mode = true;
 			}
 			else {
-				if (is_valid_numeric_literal(accumulator) && c == '.') {
+				if (is_valid_numeric_literal(accumulator) && c == '.' && m_Source[location] != '.') {
 					accumulator += c;
 				}
 				else if (token_to_type.find(c) != token_to_type.end()) {

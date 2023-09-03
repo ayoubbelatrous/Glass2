@@ -20,6 +20,7 @@ namespace Glass
 
 		Statement* ParseIf();
 		Statement* ParseWhile();
+		Statement* ParseFor();
 
 		Statement* ParseTypeExpr();
 
@@ -57,6 +58,7 @@ namespace Glass
 		Expression* ParseCallExpr();
 		Expression* ParseMemberExpr();
 		Expression* ParseArrayAccessExpr();
+		Expression* ParseRangeExpr();
 		Expression* ParseTypeOfExpr();
 		Expression* ParseCastExpr();
 		Expression* ParseSizeOfExpr();

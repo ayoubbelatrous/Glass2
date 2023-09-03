@@ -284,6 +284,7 @@ namespace Glass
 		case NodeType::Cast:
 		case NodeType::SizeOf:
 		case NodeType::DeReference:
+		case NodeType::Range:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -306,6 +307,9 @@ namespace Glass
 			break;
 		case NodeType::While:
 			return WhileCodeGen((WhileNode*)statement);
+			break;
+		case NodeType::For:
+			return ForCodeGen((ForNode*)statement);
 			break;
 		case NodeType::Break:
 		{
@@ -941,6 +945,138 @@ namespace Glass
 		return IR(WHILE);
 	}
 
+	IRInstruction* Compiler::RangeCodeGen(const RangeNode* rangeNode)
+	{
+		//IRSSAValue * begin = GetExpressionByValue(rangeNode->Begin);
+		//IRSSAValue * end = GetExpressionByValue(rangeNode->End);
+
+		IRSSAValue* begin = nullptr;
+		IRSSAValue* end = nullptr;
+
+		TypeStorage* begin_type = nullptr;
+		TypeStorage* end_type = nullptr;
+
+		BinaryDispatch(rangeNode->Begin, rangeNode->End, &begin_type, &end_type, &begin, &end);
+
+		if (!begin || !end)
+			return nullptr;
+
+		TypeStorage* type = nullptr;
+
+		{
+			if (begin_type != end_type) {
+				MSG_LOC(rangeNode);
+				FMT_WARN("range types do not match '{}'..'{}'", PrintType(begin_type), PrintType(end_type));
+				return nullptr;
+			}
+
+			if (!(m_Metadata.GetTypeFlags(begin_type->BaseID) & FLAG_NUMERIC_TYPE) || m_Metadata.GetTypeFlags(begin_type->BaseID) & FLAG_FLOATING_TYPE) {
+				MSG_LOC(rangeNode);
+				FMT_WARN("range only supports integer types invalid type is '{}'", PrintType(begin_type));
+				return nullptr;
+			}
+
+			type = begin_type;
+		}
+
+		IRIterator* iterator = IR(IRIterator());
+
+		//:
+		iterator->IteratorIndex = CreateIRSSA(IR(IRAlloca(type)));
+		CreateIRSSA(CreateStore(type, iterator->IteratorIndex->SSA, begin));
+
+		iterator->IteratorIt = CreateIRSSA(IR(IRAlloca(type)));
+		CreateIRSSA(CreateStore(type, iterator->IteratorIt->SSA, begin));
+
+		//Cond:
+		{
+			PushScope();
+			IRSSAValue* cmp_inst = CreateIRSSA(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->SSA), end)));
+			iterator->ConditionSSA = cmp_inst->SSA;
+
+			auto ssa_stack = PoPIRSSA();
+			for (auto inst : ssa_stack) {
+				iterator->ConditionBlock.push_back(inst);
+			}
+			PopScope();
+		}
+
+		//Incrementor:
+		{
+			PushScope();
+
+			auto index_load = CreateIRSSA(CreateLoad(type, iterator->IteratorIndex->SSA));
+			auto index_addition = CreateIRSSA(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type->BaseID)));
+			CreateIRSSA(CreateStore(type, iterator->IteratorIndex->SSA, index_addition));
+			CreateIRSSA(CreateStore(type, iterator->IteratorIt->SSA, index_addition));
+
+			auto ssa_stack = PoPIRSSA();
+			for (auto inst : ssa_stack) {
+				iterator->IncrementorBlock.push_back(inst);
+			}
+
+			PopScope();
+		}
+
+		iterator->ItTy = type;
+		iterator->IndexTy = type;
+
+		return iterator;
+	}
+
+	IRInstruction* Compiler::ForCodeGen(const ForNode* forNode)
+	{
+		IRIterator* iterator = (IRIterator*)ExpressionCodeGen(forNode->Condition);
+
+		if (!iterator)
+			return nullptr;
+
+		IRWhile* while_inst = IR(IRWhile());
+
+		while_inst->ConditionBlock = iterator->ConditionBlock;
+		while_inst->SSA = iterator->ConditionSSA;
+
+		PushScope();
+		m_Metadata.PushContext(ContextScopeType::FUNC);
+
+		m_Metadata.RegisterVariable(m_Metadata.GetSSA(iterator->IteratorIndex->SSA), "it_index");
+		m_Metadata.RegisterVariable(m_Metadata.GetSSA(iterator->IteratorIt->SSA), "it");
+
+		VariableMetadata it_index_metadata;
+		it_index_metadata.Tipe = iterator->IndexTy;
+		it_index_metadata.Name = forNode->Condition->GetLocation();
+		it_index_metadata.Name.Symbol = "it_index";
+		m_Metadata.RegisterVariableMetadata(iterator->IteratorIndex->SSA, it_index_metadata);
+
+		VariableMetadata it_metadata;
+		it_metadata.Tipe = iterator->ItTy;
+		it_metadata.Name = forNode->Condition->GetLocation();
+		it_metadata.Name.Symbol = "it";
+		m_Metadata.RegisterVariableMetadata(iterator->IteratorIt->SSA, it_metadata);
+
+		for (const Statement* stmt : forNode->Scope->GetStatements())
+		{
+			auto inst = StatementCodeGen(stmt);
+			auto ir_ssa_stack = PoPIRSSA();
+			for (auto inst : ir_ssa_stack)
+			{
+				while_inst->Instructions.push_back(inst);
+			}
+			if (!inst) {
+				continue;
+			}
+			while_inst->Instructions.push_back(inst);
+		}
+		m_Metadata.PopContext();
+		PopScope();
+
+		for (auto inst : iterator->IncrementorBlock) {
+			while_inst->Instructions.push_back(inst);
+		}
+
+		return while_inst;
+	}
+
 	IRInstruction* Compiler::ExpressionCodeGen(const Expression* expression)
 	{
 		NodeType Type = expression->GetType();
@@ -988,6 +1124,9 @@ namespace Glass
 		case NodeType::TE_Func:
 		case NodeType::TE_Array:
 			return TypeExpressionCodeGen((TypeExpression*)expression);
+			break;
+		case NodeType::Range:
+			return RangeCodeGen((RangeNode*)expression);
 			break;
 		}
 
@@ -2579,6 +2718,17 @@ namespace Glass
 		return IR(IRSSAValue(load_ssa->ID));
 	}
 
+
+	IRSSAValue* Compiler::CreateConstantInteger(u64 integer_base_type, i64 value)
+	{
+		IRCONSTValue* Constant = IR(IRCONSTValue());;
+
+		Constant->Type = GetLikelyConstantIntegerType();
+		memcpy(&Constant->Data, &value, sizeof(i64));
+
+		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+	}
+
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)
 	{
 		IRFunction* IRF = IR(IRFunction());
@@ -2599,6 +2749,21 @@ namespace Glass
 		SSA->SetDBGLoc(m_CurrentDBGLoc);
 
 		return SSA;
+	}
+
+	IRSSAValue* Compiler::CreateIRSSA(IRInstruction* value)
+	{
+		auto ssa = CreateIRSSA();
+		ssa->Value = value;
+		return IR(IRSSAValue(ssa->ID));
+	}
+
+	IRSSAValue* Compiler::CreateIRSSA(IRInstruction* value, TypeStorage* semantic_type)
+	{
+		auto ssa = CreateIRSSA();
+		ssa->Value = value;
+		m_Metadata.RegExprType(ssa->ID, semantic_type);
+		return IR(IRSSAValue(ssa->ID));
 	}
 
 	IRData* Compiler::CreateIRData()
@@ -2731,5 +2896,33 @@ namespace Glass
 		}
 
 		return new_ts_type;
+	}
+
+	void Compiler::BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRSSAValue** A, IRSSAValue** B)
+	{
+		if (left->GetType() != NodeType::NumericLiteral) {
+			*A = GetExpressionByValue(left);
+			*left_type = m_Metadata.GetExprType((*A)->SSA);
+
+			SetLikelyConstantType((*left_type)->BaseID);
+		}
+
+		if (right->GetType() != NodeType::NumericLiteral) {
+			*B = GetExpressionByValue(right);
+			*right_type = m_Metadata.GetExprType((*B)->SSA);
+
+			SetLikelyConstantType((*right_type)->BaseID);
+		}
+
+		if (*left_type == nullptr) {
+			*A = GetExpressionByValue(left);
+			*left_type = m_Metadata.GetExprType((*A)->SSA);
+		}
+		if (*right_type == nullptr) {
+			*B = GetExpressionByValue(right);
+			*right_type = m_Metadata.GetExprType((*B)->SSA);
+		}
+
+		ResetLikelyConstantType();
 	}
 }
