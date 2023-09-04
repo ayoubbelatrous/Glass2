@@ -182,6 +182,10 @@ namespace Glass {
 			return new_type;
 		}
 
+		static TypeStorage* GetVoid() {
+			return GetBasic(IR_void);
+		}
+
 		static TypeStorage* IncreaseIndirection(TypeStorage* type) {
 			if (type->Kind == TypeStorageKind::Pointer) {
 				return TypeSystem::GetPtr(((TSPtr*)type)->Pointee, ((TSPtr*)type)->Indirection + 1);

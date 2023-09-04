@@ -221,37 +221,14 @@ namespace Glass {
 
 	struct FunctionMetadata
 	{
-		std::string Name;
 		Token Symbol;
-
 		std::vector<ArgumentMetadata> Arguments;
+		TypeStorage* Signature = nullptr;
 		TypeStorage* ReturnType = nullptr;
 
-		TypeStorage* Signature = nullptr;
-
+		bool HasBody = false;
 		bool Variadic = false;
 		bool Foreign = false;
-		bool PolyMorphic = false;
-
-		FunctionNode* FunctionAST = nullptr;
-
-		std::vector <std::pair<IRFunction*, FunctionNode*>> PendingPolymorphInstantiations;
-
-		std::unordered_map<PolyMorphOverloads, IRFunction*, PolyMorphOverloadsHasher> PolyMorhOverLoads;
-
-		std::unordered_map<std::string, u64> PolyMorphicTypeNames;
-		std::unordered_map<u64, std::string> PolyMorphicIDToTypeNames;
-
-		u64 GetPolyMorphID(const std::string& type_name) {
-			if (auto it = PolyMorphicTypeNames.find(type_name) != PolyMorphicTypeNames.end()) {
-				return it;
-			}
-			PolyMorphicTypeNames[type_name] = PolyMorphicTypeNames.size() + 1;
-
-			PolyMorphicIDToTypeNames[PolyMorphicTypeNames[type_name]] = type_name;
-
-			return GetPolyMorphID(type_name);
-		}
 
 		const ArgumentMetadata* GetArgument(u64 i) const
 		{
@@ -498,6 +475,8 @@ namespace Glass {
 			}
 		}
 
+		void RegisterFunction(u64 ID, const FunctionMetadata& metadata);
+
 		const u64 GetTypeSize(u64 id) const {
 			if (m_TypeSizes.find(id) != m_TypeSizes.end()) {
 				return m_TypeSizes.at(id);
@@ -607,15 +586,6 @@ namespace Glass {
 			}
 			return (u64)-1;
 		}
-
-		void RegisterFunction
-		(u64 ID,
-			const std::string& name,
-			TypeStorage* returnType = nullptr,
-			std::vector<ArgumentMetadata> args = {},
-			bool variadic = false, const Token& symbol = {},
-			TypeStorage* signature = nullptr
-		);
 
 		void RegisterType(u64 ID, const std::string& name, u64 size) {
 			m_Types[ID] = name;
@@ -730,6 +700,14 @@ namespace Glass {
 			}
 
 			return nullptr;
+		}
+
+		u64 GetEnumID(const std::string& name) const {
+			auto it = m_EnumNames.find(name);
+			if (it != m_EnumNames.end()) {
+				return it->second;
+			}
+			return -1;
 		}
 
 		const EnumMetadata* GetEnum(const std::string& name) const {

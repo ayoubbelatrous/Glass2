@@ -102,7 +102,10 @@ fn print_any(Any any, i32 indent) : i32 {
 			}
 
 			printf("%s: ", member.name);
-			print_any(struct_any, indent + 1);
+
+			i32 new_indentation = indent + 1;
+
+			print_any(struct_any, new_indentation);
 			printf(";\n");
 
 			member_it = member_it + 1;

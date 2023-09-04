@@ -17,6 +17,7 @@ namespace Glass {
 		void GenerateTypeInfo();
 
 		llvm::Value* CodeGen(const IRInstruction* instruction);
+		void FunctionSignatureCodeGen(const IRFunction* func);
 		llvm::Value* FunctionCodeGen(const IRFunction* func);
 
 		llvm::Value* ReturnCodeGen(const IRReturn* ret);

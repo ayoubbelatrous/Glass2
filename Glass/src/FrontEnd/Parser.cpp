@@ -1080,7 +1080,6 @@ namespace Glass
 		{
 			NumericLiteral num_lit;
 			num_lit.token = Consume();
-			num_lit.Value = std::stoi(num_lit.token.Symbol);
 
 			if (FindStringIC(num_lit.token.Symbol, ".")) {
 				num_lit.Val.Float = std::stod(num_lit.token.Symbol);

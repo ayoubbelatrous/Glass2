@@ -330,7 +330,7 @@ namespace Glass
 			u64 Int;
 		} Val;
 
-		int Value = 0;
+		i64 Value = 0;
 
 		Token token;
 

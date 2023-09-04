@@ -96,24 +96,29 @@ fn ortho(f32 xmin, f32 xmax, f32 ymin, f32 ymax, f32 near, f32 far) : mat4 {
 	matrix4_projection_ortho3d_rh_EXP(&r,xmin,xmax,ymin,ymax,near,far);
 	return r;
 }
-
-#operator* fn m4_m_v3(mat4 m, vec3 v) : vec3 {
+fn m4_m_v3(mat4 m, vec3 v) : vec3 {
 	vec3 r;
 	matrix4_multiplyv3(&m, &v, &r);
 	return r;
 }
 
-#operator* fn m4_m_v2(mat4 m, vec2 v) : vec2 {
+#operator* m4_m_v3;
+
+fn m4_m_v2(mat4 m, vec2 v) : vec2 {
 	vec2 r;
 	matrix4_multiplyv2(&m, &v, &r);
 	return r;
 }
 
-#operator* fn m4_m_m4(mat4 lhs, mat4 rhs) : mat4 {
+#operator* m4_m_v2;
+
+fn m4_m_m4(mat4 lhs, mat4 rhs) : mat4 {
 	r := lhs;
 	matrix4_multiply(&r , &rhs);
 	return r;
 }
+
+#operator* m4_m_m4;
 
 //@Vec3
 fn add_vec3(vec3 lhs, vec3 rhs) : vec3

@@ -145,8 +145,22 @@ namespace Glass
 
 		GenerateTypeInfo();
 
-		for (auto i : m_Program->Instructions) {
 
+		for (auto i : m_Program->Instructions) {
+			if (i->GetType() == IRNodeType::File) {
+
+				IRFile* ir_file = (IRFile*)i;
+				SetLLVMFile(ir_file->File_Name, ir_file->Directory);
+
+				for (auto tl_inst : ir_file->Instructions) {
+					if (tl_inst->GetType() == IRNodeType::Function) {
+						FunctionSignatureCodeGen((IRFunction*)tl_inst);
+					}
+				}
+			}
+		}
+
+		for (auto i : m_Program->Instructions) {
 			if (i->GetType() == IRNodeType::File) {
 
 				IRFile* ir_file = (IRFile*)i;
@@ -159,7 +173,6 @@ namespace Glass
 			else {
 				CodeGen(i);
 			}
-
 		}
 
 		llvm::verifyModule(*m_LLVMModule, &llvm::outs());
@@ -324,7 +337,7 @@ namespace Glass
 			llvm::Function* llvm_Func =
 				llvm::Function::Create(
 					Function_Type, llvm::Function::LinkageTypes::ExternalLinkage,
-					metadata->Name, m_LLVMModule);
+					metadata->Symbol.Symbol, m_LLVMModule);
 
 			//llvm_Func->setCallingConv(llvm::CallingConv::C);
 
@@ -640,15 +653,9 @@ namespace Glass
 		}
 	}
 
-	llvm::Value* LLVMBackend::FunctionCodeGen(const IRFunction* func)
+	void LLVMBackend::FunctionSignatureCodeGen(const IRFunction* func)
 	{
-		SetFunctionID(func->ID);
-
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
-
-		// 		if (func_metadata->Name == "key_cb") {
-		// 			__debugbreak();
-		// 		}
 
 		std::vector<llvm::Type*> Parameters;
 
@@ -665,7 +672,32 @@ namespace Glass
 			llvm::FunctionType::get(GetLLVMType(func_metadata->ReturnType), Parameters, false);
 
 		llvm::Function* llvm_Func =
-			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Name, m_LLVMModule);
+			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Symbol.Symbol, m_LLVMModule);
+
+		InsertLLVMFunction(func->ID, llvm_Func);
+	}
+
+	llvm::Value* LLVMBackend::FunctionCodeGen(const IRFunction* func)
+	{
+		SetFunctionID(func->ID);
+
+		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
+
+		std::vector<llvm::Type*> Parameters;
+
+		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
+			if (!arg_metadata.Variadic) {
+				Parameters.push_back(GetLLVMType(arg_metadata.Type));
+			}
+			else {
+				Parameters.push_back(GetLLVMType(IR_array));
+			}
+		}
+
+		llvm::FunctionType* Function_Type =
+			llvm::FunctionType::get(GetLLVMType(func_metadata->ReturnType), Parameters, false);
+
+		llvm::Function* llvm_Func = GetLLVMFunction(m_CurrentFunctionID);
 
 		//BODY CODE GEN///////////////////////////
 
@@ -781,6 +813,8 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::ConstValueCodeGen(const IRCONSTValue* constant)
 	{
+		auto llvm_Type = GetLLVMType(constant->Type);
+
 		if (m_Metadata->GetTypeFlags(constant->Type) & FLAG_FLOATING_TYPE) {
 
 			double data = 0;
@@ -805,10 +839,10 @@ namespace Glass
 		bool is_unsigned = m_Metadata->GetTypeFlags(constant->Type) & FLAG_UNSIGNED_TYPE;
 
 		if (is_unsigned) {
-			return llvm::ConstantInt::get(GetLLVMType(constant->Type), data, false);
+			return llvm::ConstantInt::get(llvm_Type, data, false);
 		}
 		else {
-			return llvm::ConstantInt::getSigned(GetLLVMType(constant->Type), data);
+			return llvm::ConstantInt::getSigned(llvm_Type, data);
 		}
 	}
 
@@ -821,6 +855,10 @@ namespace Glass
 
 		llvm::Value* lhs = GetName(op->SSA_A->SSA);
 		llvm::Value* rhs = GetName(op->SSA_B->SSA);
+		// 
+		// 		if (lhs->getType() != rhs->getType()) {
+		// 			__debugbreak();
+		// 		}
 
 		llvm::Value* result = nullptr;
 

@@ -2,7 +2,7 @@
 //#foreign fn free(void* ptr) : void {};
 //#foreign fn memcpy(void* destination, void* source, u64 num) : void *  {}
 
-#foreign struct GLFWwindow{};
+struct GLFWwindow{};
 
 #foreign fn glfwInit() : i32 {};
 #foreign fn glfwCreateWindow(i32 w, i32 h, u8* name, void* share, void* monitor) : GLFWwindow* {};
@@ -18,30 +18,6 @@
 //function_name(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : void
 #foreign fn glfwSetKeyCallback(GLFWwindow* window, (GLFWwindow*,i32,i32,i32,i32) callback) : void* {};
 
-struct Vertex {
-	vec3 position;
-};
-
-fn _Vertex(vec3 pos) : Vertex {
-	Vertex v;
-	v.position = pos;
-	return v;
-}
-
-struct Renderer2D
-{
-	void* 			quad_vertex_base;
-	void* 			quad_vertex_pointer;
-	u64 			vertex_count;
-
-	VertexBuffer 	quad_vertex_buffer;
-	VertexArray 	quad_vertex_array;
-
-	Vertex[..]  	quad_vertices;
-
-	mat4 			projection;
-};
-
 struct Application 	{
 	Renderer2D 		r;
 
@@ -52,105 +28,6 @@ struct Application 	{
 };
 Application a;
 
-u64 R2D_QUAD_COUNT = 5000;
-
-fn Renderer2D_init(Renderer2D* r) {
-
-	u64 quad_buffer_size = 6 * sizeof(Vertex);
-	quad_buffer_size = quad_buffer_size * R2D_QUAD_COUNT;
-
-	r.quad_vertex_base = malloc(quad_buffer_size);
-	r.quad_vertex_pointer = r.quad_vertex_base;
-	r.vertex_count = 0;
-
-	quad_v_ly := BufferLayout_Create(Vertex, sizeof(Vertex));
-	r.quad_vertex_buffer = VertexBuffer_Create(null, quad_buffer_size);
-	r.quad_vertex_array = VertexArray_Create();
-
-	VertexArray_AddVertexBuffer(&r.quad_vertex_array, &r.quad_vertex_buffer, &quad_v_ly);
-
-	r.quad_vertices.data 	= malloc(6 * sizeof(Vertex));
-	r.quad_vertices.count 	= 6;
-
-	f32 nh = -0.5;
-
-	r.quad_vertices[0] = _Vertex(Vec3(nh,	nh,0.0));
-	r.quad_vertices[1] = _Vertex(Vec3(0.5,	nh,0.0));
-	r.quad_vertices[2] = _Vertex(Vec3(nh,	0.5,0.0));
-
-	r.quad_vertices[3] = _Vertex(Vec3(0.5,	nh,0.0));
-	r.quad_vertices[4] = _Vertex(Vec3(nh,	0.5,0.0));
-	r.quad_vertices[5] = _Vertex(Vec3(0.5,	0.5,0.0));
-}
-
-fn Renderer2D_flush(Renderer2D* r) {
-	//Draw
-
-	VertexArray_Bind(&r.quad_vertex_array);
-
-	u64 buffer_size = r.vertex_count * sizeof(Vertex);
-
-	//glNamedBufferSubData(
-	//	r.quad_vertex_buffer.renderer_id,
-	//	0,
-	//	buffer_size,
-	//	r.quad_vertex_base
-	//);
-
-	glBufferSubData(
-		GL_ARRAY_BUFFER,
-		0,
-		buffer_size,
-		r.quad_vertex_base
-	);
-
-	vtx_to_draw := cast(u32) r.vertex_count;
-	//print("vtx_to_draw :: %\n", vtx_to_draw);
-
-	glDrawArrays(GL_TRIANGLES, 0, vtx_to_draw);
-
-	r.quad_vertex_pointer = r.quad_vertex_base;
-	r.vertex_count = 0;
-
-}
-
-fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
-
-	u32 i = 0;
-
-	Vertex* qvp = cast(Vertex*) r.quad_vertex_pointer;
-
-	while i < 6 {
-
-		v := r.quad_vertices[i];
-
-		//@Fix currently the left type dominates inference switch to result of op if overloaded
-		//p := r.projection * v.position;
-		//vec2 p = r.projection * (v.position + position);
-
-		mat4 transform = scaling(Vec3(size.x,size.y,0.0)) * translation(Vec3(position.x,-position.y,0.0));
-
-		vec3 p = transform * v.position;
-		p = r.projection * p;
-
-		//print("P :: %\n", p);
-		//print("Transform :: %\n", transform);
-
-		v.position = p;
-
-		*qvp = v;
-
-		i = i + 1;
-		qvp = &qvp[1];
-	}
-
-	quad_vertex_pointer = cast(void*) qvp;
-	r.vertex_count = r.vertex_count + 6;
-}
-
-fn Renderer2D_begin(Renderer2D* r, mat4 p) {
-	r.projection = p;
-}
 
 //@Life
 fn start() {
@@ -168,13 +45,12 @@ fn update() {
 		-width * 0.5,height * 0.5,0.0
 	)) * projection;
 
-
 	Renderer2D_begin(&a.r, projection);
 
 	f32 posx = 0.1;
 	f32 posy = 0.1;
 
-	Renderer2D_draw_quad(&a.r, Vec2(50.0, 50.0), Vec2(100.0, 100.0));
+	Renderer2D_draw_quad(&a.r, Vec2(50.0, 50.0), Vec2(100.0, 60.0));
 
 	Renderer2D_flush(&a.r);
 }
@@ -198,11 +74,6 @@ fn key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : voi
 }
 
 fn main() : i32 {
-
-	int x = 10;
-	i32 y = 31;
-
-	i32 i = 0;
 
 	a.running = 1;
 
@@ -231,7 +102,7 @@ fn main() : i32 {
 	while a.running {
 
 		glClearColor(0.1, 0.16, 0.15, 1.0);
-		glClear(COLOR_BUF_BIT);
+		glClear(GL_COLOR_BUFFER_BIT);
 
 		update();
 
@@ -242,4 +113,9 @@ fn main() : i32 {
 	}
 
 	return 0;
+}
+
+fn main2() : i64 {
+	i32 bb = 0;
+	return 10;
 }

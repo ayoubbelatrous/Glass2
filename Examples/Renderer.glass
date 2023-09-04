@@ -187,3 +187,151 @@ fn VertexArray_Bind(VertexArray* va) {
 	glBindVertexArray(va.renderer_id);
 	glBindBuffer(GL_ARRAY_BUFFER, va.vertex_buffer.renderer_id);
 }
+
+enum TextureFormat
+{
+	RGB8;
+	RGBA8;
+};
+
+struct Texture {
+	u32 renderer_id;
+
+	u32 width;
+	u32 height;
+	TextureFormat format;
+};
+
+fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Texture {
+	Texture t;
+
+	t.width 	= width;
+	t.height 	= height;
+	t.format 	= format;
+
+	return t;
+}
+
+struct Vertex {
+	vec3 position;
+};
+
+fn _Vertex(vec3 pos) : Vertex {
+	Vertex v;
+	v.position = pos;
+	return v;
+}
+
+struct Renderer2D
+{
+	void* 			quad_vertex_base;
+	void* 			quad_vertex_pointer;
+	u64 			vertex_count;
+
+	VertexBuffer 	quad_vertex_buffer;
+	VertexArray 	quad_vertex_array;
+
+	Vertex[..]  	quad_vertices;
+
+	mat4 			projection;
+};
+
+u64 R2D_QUAD_COUNT = 5000;
+
+fn Renderer2D_init(Renderer2D* r) {
+
+	u64 quad_buffer_size = 6 * sizeof(Vertex);
+	quad_buffer_size = quad_buffer_size * R2D_QUAD_COUNT;
+
+	r.quad_vertex_base = malloc(quad_buffer_size);
+	r.quad_vertex_pointer = r.quad_vertex_base;
+	r.vertex_count = 0;
+
+	quad_v_ly := BufferLayout_Create(Vertex, sizeof(Vertex));
+	r.quad_vertex_buffer = VertexBuffer_Create(null, quad_buffer_size);
+	r.quad_vertex_array = VertexArray_Create();
+
+	VertexArray_AddVertexBuffer(&r.quad_vertex_array, &r.quad_vertex_buffer, &quad_v_ly);
+
+	r.quad_vertices.data 	= malloc(6 * sizeof(Vertex));
+	r.quad_vertices.count 	= 6;
+
+	f32 nh = -0.5;
+
+	r.quad_vertices[0] = _Vertex(Vec3(nh,	nh,0.0));
+	r.quad_vertices[1] = _Vertex(Vec3(0.5,	nh,0.0));
+	r.quad_vertices[2] = _Vertex(Vec3(nh,	0.5,0.0));
+
+	r.quad_vertices[3] = _Vertex(Vec3(0.5,	nh,0.0));
+	r.quad_vertices[4] = _Vertex(Vec3(nh,	0.5,0.0));
+	r.quad_vertices[5] = _Vertex(Vec3(0.5,	0.5,0.0));
+}
+
+fn Renderer2D_flush(Renderer2D* r) {
+	//Draw
+
+	VertexArray_Bind(&r.quad_vertex_array);
+
+	u64 buffer_size = r.vertex_count * sizeof(Vertex);
+
+	//glNamedBufferSubData(
+	//	r.quad_vertex_buffer.renderer_id,
+	//	0,
+	//	buffer_size,
+	//	r.quad_vertex_base
+	//);
+
+	glBufferSubData(
+		GL_ARRAY_BUFFER,
+		0,
+		buffer_size,
+		r.quad_vertex_base
+	);
+
+	vtx_to_draw := cast(u32) r.vertex_count;
+	//print("vtx_to_draw :: %\n", vtx_to_draw);
+
+	glDrawArrays(GL_TRIANGLES, 0, vtx_to_draw);
+
+	r.quad_vertex_pointer = r.quad_vertex_base;
+	r.vertex_count = 0;
+
+}
+
+fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
+
+	u32 i = 0;
+
+	Vertex* qvp = cast(Vertex*) r.quad_vertex_pointer;
+
+	while i < 6 {
+
+		v := r.quad_vertices[i];
+
+		//@Fix currently the left type dominates inference switch to result of op if overloaded
+		//p := r.projection * v.position;
+		//vec2 p = r.projection * (v.position + position);
+
+		mat4 transform = scaling(Vec3(size.x,size.y,0.0)) * translation(Vec3(position.x,-position.y,0.0));
+
+		vec3 p = transform * v.position;
+		p = r.projection * p;
+
+		//print("P :: %\n", p);
+		//print("Transform :: %\n", transform);
+
+		v.position = p;
+
+		*qvp = v;
+
+		i = i + 1;
+		qvp = &qvp[1];
+	}
+
+	quad_vertex_pointer = cast(void*) qvp;
+	r.vertex_count = r.vertex_count + 6;
+}
+
+fn Renderer2D_begin(Renderer2D* r, mat4 p) {
+	r.projection = p;
+}

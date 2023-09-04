@@ -4,6 +4,53 @@
 
 namespace Glass
 {
+	enum class DependencyType : uint8_t
+	{
+		Type,
+		TypeSize,
+	};
+
+	struct TopLevelItemFunction
+	{
+		FunctionNode* AstNode;
+	};
+
+	struct TopLevelItemStruct
+	{
+		StructNode* AstNode;
+	};
+
+	struct TopLevelItemEnum
+	{
+		EnumNode* AstNode;
+	};
+
+	struct TopLevelItemVariable
+	{
+		VariableNode* AstNode;
+	};
+
+	struct TopLevelItem
+	{
+		union
+		{
+			TopLevelItemFunction Function;
+			TopLevelItemStruct Struct;
+			TopLevelItemEnum Enum;
+			TopLevelItemVariable Variable;
+		} As;
+	};
+
+	struct DependencyManager
+	{
+		static void Insert(TopLevelItem tl_item)
+		{
+			Items.push_back(tl_item);
+		}
+
+		static std::vector<TopLevelItem> Items;
+	};
+
 	class Compiler
 	{
 	public:
@@ -13,6 +60,12 @@ namespace Glass
 		void InitTypeSystem();
 
 		IRTranslationUnit* CodeGen();
+
+		void FirstPass();
+
+		void HandleTopLevelFunction(FunctionNode* fnNode);
+		void HandleTopLevelStruct(StructNode* strct);
+		void HandleTopLevelEnum(EnumNode* enmNode);
 
 		IRInstruction* StatementCodeGen(const Statement* statement);
 
@@ -109,24 +162,6 @@ namespace Glass
 		TypeStorage* LegacyToTS(const Glass::Type& type);
 
 		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRSSAValue** A, IRSSAValue** B);
-
-		const IRFunction* GetPolyMorphOverLoad(u64 ID, const PolyMorphOverloads& overloads)
-		{
-			auto metadata = m_Metadata.GetFunctionMetadata(ID);
-			if (metadata->PolyMorhOverLoads.find(overloads) != metadata->PolyMorhOverLoads.end()) {
-				return metadata->PolyMorhOverLoads.at(overloads);
-			}
-			else {
-				IRFunction* ir_func = CreatePolyMorhOverload(ID, overloads);
-				if (ir_func == nullptr) {
-					return nullptr;
-				}
-				else {
-					metadata->PolyMorhOverLoads.emplace(overloads, ir_func);
-				}
-			}
-			return GetPolyMorphOverLoad(ID, overloads);
-		}
 
 		bool CheckTypeConversion(u64 a, u64 b)
 		{
@@ -382,6 +417,16 @@ namespace Glass
 		}
 
 	private:
+
+		void SetExpectedReturnType(TypeStorage* return_type) {
+			m_ExpectedReturnType = return_type;
+		}
+
+		TypeStorage* GetExpectedReturnType() {
+			return m_ExpectedReturnType;
+		}
+
+		TypeStorage* m_ExpectedReturnType = nullptr;
 
 		DBGSourceLoc m_CurrentDBGLoc;
 

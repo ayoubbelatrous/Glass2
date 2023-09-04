@@ -188,6 +188,8 @@ namespace Glass
 
 		InitTypeSystem();
 
+		FirstPass();
+
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
 		for (CompilerFile* file : m_Files)
 		{
@@ -211,22 +213,6 @@ namespace Glass
 			m_CurrentFile++;
 		}
 
-		for (auto& func : m_Metadata.m_Functions)
-		{
-			FunctionMetadata& metadata = func.second;
-			if (metadata.PolyMorphic)
-			{
-				for (auto [irf, function_node] : metadata.PendingPolymorphInstantiations)
-				{
-					IRFunction* ir_function = (IRFunction*)FunctionCodeGen(function_node);
-					irf->Instructions = ir_function->Instructions;
-					irf->Arguments = ir_function->Arguments;
-
-					m_Metadata.m_Functions[irf->ID] = *m_Metadata.GetFunctionMetadata(ir_function->ID);
-				}
-			}
-		}
-
 		auto ir_data = PoPIRData();
 
 		std::vector<IRInstruction*> instructions;
@@ -243,20 +229,126 @@ namespace Glass
 
 		tu->Instructions = instructions;
 
-		for (auto& func : m_Metadata.m_Functions)
-		{
-			FunctionMetadata& metadata = func.second;
-			if (metadata.PolyMorphic)
-			{
+		return tu;
+	}
 
-				for (auto& [overload, irf] : metadata.PolyMorhOverLoads)
+	void Compiler::FirstPass()
+	{
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
 				{
-					tu->Instructions.push_back(irf);
+				case NodeType::Function:
+					HandleTopLevelFunction((FunctionNode*)stmt);
+					break;
+				case NodeType::StructNode:
+					HandleTopLevelStruct((StructNode*)stmt);
+					break;
+				case NodeType::Enum:
+					HandleTopLevelEnum((EnumNode*)stmt);
+					break;
+
 				}
 			}
 		}
 
-		return tu;
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+				if (tl_type == NodeType::Foreign) {
+					ForeignCodeGen((ForeignNode*)stmt);
+				}
+			}
+		}
+
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+				if (tl_type == NodeType::Operator) {
+					OperatorCodeGen((OperatorNode*)stmt);
+				}
+			}
+		}
+	}
+
+	void Compiler::HandleTopLevelFunction(FunctionNode* fnNode)
+	{
+		u64 ID = GetFunctionID();
+
+		TypeStorage* return_type = nullptr;
+
+		if (fnNode->ReturnType == nullptr) {
+			return_type = TypeSystem::GetVoid();
+		}
+		else {
+			return_type = TypeExpressionGetType(fnNode->ReturnType);
+		}
+
+		std::vector<ArgumentMetadata> arguments;
+
+		for (const Statement* a : fnNode->GetArgList()->GetArguments())
+		{
+			const ArgumentNode* decl_arg = (ArgumentNode*)a;
+
+			ArgumentMetadata argument;
+			argument.Name = decl_arg->Symbol.Symbol;
+			argument.Type = TypeExpressionGetType(decl_arg->Type);
+
+			arguments.push_back(argument);
+		}
+
+		std::vector<TypeStorage*> signature_arguments;
+		for (auto& arg : arguments) {
+			signature_arguments.push_back(arg.Type);
+		}
+		auto signature = TypeSystem::GetFunction(signature_arguments, return_type);
+
+		FunctionMetadata metadata;
+		metadata.Signature = signature;
+		metadata.Arguments = arguments;
+		metadata.HasBody = false;
+		metadata.ReturnType = return_type;
+		metadata.Symbol = fnNode->Symbol;
+
+		m_Metadata.RegisterFunction(ID, metadata);
+	}
+
+	void Compiler::HandleTopLevelStruct(StructNode* strct)
+	{
+		u64 type_id = GetTypeID();
+		u64 struct_id = GetStructID();
+
+		m_Metadata.RegisterType(type_id, strct->Name.Symbol, 0);
+
+		StructMetadata struct_metadata;
+		struct_metadata.Name = strct->Name;
+
+		m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
+	}
+
+	void Compiler::HandleTopLevelEnum(EnumNode* enmNode)
+	{
+		EnumMetadata metadata;
+		metadata.Name = enmNode->Name;
+
+		u64 enum_id = GetEnumID();
+		u64 type_id = enum_id;
+
+		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
 	}
 
 	IRInstruction* Compiler::StatementCodeGen(const Statement* statement)
@@ -268,12 +360,12 @@ namespace Glass
 
 		switch (Type)
 		{
-		case NodeType::Foreign:
-			return ForeignCodeGen((ForeignNode*)statement);
-			break;
-		case NodeType::Operator:
-			return OperatorCodeGen((OperatorNode*)statement);
-			break;
+			// 		case NodeType::Foreign:
+			// 			return ForeignCodeGen((ForeignNode*)statement);
+			// 			break;
+						// 		case NodeType::Operator:
+						// 			return OperatorCodeGen((OperatorNode*)statement);
+						// 			break;
 		case NodeType::Identifier:
 		case NodeType::NumericLiteral:
 		case NodeType::BinaryExpression:
@@ -340,7 +432,6 @@ namespace Glass
 			u64 ID = GetFunctionID();
 
 			TypeStorage* return_type = TypeExpressionGetType(fn_decl->ReturnType);
-
 			std::vector<ArgumentMetadata> args;
 
 			for (const Statement* a : fn_decl->GetArgList()->GetArguments())
@@ -351,14 +442,26 @@ namespace Glass
 
 				fmt_arg.Name = decl_arg->Symbol.Symbol;
 				fmt_arg.Type = TypeExpressionGetType(decl_arg->Type);
-
 				args.push_back(fmt_arg);
 			}
 
-			m_Metadata.RegisterFunction(ID, fn_decl->Symbol.Symbol, return_type, args, fn_decl->CVariadic);
+			std::vector<TypeStorage*> signature_arguments;
+			for (auto& arg : args) {
+				signature_arguments.push_back(arg.Type);
+			}
+			auto signature = TypeSystem::GetFunction(signature_arguments, return_type);
 
-			FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(ID);
-			metadata->Foreign = true;
+			FunctionMetadata metadata;
+			metadata.Foreign = true;
+			metadata.Signature = signature;
+			metadata.Arguments = args;
+			metadata.Variadic = fn_decl->CVariadic;
+			metadata.HasBody = false;
+			metadata.ReturnType = return_type;
+			metadata.Symbol = fn_decl->Symbol;
+
+			m_Metadata.RegisterFunction(ID, metadata);
+
 			return nullptr;
 		}
 		else if (tipe == NodeType::StructNode)
@@ -442,27 +545,30 @@ namespace Glass
 		return nullptr;
 	}
 
-	IRInstruction* Compiler::FunctionCodeGen(FunctionNode* functionNode)
+	IRInstruction* Compiler::FunctionCodeGen(FunctionNode* fnNode)
 	{
 		ResetSSAIDCounter();
 
 		TypeStorage* return_type;
 		return_type = TypeSystem::GetBasic(IR_void);
 
-		if (functionNode->ReturnType)
+		if (fnNode->ReturnType)
 		{
-			return_type = TypeExpressionGetType(functionNode->ReturnType);
+			return_type = TypeExpressionGetType(fnNode->ReturnType);
 
 			if (!return_type) {
-				MSG_LOC(functionNode);
-				MSG_LOC(functionNode->ReturnType);
-				FMT_WARN("function '{}' has undefined return type", functionNode->Symbol.Symbol);
+				MSG_LOC(fnNode);
+				MSG_LOC(fnNode->ReturnType);
+				FMT_WARN("function '{}' has undefined return type", fnNode->Symbol.Symbol);
 			}
 		}
 
+		SetExpectedReturnType(return_type);
+
 		std::vector<ArgumentMetadata> args_metadata;
 
-		IRFunction* IRF = CreateIRFunction(functionNode);
+		IRFunction* IRF = IR(IRFunction());
+		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
 
 		PoPIRSSA();
 
@@ -471,7 +577,7 @@ namespace Glass
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 		//////////////////////////////////////////////////////////////////////////
 
-		for (auto a : functionNode->GetArgList()->GetArguments())
+		for (auto a : fnNode->GetArgList()->GetArguments())
 		{
 
 			IRSSA* arg_ssa = IR(IRSSA());
@@ -507,7 +613,7 @@ namespace Glass
 			{
 				PushMessage(CompilerMessage{ PrintTokenLocation(arg->Type->GetLocation()), MessageType::Error });
 				PushMessage(CompilerMessage{ fmt::format("argument '{}' is of undefined type '{}', at '{}' function definition",
-														arg->Symbol.Symbol, PrintType(argument_type), functionNode->DefinitionTk.Symbol),
+														arg->Symbol.Symbol, PrintType(argument_type), fnNode->DefinitionTk.Symbol),
 											MessageType::Warning });
 				return nullptr;
 			}
@@ -533,9 +639,24 @@ namespace Glass
 			args_metadata.push_back(arg_metadata);
 		}
 
-		m_Metadata.RegisterFunction(IRF->ID, functionNode->Symbol.Symbol, return_type, args_metadata, false, functionNode->Symbol);
+		std::vector<TypeStorage*> signature_arguments;
+		for (auto& arg : args_metadata) {
+			signature_arguments.push_back(arg.Type);
+		}
+		auto signature = TypeSystem::GetFunction(signature_arguments, return_type);
 
-		for (const Statement* stmt : functionNode->GetStatements())
+		FunctionMetadata metadata;
+		metadata.Symbol = fnNode->Symbol;
+		metadata.Signature = signature;
+		metadata.ReturnType = return_type;
+		metadata.Arguments = args_metadata;
+		metadata.Variadic = false;
+		metadata.HasBody = false;
+		metadata.Foreign = false;
+
+		m_Metadata.RegisterFunction(IRF->ID, metadata);
+
+		for (const Statement* stmt : fnNode->GetStatements())
 		{
 			IRInstruction* code = StatementCodeGen(stmt);
 
@@ -734,7 +855,9 @@ namespace Glass
 	{
 		IRReturn ret;
 
+		SetLikelyConstantType(GetExpectedReturnType()->BaseID);
 		auto expr = (IRSSAValue*)GetExpressionByValue(returnNode->Expr);
+		ResetLikelyConstantType();
 
 		ret.Value = expr;
 
@@ -765,8 +888,8 @@ namespace Glass
 			struct_metadata.Members.push_back(member_metadata);
 		}
 
-		u64 type_id = GetTypeID();
-		u64 struct_id = GetStructID();
+		u64 type_id = m_Metadata.GetType(structNode->Name.Symbol);
+		u64 struct_id = m_Metadata.GetStructIDFromType(type_id);
 
 		m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
 
@@ -798,30 +921,35 @@ namespace Glass
 
 	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode, u64 type_id /*= (u64)-1*/)
 	{
-		{
-			SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
-
-			if (symbol_type == SymbolType::Enum) {
-				const EnumMetadata* previous = m_Metadata.GetEnum(enumNode->Name.Symbol);
-
-				MSG_LOC(enumNode);
-				FMT_WARN("enum '{}' is already defined At: {}", enumNode->Name.Symbol, PrintTokenLocation(previous->Name));
-
-				return nullptr;
-			}
-
-			if (symbol_type != SymbolType::None) {
-				MSG_LOC(enumNode);
-				FMT_WARN("enum '{}' name is already taken", enumNode->Name.Symbol);
-
-				return nullptr;
-			}
-		}
+		// 		{
+		// 			SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
+		// 
+		// 			if (symbol_type == SymbolType::Enum) {
+		// 				const EnumMetadata* previous = m_Metadata.GetEnum(enumNode->Name.Symbol);
+		// 
+		// 				MSG_LOC(enumNode);
+		// 				FMT_WARN("enum '{}' is already defined At: {}", enumNode->Name.Symbol, PrintTokenLocation(previous->Name));
+		// 
+		// 				return nullptr;
+		// 			}
+		// 
+		// 			if (symbol_type != SymbolType::None) {
+		// 				MSG_LOC(enumNode);
+		// 				FMT_WARN("enum '{}' name is already taken", enumNode->Name.Symbol);
+		// 
+		// 				return nullptr;
+		// 			}
+		// 		}
 
 
 		EnumMetadata metadata;
-
 		metadata.Name = enumNode->Name;
+
+		u64 enum_id = m_Metadata.GetEnumID(enumNode->Name.Symbol);
+
+		if (type_id == NULL_ID) {
+			type_id = enum_id;
+		}
 
 		u64 IOTA = 0;
 
@@ -855,11 +983,7 @@ namespace Glass
 			IOTA++;
 		}
 
-		if (type_id == NULL_ID) {
-			type_id = GetEnumID();
-		}
-
-		m_Metadata.RegisterEnum(GetEnumID(), type_id, metadata);
+		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
 
 		return nullptr;
 	}
@@ -1211,10 +1335,14 @@ namespace Glass
 			Constant->Type = GetLikelyConstantFloatType();
 			memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
 		}
-		if (numericLiteral->type == NumericLiteral::Type::Int)
+		else if (numericLiteral->type == NumericLiteral::Type::Int)
 		{
-			Constant->Type = GetLikelyConstantIntegerType();
+			u64 likely_integer = GetLikelyConstantIntegerType();
+			Constant->Type = likely_integer;
 			memcpy(&Constant->Data, &numericLiteral->Val.Int, sizeof(i64));
+		}
+		else {
+			GS_CORE_ASSERT(0);
 		}
 
 		if (GetLikelyConstantIntegerType() == IR_void) {
@@ -1412,7 +1540,7 @@ namespace Glass
 						call.Arguments.push_back(lhs);
 					}
 
-					call.Function.Symbol = op_func_metadata->Name;
+					call.Function.Symbol = op_func_metadata->Symbol.Symbol;
 
 					IRSSAValue* op_result = (IRSSAValue*)ExpressionCodeGen(AST(call));
 
@@ -1581,7 +1709,7 @@ namespace Glass
 
 				const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
 
-				SetLikelyConstantIntegerType(metadata->Tipe->BaseID);
+				SetLikelyConstantType(metadata->Tipe->BaseID);
 
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
@@ -1712,128 +1840,72 @@ namespace Glass
 
 		std::vector<IRSSAValue*> argument_expr_results;
 
-		if (metadata->PolyMorphic)
-		{
-			// 			PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()),MessageType::Error });
-			// 			PushMessage(CompilerMessage{ fmt::format("calls to polymorphic '{}' function is unsupported",call->Function.Symbol),MessageType::Warning });
-			// 			return nullptr;
-
-			PolyMorphOverloads overloads;
-
-			auto& args = call->Arguments;
-
-			for (size_t i = 0; i < args.size(); i++)
-			{
-				auto expr_code = GetExpressionByValue(args[i]);
-
-				if (!expr_code)
-				{
-					return nullptr;
-				}
-
-				argument_expr_results.push_back(expr_code);
-
-				if (!metadata->Arguments[i].PolyMorphic)
-				{
-					continue;
-				}
-
-				TypeStorage* expr_type = m_Metadata.GetExprType(expr_code->SSA);
-
-				PolyMorphicType poly_type;
-				poly_type.ID = metadata->GetPolyMorphID(metadata->Arguments[i].Name);
-
-				overloads.TypeArguments.push_back({ poly_type, TSToLegacy(expr_type) });
-			}
-			const IRFunction* overload = GetPolyMorphOverLoad(IRF, overloads);
-
-			IRF = overload->ID;
-
-			if (overload == nullptr)
-			{
-				PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
-				PushMessage(CompilerMessage{ fmt::format("failed to instantiate polymorphic function '{}'", call->Function.Symbol), MessageType::Warning });
-				return nullptr;
-			}
-		}
-
 		IRFunctionCall ir_call;
-
 		ir_call.FuncID = IRF;
 
-		if (metadata->PolyMorphic)
+		for (size_t i = 0; i < call->Arguments.size(); i++)
 		{
-			for (size_t i = 0; i < call->Arguments.size(); i++)
+			const ArgumentMetadata* decl_arg = metadata->GetArgument(i);
+
+			IRInstruction* arg = nullptr;
+
+			IRSSAValue* argument_code = nullptr;
+
+			if (decl_arg != nullptr)
 			{
-				ir_call.Arguments.push_back(IR(IRSSAValue(argument_expr_results[i]->SSA)));
-			}
-		}
-		else
-		{
-			for (size_t i = 0; i < call->Arguments.size(); i++)
-			{
-				const ArgumentMetadata* decl_arg = metadata->GetArgument(i);
+				SetLikelyConstantType(decl_arg->Type->BaseID);
 
-				IRInstruction* arg = nullptr;
-
-				IRSSAValue* argument_code = nullptr;
-
-				if (decl_arg != nullptr)
-				{
-					SetLikelyConstantType(decl_arg->Type->BaseID);
-
-					if (!decl_arg->Variadic) {
-						if (decl_arg->Type->BaseID == IR_any) {
-							argument_code = PassAsAny(call->Arguments[i]);
-						}
-						else {
-							argument_code = GetExpressionByValue(call->Arguments[i]);
-						}
+				if (!decl_arg->Variadic) {
+					if (decl_arg->Type->BaseID == IR_any) {
+						argument_code = PassAsAny(call->Arguments[i]);
 					}
 					else {
-						argument_code = PassAsVariadicArray(i, call->Arguments, decl_arg);
+						argument_code = GetExpressionByValue(call->Arguments[i]);
 					}
-
-					ResetLikelyConstantType();
-
-					if (argument_code == nullptr)
-						return nullptr;
-
-					TypeStorage* type = m_Metadata.GetExprType(argument_code->SSA);
-
-					if (decl_arg->Type->BaseID != IR_any && !decl_arg->Variadic)
-					{
-						bool type_mismatch = decl_arg->Type != type;
-
-						if (type_mismatch)
-						{
-
-							PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()), MessageType::Error });
-							PushMessage(CompilerMessage{ "type mismatch in function call", MessageType::Warning });
-							PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
-																	PrintType(decl_arg->Type),
-																	PrintType(type)),
-
-														MessageType::Info });
-							PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
-														MessageType::Info });
-						}
-					}
-
-					arg = argument_code;
 				}
-				else
-				{
-					arg = GetExpressionByValue(call->Arguments[i]);
+				else {
+					argument_code = PassAsVariadicArray(i, call->Arguments, decl_arg);
 				}
 
-				ir_call.Arguments.push_back(arg);
-				if (decl_arg != nullptr)
+				ResetLikelyConstantType();
+
+				if (argument_code == nullptr)
+					return nullptr;
+
+				TypeStorage* type = m_Metadata.GetExprType(argument_code->SSA);
+
+				if (decl_arg->Type->BaseID != IR_any && !decl_arg->Variadic)
 				{
-					if (decl_arg->Variadic)
+					bool type_mismatch = decl_arg->Type != type;
+
+					if (type_mismatch)
 					{
-						break;
+
+						PushMessage(CompilerMessage{ PrintTokenLocation(call->Arguments[i]->GetLocation()), MessageType::Error });
+						PushMessage(CompilerMessage{ "type mismatch in function call", MessageType::Warning });
+						PushMessage(CompilerMessage{ fmt::format("needed a '{}' instead got '{}'",
+																PrintType(decl_arg->Type),
+																PrintType(type)),
+
+													MessageType::Info });
+						PushMessage(CompilerMessage{ fmt::format("In place of function argument '{}'", decl_arg->Name),
+													MessageType::Info });
 					}
+				}
+
+				arg = argument_code;
+			}
+			else
+			{
+				arg = GetExpressionByValue(call->Arguments[i]);
+			}
+
+			ir_call.Arguments.push_back(arg);
+			if (decl_arg != nullptr)
+			{
+				if (decl_arg->Variadic)
+				{
+					break;
 				}
 			}
 		}
@@ -2084,7 +2156,7 @@ namespace Glass
 
 	IRInstruction* Compiler::FuncRefCallCodeGen(const FunctionCall* call)
 	{
-		//We only support function calls as variables for now
+		//We only support function calls as variables for now (no expressions)
 
 		Identifier* function_as_identifier = AST(Identifier());
 		function_as_identifier->Symbol = call->Function;
@@ -2096,15 +2168,18 @@ namespace Glass
 
 		std::vector<u64> argument_SSAs;
 
+		u64 index = 0;
 		for (auto arg : call->Arguments) {
-
+			SetLikelyConstantType(((TSFunc*)callee_type)->Arguments[index]->BaseID);
 			auto argument_code = GetExpressionByValue(arg);
+			ResetLikelyConstantType();
 
 			if (!argument_code) {
 				return nullptr;
 			}
 
 			argument_SSAs.push_back(argument_code->SSA);
+			index++;
 		}
 
 		auto ir_call = IR(IRCallFuncRef(callee_ssa->SSA, argument_SSAs, callee_type));
@@ -2745,7 +2820,7 @@ namespace Glass
 	{
 		IRCONSTValue* Constant = IR(IRCONSTValue());;
 
-		Constant->Type = GetLikelyConstantIntegerType();
+		Constant->Type = integer_base_type;
 		memcpy(&Constant->Data, &value, sizeof(i64));
 
 		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
@@ -2798,46 +2873,6 @@ namespace Glass
 		PushIRData(Data);
 
 		return Data;
-	}
-
-	IRFunction* Compiler::CreatePolyMorhOverload(u64 ID, const PolyMorphOverloads& overloads)
-	{
-		FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(ID);
-
-		ASTCopier copier = ASTCopier(metadata->FunctionAST);
-		FunctionNode* new_function = (FunctionNode*)copier.Copy();
-
-		std::unordered_map<std::string, std::string> replacements;
-
-		std::string mangled_name_args;
-
-		for (const auto& [polyID, arg] : overloads.TypeArguments)
-		{
-			replacements[metadata->PolyMorphicIDToTypeNames[polyID.ID]] = m_Metadata.GetType(arg.ID);
-			mangled_name_args += m_Metadata.GetType(arg.ID);
-		}
-
-		ASTPolyMorpher poly_morpher = ASTPolyMorpher(new_function, replacements);
-		poly_morpher.Poly();
-
-		std::string function_name = fmt::format("{}__{}", new_function->Symbol.Symbol, mangled_name_args);
-
-		new_function->Symbol.Symbol = function_name;
-
-		auto& args = new_function->GetArgList()->GetArguments();
-
-		for (Statement* a : args)
-		{
-			VariableNode* arg = (VariableNode*)a;
-
-			//arg->Type->PolyMorphic = false;
-		}
-
-		IRFunction* ir_func = CreateIRFunction(new_function);
-
-		metadata->PendingPolymorphInstantiations.push_back({ ir_func, new_function });
-
-		return ir_func;
 	}
 
 	TypeStorage* Compiler::TypeExpressionGetType(TypeExpression* type_expr)
@@ -2938,12 +2973,13 @@ namespace Glass
 
 		if (*left_type == nullptr) {
 			*A = GetExpressionByValue(left);
-			*left_type = m_Metadata.GetExprType((*A)->SSA);
 		}
 		if (*right_type == nullptr) {
 			*B = GetExpressionByValue(right);
-			*right_type = m_Metadata.GetExprType((*B)->SSA);
 		}
+
+		*left_type = m_Metadata.GetExprType((*A)->SSA);
+		*right_type = m_Metadata.GetExprType((*B)->SSA);
 
 		ResetLikelyConstantType();
 	}
