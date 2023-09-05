@@ -24,6 +24,8 @@ namespace Glass
 
 		ModuleFile* GetAST();
 
+		static CompilerFile* GenerateCompilerFile(const fs_path& path);
+
 	private:
 		u64 m_ID = 0;
 		std::string m_Source = "";

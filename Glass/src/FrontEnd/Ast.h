@@ -40,6 +40,7 @@ namespace Glass
 		DeReference,
 		TypeOf,
 		Operator,
+		Load,
 		Cast,
 		ArrayAccess,
 		SizeOf,
@@ -878,6 +879,27 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return statement->GetLocation();
+		}
+	};
+
+
+	class LoadNode : public Statement
+	{
+	public:
+
+		StringLiteral* FileName = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Load;
+		}
+
+		virtual std::string ToString() const {
+			return "#load " + FileName->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return FileName->GetLocation();
 		}
 	};
 

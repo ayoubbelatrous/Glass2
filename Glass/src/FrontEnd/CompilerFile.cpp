@@ -52,4 +52,18 @@ namespace Glass {
 	ModuleFile* CompilerFile::GetAST() {
 		return m_Ast;
 	}
+
+	CompilerFile* CompilerFile::GenerateCompilerFile(const fs_path& path)
+	{
+		std::string source;
+
+		std::ifstream in(path);
+		std::stringstream buffer;
+		buffer << in.rdbuf();
+		source = buffer.str();
+
+		CompilerFile* compilerFile = new CompilerFile(-1, source, path);
+
+		return compilerFile;
+	}
 }

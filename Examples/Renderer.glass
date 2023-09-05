@@ -1,21 +1,3 @@
-enum ShaderDataType {
-	Invalid	;
-	Float	;
-	Float2	;
-	Float3	;
-	Float4	;
-};
-
-struct VertexBufferElement {
-	ShaderDataType type;
-	u32 offset;
-};
-
-struct BufferLayout {
-	VertexBufferElement[..] elements;
-	u32 stride;
-};
-
 fn GetShaderDataType(Type type) : ShaderDataType {
 	t := ShaderDataType.Invalid;
 	if type == f32 {
@@ -101,18 +83,6 @@ fn BufferLayout_Free(BufferLayout layout) {
 	layout.elements.count = 0;
 }
 
-struct VertexBuffer {
-	BufferLayout layout;
-	u32 renderer_id;
-	u64 size;
-};
-
-struct VertexArray {
-	VertexBuffer vertex_buffer;
-	u32	vertex_buffer_index;
-	u32 renderer_id;
-};
-
 fn VertexArray_Create() : VertexArray {
 
 	VertexArray va;
@@ -188,20 +158,6 @@ fn VertexArray_Bind(VertexArray* va) {
 	glBindBuffer(GL_ARRAY_BUFFER, va.vertex_buffer.renderer_id);
 }
 
-enum TextureFormat
-{
-	RGB8;
-	RGBA8;
-};
-
-struct Texture {
-	u32 renderer_id;
-
-	u32 width;
-	u32 height;
-	TextureFormat format;
-};
-
 fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Texture {
 	Texture t;
 
@@ -212,29 +168,11 @@ fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Te
 	return t;
 }
 
-struct Vertex {
-	vec3 position;
-};
-
 fn _Vertex(vec3 pos) : Vertex {
 	Vertex v;
 	v.position = pos;
 	return v;
 }
-
-struct Renderer2D
-{
-	void* 			quad_vertex_base;
-	void* 			quad_vertex_pointer;
-	u64 			vertex_count;
-
-	VertexBuffer 	quad_vertex_buffer;
-	VertexArray 	quad_vertex_array;
-
-	Vertex[..]  	quad_vertices;
-
-	mat4 			projection;
-};
 
 u64 R2D_QUAD_COUNT = 5000;
 
@@ -335,3 +273,65 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 fn Renderer2D_begin(Renderer2D* r, mat4 p) {
 	r.projection = p;
 }
+
+struct VertexBufferElement {
+	ShaderDataType type;
+	u32 offset;
+};
+
+struct BufferLayout {
+	VertexBufferElement[..] elements;
+	u32 stride;
+};
+
+struct VertexBuffer {
+	BufferLayout layout;
+	u32 renderer_id;
+	u64 size;
+};
+
+struct VertexArray {
+	VertexBuffer vertex_buffer;
+	u32	vertex_buffer_index;
+	u32 renderer_id;
+};
+
+struct Texture {
+	u32 renderer_id;
+
+	u32 width;
+	u32 height;
+	TextureFormat format;
+};
+
+struct Vertex {
+	vec3 position;
+};
+
+struct Renderer2D
+{
+	void* 			quad_vertex_base;
+	void* 			quad_vertex_pointer;
+	u64 			vertex_count;
+
+	VertexBuffer 	quad_vertex_buffer;
+	VertexArray 	quad_vertex_array;
+
+	Vertex[..]  	quad_vertices;
+
+	mat4 			projection;
+};
+
+enum ShaderDataType {
+	Invalid	;
+	Float	;
+	Float2	;
+	Float3	;
+	Float4	;
+};
+
+enum TextureFormat
+{
+	RGB8;
+	RGBA8;
+};

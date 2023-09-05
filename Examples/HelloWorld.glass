@@ -1,6 +1,8 @@
-//#foreign fn malloc(u64 size) : void* {};
-//#foreign fn free(void* ptr) : void {};
-//#foreign fn memcpy(void* destination, void* source, u64 num) : void *  {}
+#load "C.glass";
+#load "Renderer.glass";
+#load "Math.glass";
+#load "GL.glass";
+#load "Print.glass";
 
 struct GLFWwindow{};
 
@@ -15,7 +17,6 @@ struct GLFWwindow{};
 #foreign fn glfwSetWindowSizeCallback(GLFWwindow* window, (GLFWwindow*,i32,i32) callback) : (GLFWwindow*,i32,i32) {};
 #foreign fn glfwSetFramebufferSizeCallback(GLFWwindow* window, (GLFWwindow*,i32,i32) callback) : (GLFWwindow*,i32,i32) {};
 
-//function_name(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : void
 #foreign fn glfwSetKeyCallback(GLFWwindow* window, (GLFWwindow*,i32,i32,i32,i32) callback) : void* {};
 
 struct Application 	{
@@ -27,7 +28,6 @@ struct Application 	{
 	i32 			WindowHeight;
 };
 Application a;
-
 
 //@Life
 fn start() {
@@ -78,6 +78,8 @@ fn main() : i32 {
 	a.running = 1;
 
 	i32 init_result = glfwInit();
+
+	print("Hello :: %", a);
 
 	Application_Init();
 

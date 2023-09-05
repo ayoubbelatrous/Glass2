@@ -164,6 +164,24 @@ namespace Glass
 			return Application::AllocateAstNode(Node);
 		}
 
+		if (At().Symbol == "load") {
+
+			Consume();
+
+			LoadNode Node;
+			Node.FileName = (StringLiteral*)ParseStatement();
+
+			if (Node.FileName == nullptr) {
+				Abort("Expected A File Name after #load directive");
+			}
+
+			if (Node.FileName->GetType() != NodeType::StringLiteral) {
+				Abort("Expected a string after #load directive");
+			}
+
+			return Application::AllocateAstNode(Node);
+		}
+
 		Abort(fmt::format("Un-recognized directive: {}", At().Symbol));
 
 		return nullptr;

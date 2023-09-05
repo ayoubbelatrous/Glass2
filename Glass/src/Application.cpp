@@ -82,6 +82,7 @@ namespace Glass
 		}
 
 		Compiler compiler(compiler_files);
+
 		IRTranslationUnit* code;
 
 		bool compilation_successful = true;
@@ -130,11 +131,19 @@ namespace Glass
 
 		bool llvm = true;
 
+		std::chrono::steady_clock::time_point m_LLVMStart;
+		std::chrono::steady_clock::time_point m_LLVMEnd;
+
+		std::chrono::steady_clock::time_point m_LinkerStart;
+		std::chrono::steady_clock::time_point m_LinkerEnd;
+
 		if (llvm && compilation_successful)
 		{
 			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
 
+			m_LLVMStart = std::chrono::high_resolution_clock::now();
 			llvm_backend.Compile();
+			m_LLVMEnd = std::chrono::high_resolution_clock::now();
 
 			std::string libraries_cmd;
 
@@ -162,7 +171,9 @@ namespace Glass
 			{
 				GS_CORE_WARN("Running: {}", linker_cmd);
 
+				m_LinkerStart = std::chrono::high_resolution_clock::now();
 				int lnk_result = system(linker_cmd.c_str());
+				m_LinkerEnd = std::chrono::high_resolution_clock::now();
 
 				if (lnk_result != 0) {
 					GS_CORE_ERROR("Error: During Execution of Command");
@@ -182,6 +193,11 @@ namespace Glass
 			}
 
 			GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
+			GS_CORE_WARN("Lexer Took: {} micro", std::chrono::duration_cast<std::chrono::microseconds>(m_LexerEnd - m_LexerStart).count());
+			GS_CORE_WARN("Parser Took: {} micro", std::chrono::duration_cast<std::chrono::microseconds>(m_ParserEnd - m_ParserStart).count());
+			GS_CORE_WARN("LLVM Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LLVMEnd - m_LLVMStart).count());
+			GS_CORE_WARN("Linker Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LinkerEnd - m_LinkerStart).count());
+			GS_CORE_WARN("IR Generation Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_CompilerEnd - m_CompilerStart).count());
 		}
 	}
 

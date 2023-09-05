@@ -181,6 +181,8 @@ namespace Glass
 
 	IRTranslationUnit* Compiler::CodeGen()
 	{
+		LoadLoop();
+
 		//////////////////////////////////////////////////////////////////////////
 		//		@PUSH_SCOPE @GLOBAL
 		m_Metadata.PushContextGlobal();
@@ -232,8 +234,61 @@ namespace Glass
 		return tu;
 	}
 
+
+	void Compiler::LoadLoop()
+	{
+		IRTranslationUnit* tu = IR(IRTranslationUnit());
+		for (CompilerFile* file : m_Files)
+		{
+			ModuleFile* module_file = file->GetAST();
+
+			for (Statement* stmt : module_file->GetStatements()) {
+				if (stmt->GetType() == NodeType::Load) {
+					LoadCodeGen((LoadNode*)stmt);
+				}
+			}
+			m_CurrentFile++;
+		}
+
+		m_CurrentFile = 0;
+	}
+
 	void Compiler::FirstPass()
 	{
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
+				{
+				case NodeType::Enum:
+					HandleTopLevelEnum((EnumNode*)stmt);
+					break;
+				}
+			}
+		}
+
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
+				{
+				case NodeType::StructNode:
+					HandleTopLevelStruct((StructNode*)stmt);
+					break;
+				}
+			}
+		}
+
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -247,13 +302,6 @@ namespace Glass
 				case NodeType::Function:
 					HandleTopLevelFunction((FunctionNode*)stmt);
 					break;
-				case NodeType::StructNode:
-					HandleTopLevelStruct((StructNode*)stmt);
-					break;
-				case NodeType::Enum:
-					HandleTopLevelEnum((EnumNode*)stmt);
-					break;
-
 				}
 			}
 		}
@@ -338,6 +386,8 @@ namespace Glass
 		struct_metadata.Name = strct->Name;
 
 		m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
+
+		StructCodeGen(strct);
 	}
 
 	void Compiler::HandleTopLevelEnum(EnumNode* enmNode)
@@ -349,6 +399,40 @@ namespace Glass
 		u64 type_id = enum_id;
 
 		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
+		EnumCodeGen(enmNode);
+	}
+
+	void Compiler::LoadCodeGen(LoadNode* loadNode)
+	{
+		std::string fileName = ((StringLiteral*)loadNode->FileName)->Symbol.Symbol;
+
+		auto current_file_path = m_Files[m_CurrentFile]->GetPath();
+		current_file_path.remove_filename();
+
+		fs_path relative_path = current_file_path / fileName;
+
+		if (!std::filesystem::exists(relative_path)) {
+			MSG_LOC(loadNode);
+			FMT_WARN("Cannot find path specified in #load directive, Path is: \"{}\"", fileName);
+			return;
+		}
+
+		CompilerFile* file = CompilerFile::GenerateCompilerFile(relative_path);
+
+		Lexer lexer = Lexer(file->GetSource(), relative_path);
+		file->SetTokens(lexer.Lex());
+
+		Parser parser = Parser(*file);
+		file->SetAST(parser.CreateAST());
+
+		std::vector<CompilerFile*> files_copy;
+		files_copy.push_back(file);
+
+		for (auto f : m_Files) {
+			files_copy.push_back(f);
+		}
+
+		m_Files = files_copy;
 	}
 
 	IRInstruction* Compiler::StatementCodeGen(const Statement* statement)
@@ -389,12 +473,12 @@ namespace Glass
 		case NodeType::Return:
 			return ReturnCodeGen((ReturnNode*)statement);
 			break;
-		case NodeType::StructNode:
-			return StructCodeGen((StructNode*)statement);
-			break;
-		case NodeType::Enum:
-			return EnumCodeGen((EnumNode*)statement);
-			break;
+			// 		case NodeType::StructNode:
+			// 			return StructCodeGen((StructNode*)statement);
+			// 			break;
+						// 		case NodeType::Enum:
+						// 			return EnumCodeGen((EnumNode*)statement);
+						// 			break;
 		case NodeType::If:
 			return IfCodeGen((IfNode*)statement);
 			break;
@@ -921,25 +1005,25 @@ namespace Glass
 
 	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode, u64 type_id /*= (u64)-1*/)
 	{
-		// 		{
-		// 			SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
-		// 
-		// 			if (symbol_type == SymbolType::Enum) {
-		// 				const EnumMetadata* previous = m_Metadata.GetEnum(enumNode->Name.Symbol);
-		// 
-		// 				MSG_LOC(enumNode);
-		// 				FMT_WARN("enum '{}' is already defined At: {}", enumNode->Name.Symbol, PrintTokenLocation(previous->Name));
-		// 
-		// 				return nullptr;
-		// 			}
-		// 
-		// 			if (symbol_type != SymbolType::None) {
-		// 				MSG_LOC(enumNode);
-		// 				FMT_WARN("enum '{}' name is already taken", enumNode->Name.Symbol);
-		// 
-		// 				return nullptr;
-		// 			}
-		// 		}
+		//{
+		//	SymbolType symbol_type = m_Metadata.GetSymbolType(enumNode->Name.Symbol);
+		//
+		//	if (symbol_type == SymbolType::Enum) {
+		//		const EnumMetadata* previous = m_Metadata.GetEnum(enumNode->Name.Symbol);
+		//
+		//		MSG_LOC(enumNode);
+		//		FMT_WARN("enum '{}' is already defined At: {}", enumNode->Name.Symbol, PrintTokenLocation(previous->Name));
+		//
+		//		return nullptr;
+		//	}
+		//
+		//	if (symbol_type != SymbolType::None) {
+		//		MSG_LOC(enumNode);
+		//		FMT_WARN("enum '{}' name is already taken", enumNode->Name.Symbol);
+		//
+		//		return nullptr;
+		//	}
+		//}
 
 
 		EnumMetadata metadata;

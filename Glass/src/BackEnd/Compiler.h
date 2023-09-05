@@ -61,11 +61,15 @@ namespace Glass
 
 		IRTranslationUnit* CodeGen();
 
+		void LoadLoop();
+
 		void FirstPass();
 
 		void HandleTopLevelFunction(FunctionNode* fnNode);
 		void HandleTopLevelStruct(StructNode* strct);
 		void HandleTopLevelEnum(EnumNode* enmNode);
+
+		void LoadCodeGen(LoadNode* loadNode);
 
 		IRInstruction* StatementCodeGen(const Statement* statement);
 
