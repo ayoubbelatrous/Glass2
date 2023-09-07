@@ -26,6 +26,66 @@ struct GLFWwindow{};
 
 #foreign fn glfwWindowHint(i32 hint, i32 value) : void {};
 
+struct stbtt__buf
+{
+	void* data;
+	i32 cursor;
+	i32 size;
+};
+
+struct stbtt_fontinfo
+{
+	void* 	userdata;
+	void* 	data; // pointer to .ttf file
+	i32 	fontstart;       // offset of start of font
+
+	i32 numGlyphs; // number of glyphs, needed for range checking
+
+	// table locations as offset from start of .ttf
+	i32 loca;
+	i32 head;
+	i32 glyf;
+	i32 hhea;
+	i32 hmtx;
+	i32 kern;
+	i32 gpos;
+	i32 svg;
+	/////////////////////////////
+
+	i32 index_map;                                     // a cmap mapping for our chosen character encoding
+	i32 indexToLocFormat;                              // format needed to map from glyph index to glyph
+
+	stbtt__buf cff;         // cff font data
+	stbtt__buf charstrings; // the charstring index
+	stbtt__buf gsubrs;      // global charstring subroutines index
+	stbtt__buf subrs;       // private charstring subroutines index
+	stbtt__buf fontdicts;   // array of font dicts
+	stbtt__buf fdselect;    // map from glyph to fontdict
+};
+
+#foreign fn stbtt_GetFontOffsetForIndex(u8* data, i32 index): i32 {};
+#foreign fn stbtt_InitFont(stbtt_fontinfo *info, u8* data, i32 offset) : i32 {};
+#foreign fn stbtt_GetCodepointBitmap(stbtt_fontinfo *info, f32 scale_x, f32 scale_y, i32* codepoint, i32* width, i32* height, i32* xoff, i32* yoff) : u8* {};
+
+struct stbtt_bakedchar
+{
+	// coordinates of bbox in bitmap
+   u16 x0;
+   u16 y0;
+   u16 x1;
+   u16 y1;
+   ////////////////////////////////
+   f32 xoff;
+   f32 yoff;
+   f32 xadvance;
+};
+
+#foreign fn stbtt_BakeFontBitmap(u8* data, i32 offset,	// font location (use offset=0 for plain .ttf)
+f32 pixel_height,						// height of font in pixels
+u8* pixels, i32 pw, i32 ph,				// bitmap to be filled in
+i32 first_char, i32 num_chars,			// characters to bake
+stbtt_bakedchar* chardata) : i32{};		// you allocate this, it's num_chars long
+
 struct Application 	{
 	Renderer2D 		r;
 
@@ -43,8 +103,6 @@ fn start() {
 }
 
 fn update() {
-
-	print("Vec3: %\n", Vec3(10.0));
 
 	f32 width 		= cast(f32) a.WindowWidth;
 	f32 height 		= cast(f32) a.WindowHeight;
@@ -89,6 +147,20 @@ i32 GLFW_CONTEXT_VERSION_MAJOR = 139266;
 i32 GLFW_CONTEXT_VERSION_MINOR = 139267;
 
 fn main() : i32 {
+
+	u32[..] atlas_data;
+	atlas_data.data = malloc(10 * sizeof(i32));
+	atlas_data.count = 10;
+
+	atlas_data[0] = 50;
+	atlas_data[1] = 500;
+	atlas_data[2] = 5000;
+	atlas_data[3] = 50000;
+
+	for atlas_data {
+		print("Data: %,%\n", it_index, it);
+		it = 60;
+	}
 
 	a.running = 1;
 

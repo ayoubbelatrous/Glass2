@@ -1266,9 +1266,91 @@ namespace Glass
 		return iterator;
 	}
 
+
+	IRIterator* Compiler::DynArrayIteratorCodeGen(const Expression* expression, IRSSAValue* generated)
+	{
+		TSDynArray* dynamic_array_type = (TSDynArray*)m_Metadata.GetExprType(generated->SSA);
+		TypeStorage* dynmaic_array_element_type = dynamic_array_type->ElementType;
+
+		IRIterator* iterator = IR(IRIterator());
+
+		auto index_type = TypeSystem::GetBasic(IR_u64);
+		auto element_type = dynmaic_array_element_type;
+
+		//:
+		iterator->IteratorIndex = CreateIRSSA(IR(IRAlloca(index_type)));
+		CreateIRSSA(CreateStore(
+			index_type,
+			iterator->IteratorIndex->SSA,
+			CreateConstantInteger(index_type->BaseID, 0)));
+
+		iterator->IteratorIt = CreateIRSSA(IR(IRAlloca(dynmaic_array_element_type)));
+
+		//Cond:
+		{
+			PushScope();
+
+			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
+			IRSSAValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->SSA)->SSA);
+
+			auto index_load = CreateIRSSA(CreateLoad(index_type, iterator->IteratorIndex->SSA));
+
+
+			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->SSA);
+
+			auto data_pointer = CreateIRSSA(IR(IRArrayAccess(casted_data->SSA, index_load->SSA, element_type)));
+
+			CreateIRSSA(CreateStore(element_type, iterator->IteratorIt->SSA, CreateLoad(element_type, data_pointer->SSA)));
+
+			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->SSA)->SSA);
+			IRSSAValue* cmp_inst = CreateIRSSA(IR(IRLesser(index_load, end)));
+
+			iterator->ConditionSSA = cmp_inst->SSA;
+
+			auto ssa_stack = PoPIRSSA();
+			for (auto inst : ssa_stack) {
+				iterator->ConditionBlock.push_back(inst);
+			}
+			PopScope();
+		}
+
+		//Incrementor:
+		{
+			PushScope();
+
+			auto index_load = CreateIRSSA(CreateLoad(index_type, iterator->IteratorIndex->SSA));
+			auto index_addition = CreateIRSSA(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type->BaseID)));
+			CreateIRSSA(CreateStore(index_type, iterator->IteratorIndex->SSA, index_addition));
+
+			auto ssa_stack = PoPIRSSA();
+			for (auto inst : ssa_stack) {
+				iterator->IncrementorBlock.push_back(inst);
+			}
+
+			PopScope();
+		}
+
+		iterator->ItTy = element_type;
+		iterator->IndexTy = index_type;
+
+		return iterator;
+	}
+
+	IRIterator* Compiler::IteratorCodeGen(const Expression* expr)
+	{
+		if (expr->GetType() == NodeType::Range)
+			return (IRIterator*)RangeCodeGen((RangeNode*)expr);
+
+		IRSSAValue* expr_result = (IRSSAValue*)ExpressionCodeGen(expr);
+
+		if (m_Metadata.GetExprType(expr_result->SSA)->Kind == TypeStorageKind::DynArray) {
+			return DynArrayIteratorCodeGen(expr, expr_result);
+		}
+	}
+
 	IRInstruction* Compiler::ForCodeGen(const ForNode* forNode)
 	{
-		IRIterator* iterator = (IRIterator*)ExpressionCodeGen(forNode->Condition);
+		IRIterator* iterator = IteratorCodeGen(forNode->Condition);
 
 		if (!iterator)
 			return nullptr;
@@ -2496,7 +2578,7 @@ namespace Glass
 
 		ir_array_Access->ArrayAddress = object->SSA;
 		ir_array_Access->ElementSSA = index->SSA;
-		ir_array_Access->Type = obj_expr_type->BaseID;
+		ir_array_Access->Type = TypeSystem::GetBasic(obj_expr_type->BaseID);
 
 		array_access_ssa->Value = ir_array_Access;
 
@@ -3069,6 +3151,25 @@ namespace Glass
 		auto alloca = CreateIRSSA(IR(IRAlloca(type)), type);
 		CreateStore(type, alloca->SSA, loaded_value);
 		return alloca;
+	}
+
+	IRSSAValue* Compiler::CreateMemberAccess(const std::string& strct, const std::string& member, u64 address)
+	{
+		u64 struct_id = m_Metadata.GetStructIDFromType(m_Metadata.GetType(strct));
+
+		const StructMetadata* metadata = m_Metadata.GetStructMetadata(struct_id);
+
+		IRMemberAccess* member_access = IR(IRMemberAccess());
+		member_access->StructID = struct_id;
+		member_access->MemberID = metadata->FindMember(member);
+		member_access->ObjectSSA = address;
+
+		return CreateIRSSA(member_access);
+	}
+
+	IRSSAValue* Compiler::CreatePointerCast(TypeStorage* to_type, u64 address)
+	{
+		return CreateIRSSA(IR(IRPointerCast(to_type, address)));
 	}
 
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)

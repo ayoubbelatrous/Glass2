@@ -108,6 +108,8 @@ namespace Glass
 
 		IRInstruction* RangeCodeGen(const RangeNode* rangeNode);
 
+		IRIterator* DynArrayIteratorCodeGen(const Expression* expression, IRSSAValue* generated);
+		IRIterator* IteratorCodeGen(const Expression* expr);
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
 		IRInstruction* FuncRefCallCodeGen(const FunctionCall* call);
@@ -138,6 +140,10 @@ namespace Glass
 		IRSSAValue* CreateConstant(u64 base_type, i64 value_integer, double value_float);
 
 		IRSSAValue* CreateCopy(TypeStorage* type, IRSSAValue* loaded_value);
+
+		IRSSAValue* CreateMemberAccess(const std::string& strct, const std::string& member, u64 address);
+
+		IRSSAValue* CreatePointerCast(TypeStorage* to_type, u64 address);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();

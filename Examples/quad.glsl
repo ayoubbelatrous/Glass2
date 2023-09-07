@@ -16,6 +16,10 @@ void main() {
 
 out vec4 o_Color;
 
+uniform sampler2D u_Tex;
+
 void main() {
-	o_Color = vec4(1,1,1,1);
+
+
+	o_Color = vec4(1,1,1,1) * texture(u_Tex,vec2(0,0));
 }

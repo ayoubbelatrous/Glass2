@@ -39,6 +39,10 @@ fn print_string(u8* str) {
 	printf("%s", str);
 }
 
+fn print_address(void* addr) {
+	printf("%x", addr);
+}
+
 fn print_any(Any any, i32 indent) : i32 {
 
 	TypeInfo* typeinfo = type_info(any.type);
@@ -75,6 +79,10 @@ fn print_any(Any any, i32 indent) : i32 {
 				}
 			}
 
+		}
+
+		if any.type == void* {
+			print_address(*cast(void**)any.data);
 		}
 	}
 

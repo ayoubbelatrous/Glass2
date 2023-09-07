@@ -65,3 +65,8 @@ fn read_entire_file(u64* file, u64* size) : u8[..] {
 
 	return array;
 }
+
+fn read_entire_file(u64* file) : u8[..] {
+	u64 discard;
+	return read_entire_file(file, &discard);
+}

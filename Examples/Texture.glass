@@ -24,12 +24,16 @@ fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Te
 	glGenTextures(1, &t.renderer_id);
 	glBindTexture(GL_TEXTURE_2D, t.renderer_id);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data);
+	//glTexImage2D(GL_TEXTURE_2D, 1, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data);
+
+	glTextureStorage2D(t.renderer_id, 1, GL_RGB8, width, height);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glTextureSubImage2D(t.renderer_id, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, data.data);
 
 	return t;
 }

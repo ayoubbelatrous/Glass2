@@ -1927,6 +1927,26 @@ fn glTexImage2D(i32 target, i32 level, i32 internalformat, u32 width, u32 height
 fn glTexParameteri(i32 target,i32 pname,i32 param) : void {}
 
 
+//void glTextureStorage2D(GLuint texture,
+//	GLsizei levels,
+//	GLenum internalformat,
+//	GLsizei width,
+//	GLsizei height);
+
+(u32,u32,i32,u32,u32) glTextureStorage2D;
+
+//void glTextureSubImage2D(GLuint texture,
+//	GLint level,
+//	GLint xoffset,
+//	GLint yoffset,
+//	GLsizei width,
+//	GLsizei height,
+//	GLenum format,
+//	GLenum type,
+//	const void *pixels);
+
+(u32,i32,i32,u32,u32,i32,i32,i32,void*) glTextureSubImage2D;
+
 ((u32,u32,u32,u32,i32,u8*,void*):void, void*) glDebugMessageCallback;
 (i32,i32,i32,u32,u32*,i32) glDebugMessageControl;
 
@@ -2037,6 +2057,10 @@ fn InitGL() : void {
 	GL_load_Func(cast(void**) &glUniformMatrix4fv, 				"glUniformMatrix4fv");
 
 	GL_load_Func(cast(void**) &glUseProgram, 				"glUseProgram");
+
+
+	GL_load_Func(cast(void**) &glTextureStorage2D, 			"glTextureStorage2D");
+	GL_load_Func(cast(void**) &glTextureSubImage2D, 		"glTextureSubImage2D");
 
 	GL_load_Func(cast(void**) &glDebugMessageCallback, 		"glDebugMessageCallback");
 	GL_load_Func(cast(void**) &glDebugMessageControl, 		"glDebugMessageControl");

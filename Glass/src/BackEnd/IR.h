@@ -700,6 +700,7 @@ namespace Glass
 
 	struct IRMemberAccess : public IRInstruction {
 		u64 ID = 0;
+
 		u64 StructID = 0;
 		u64 ObjectSSA = 0;
 		u64 MemberID = 0;
@@ -720,9 +721,14 @@ namespace Glass
 
 		u64 ArrayAddress;
 		u64 ElementSSA;
-		u64 Type;
+		TypeStorage* Type;
 
-		bool ReferenceAccess = false;
+		IRArrayAccess() = default;
+
+		IRArrayAccess(u64 array_address, u64 element_ssa, TypeStorage* type)
+			:ArrayAddress(array_address), ElementSSA(element_ssa), Type(type)
+		{
+		}
 
 		virtual std::string ToString() const override {
 			return 	" [] -> ";

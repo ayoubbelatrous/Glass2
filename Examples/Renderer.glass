@@ -49,6 +49,49 @@ fn Renderer2D_init(Renderer2D* r) {
 	}
 
 	r.quad_index_buffer = IndexBuffer_Create(quadIndices);
+
+
+	stbtt_fontinfo font_info;
+
+	font_file := open_file("C://Windows/Fonts/Arial.ttf", File_Open_Mode.Read);
+	font_file_contents := read_entire_file(font_file);
+	close_file(font_file);
+
+	i32 font_result = stbtt_InitFont(&font_info, cast(u8*) font_file_contents.data, stbtt_GetFontOffsetForIndex(cast(u8*)font_file_contents.data,0));
+
+	u64 width  =	512;
+	u64 height =	256;
+
+	u64 start_char 	= 32;
+	u64 num_chars 	= 96;
+
+	u8* bitmap = cast(u8*) malloc(width * height);
+
+	stbtt_bakedchar* chars
+		= cast(stbtt_bakedchar*) malloc(num_chars * sizeof(stbtt_bakedchar));
+
+	i32 bake_result = stbtt_BakeFontBitmap(cast(u8*) font_file_contents.data, 0,
+			12.0,
+			bitmap, cast(i32) width, cast(i32) height,
+			cast(i32) start_char, cast(i32) num_chars,
+			chars
+		);
+
+	print("Bake Result: %\n", bake_result);
+
+	u8[..] atlas_data;
+	atlas_data.data = malloc(width * height * 3);
+	atlas_data.count = width * height;
+
+	for 0..width * height {
+		atlas_data[it_index] = bitmap[it_index];
+		atlas_data[(it_index + 1)] = bitmap[it_index];
+		atlas_data[(it_index + 2)] = bitmap[it_index];
+	}
+
+	r.font_atlas = Texture_Create(cast(u32) width, cast(u32) height, atlas_data, TextureFormat.RGB8);
+
+	Texture_Bind(&r.font_atlas);
 }
 
 fn Renderer2D_flush(Renderer2D* r) {
@@ -68,6 +111,7 @@ fn Renderer2D_flush(Renderer2D* r) {
 
 	Shader_Bind(&r.shader);
 	Shader_SetMat4(&r.shader, "u_ViewProjection", &r.projection);
+	Shader_SetInt(&r.shader, "u_Tex", 0);
 
 	//@Note we are not resetting the ssa counter after firstpass()
 
@@ -127,7 +171,9 @@ struct Renderer2D
 
 	mat4 			projection;
 
-	Shader shader;
+	Shader 			shader;
+
+	Texture 		font_atlas;
 };
 
 fn _Vertex(vec3 pos) : Vertex {
