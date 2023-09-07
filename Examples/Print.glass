@@ -91,7 +91,7 @@ fn print_any(Any any, i32 indent) : i32 {
 
 			TypeInfo_Member member = type_info_struct.members[member_it];
 
-			u8* member_ptr = &base_ptr[member.offset];
+			u8* member_ptr = cast(u8*) &base_ptr[member.offset];
 
 			Any struct_any;
 			struct_any.data = cast(void*) member_ptr;
@@ -128,7 +128,7 @@ fn print(Any... args) {
 	Any* arguments = cast(Any*) args.data;
 
 	Any fmt_arg = arguments[0];
-	u8* fmt_string = cast(u8*) fmt_arg.data;
+	u8* fmt_string = *cast(u8**) fmt_arg.data;
 
 	i32 format_char_count = strlen(fmt_string);
 	i32 format_it = 0;

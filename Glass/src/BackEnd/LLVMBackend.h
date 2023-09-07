@@ -69,6 +69,8 @@ namespace Glass {
 
 		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Constant* arraySize = nullptr);
 
+		std::string MangleName(const std::string& name, TSFunc* signature);
+
 	private:
 
 		static std::unique_ptr<llvm::LLVMContext> m_LLVMContext;
@@ -88,6 +90,10 @@ namespace Glass {
 		void SetFunctionID(u64 id)
 		{
 			m_CurrentFunctionID = id;
+		}
+
+		u64 GetFunctionHash(const std::string& name, u64 signature) {
+			return Combine2Hashes(std::hash<std::string>{}(name), signature);
 		}
 
 		void InsertFunctionArgNames(u64 func_id, const std::vector<llvm::Value*>& argument_names)
@@ -190,11 +196,20 @@ namespace Glass {
 			return nullptr;
 		}
 
+		struct LLVMFunction {
+			llvm::Function* llvmFunction = nullptr;
+			std::map<TSFunc*, llvm::Function*> Overloads;
+		};
+
 		void InsertLLVMFunction(u64 function_id, llvm::Function* function) {
-			m_LLVMFunctions[function_id] = function;
+			m_LLVMFunctions[function_id].llvmFunction = function;
 		}
 
-		llvm::Function* GetLLVMFunction(u64 function_id) {
+		void InsertLLVMFunctionOverload(u64 function_id, TSFunc* signature, llvm::Function* function) {
+			m_LLVMFunctions[function_id].Overloads[signature] = function;
+		}
+
+		LLVMFunction& GetLLVMFunction(u64 function_id) {
 			return m_LLVMFunctions.at(function_id);
 		}
 
@@ -235,7 +250,7 @@ namespace Glass {
 		std::unordered_map<u64, llvm::GlobalVariable*> m_GlobalVariables;
 
 		std::unordered_map<u64, std::vector<llvm::Value*>> m_FunctionArgNames;
-		std::unordered_map<u64, llvm::Function*> m_LLVMFunctions;
+		std::unordered_map<u64, LLVMFunction> m_LLVMFunctions;
 
 		std::unordered_map<u64, llvm::Value*> m_LLVMData;
 
@@ -307,17 +322,14 @@ namespace Glass {
 			return nullptr;
 		}
 
-		llvm::DISubroutineType* GetFunctionDebugType(u64 function_id) {
-
-			const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(function_id);
-			GS_CORE_ASSERT(func_metadata, "function metadata not found");
+		llvm::DISubroutineType* GetFunctionDebugType(TSFunc* signature) {
 
 			std::vector<llvm::Metadata*> dbg_param_types;
 
-			dbg_param_types.push_back(GetLLVMDebugType(func_metadata->ReturnType));
+			dbg_param_types.push_back(GetLLVMDebugType(signature->ReturnType));
 
-			for (auto& argument_metadata : func_metadata->Arguments) {
-				dbg_param_types.push_back(GetLLVMDebugType(argument_metadata.Type));
+			for (auto argument_type : signature->Arguments) {
+				dbg_param_types.push_back(GetLLVMDebugType(argument_type));
 			}
 
 			llvm::DISubroutineType* func_dbg_type = m_DBuilder->createSubroutineType(
@@ -330,12 +342,9 @@ namespace Glass {
 			mDContext = m_DBuilder->createFile(file_name, directory);
 		}
 
-		void FunctionDebugInfo(u64 function_id, llvm::Function* llvm_func) {
+		void FunctionDebugInfo(const FunctionMetadata* func_metadata, llvm::Function* llvm_func) {
 
-			const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(function_id);
-			GS_CORE_ASSERT(func_metadata, "function metadata not found");
-
-			auto function_dbg_type = GetFunctionDebugType(function_id);
+			auto function_dbg_type = GetFunctionDebugType((TSFunc*)func_metadata->Signature);
 
 			u32 LineNo = (u32)func_metadata->Symbol.Line;
 			u32 ScopeLine = (u32)func_metadata->Symbol.Line + 1;
@@ -345,7 +354,7 @@ namespace Glass {
 			llvm::DISubprogram* SP = m_DBuilder->createFunction(
 				FContext,
 				func_metadata->Symbol.Symbol,
-				llvm::StringRef(),
+				MangleName(func_metadata->Symbol.Symbol, (TSFunc*)func_metadata->Signature),
 				(llvm::DIFile*)mDContext,
 				LineNo,
 				function_dbg_type,
@@ -354,10 +363,7 @@ namespace Glass {
 				llvm::DISubprogram::SPFlagDefinition);
 
 			llvm_func->setSubprogram(SP);
-
 			m_DLexicalBlocks.push_back(SP);
-
-			//SetDBGLocation(DBGSourceLoc(func_metadata->Symbol.Line + 1, 0));
 		}
 
 		void FinalizeFunctionDebugInfo(llvm::Function* llvm_func) {

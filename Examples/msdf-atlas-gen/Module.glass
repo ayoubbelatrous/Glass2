@@ -1,0 +1,7 @@
+struct MSDF_FreeTypeHandle
+{
+	void* _;
+};
+
+#foreign fn msdfgen__initializeFreetype() : MSDF_FreeTypeHandle*;
+#foreign fn msdfgen__deinitializeFreetype(MSDF_FreeTypeHandle* handle);

@@ -44,6 +44,7 @@ struct mat4
 
 //@Hypatia Math
 
+#foreign fn matrix4_multiplyv4(mat4* m, vec4* v, vec4* r) : vec4* {};
 #foreign fn matrix4_multiplyv3(mat4* m, vec3* v, vec3* r) : vec3* {};
 #foreign fn matrix4_multiplyv2(mat4* m, vec2* v, vec2* r) : vec2* {};
 #foreign fn matrix4_identity(mat4* m) : mat4* {};
@@ -109,8 +110,14 @@ fn m4_m_v2(mat4 m, vec2 v) : vec2 {
 	matrix4_multiplyv2(&m, &v, &r);
 	return r;
 }
-
 #operator* m4_m_v2;
+
+fn m4_m_v4(mat4 m, vec4 v) : vec4 {
+	vec4 r;
+	matrix4_multiplyv4(&m, &v, &r);
+	return r;
+}
+#operator* m4_m_v4;
 
 fn m4_m_m4(mat4 lhs, mat4 rhs) : mat4 {
 	r := lhs;

@@ -1,11 +1,12 @@
-#foreign fn printf!(u8* fmt) : i32 {};
+
+#load "Print.glass"
+#load "C.glass"
 
 fn main() : i32 {
-	f32 i = -1.0;
-	for 0..10 + 1 {
-		printf("I: %f\n",i);
-		i = i + 1.0;
-	}
+
+	i32 data = 500;
+
+	print("I: %", data);
 
 	return 0;
 }

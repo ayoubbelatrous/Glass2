@@ -1,0 +1,173 @@
+
+enum ShaderDataType {
+	Invalid	;
+	Float	;
+	Float2	;
+	Float3	;
+	Float4	;
+};
+
+struct Shader {
+	u32 renderer_id;
+};
+
+fn Shader_Create(u8* path) : Shader {
+    assert(cast(i32) path ," :: Shader_Create() :: path was null");
+    print("[INFO] Loading Shader :: '%' \n", path);
+
+    Shader s;
+
+    f := open_file(path, File_Open_Mode.Read);
+    u64 shader_source_size = 0;
+    shader_source := read_entire_file(f, &shader_source_size);
+    close_file(f);
+
+    u8[..] vertex_source;
+    u8[..] fragment_source;
+
+    u64 i = 0;
+    u64 line_no = 1;
+
+    while i < shader_source.count {
+
+        c := shader_source[i];
+
+        if c == "#"[0] {
+            if strncmp(&shader_source[i], "#section", strlen("#section")) == 0 {
+
+                u64 j = i + cast(u64) strlen("#section");
+
+                bool peek = 1;
+
+                while peek {
+
+                    c = shader_source[j];
+
+                    if isspace(cast(i32) c) != 0 {
+                        peek = 0;
+                    }
+
+                    j = j + 1;
+                }
+
+                str_section_vertex := "vertex";
+                str_section_fragment := "fragment";
+
+                bool found_section = 0;
+
+                if strncmp(&shader_source[j], str_section_vertex, strlen(str_section_vertex)) == 0 {
+                    found_section = 1;
+                    loc_vert := j + cast(u64) strlen(str_section_vertex);
+                    vertex_source.data = cast(void*) &shader_source[loc_vert];
+
+                    u64 k = loc_vert;
+					bool loop = 1;
+                    while loop && k < shader_source.count {
+
+						if shader_source[k] == "#"[0] {
+							if strncmp(&shader_source[k], "#section", strlen("#section")) == 0 {
+								loop = 0;
+							}
+						}
+
+                        k = k + 1;
+                    }
+                    vertex_source.count = k - loc_vert;
+
+                }
+
+                if strncmp(&shader_source[j], str_section_fragment, strlen(str_section_fragment)) == 0 {
+                    found_section = 2;
+                    loc_frag := j + cast(u64) strlen(str_section_fragment);
+                    fragment_source.data = cast(void*) &shader_source[loc_frag];
+
+                    u64 k = loc_frag;
+					bool loop = 1;
+                    while loop && k < shader_source.count {
+
+						if shader_source[k] == "#"[0] {
+							if strncmp(&shader_source[k], "#section", strlen("#section")) == 0 {
+								loop = 0;
+							}
+						}
+
+                        k = k + 1;
+                    }
+                    fragment_source.count = k - loc_frag;
+                }
+
+                if found_section == 0 {
+                    print("[ERROR] expected section name after #section, At %:%\n", path, line_no);
+                }
+            }
+        }
+
+        if c == "\n"[0] {
+            line_no = line_no + 1;
+        }
+
+        i = i + 1;
+    }
+
+	s.renderer_id = glCreateProgram();
+
+	glAttachShader(s.renderer_id, Compile_GL_Shader(vertex_source, GL_VERTEX_SHADER));
+	glAttachShader(s.renderer_id, Compile_GL_Shader(fragment_source, GL_FRAGMENT_SHADER));
+
+	glLinkProgram(s.renderer_id);
+
+	free(shader_source.data);
+
+	return s;
+}
+
+fn Compile_GL_Shader(u8[..] src, i32 type) : u32 {
+	sh := glCreateShader(type);
+	glShaderSource(sh, 1, cast(u8**) &src.data, cast(i32*) &src.count);
+	glCompileShader(sh);
+	return sh;
+}
+
+fn Shader_Set(Shader* shader, u8* name, Any value) {
+
+	bool set = 0;
+
+	if value.type == f32 {
+		Shader_SetFloat(shader, name, *cast(f32*)value.data);
+		set = 1;
+	}
+
+	if value.type == i32 {
+		Shader_SetInt(shader, name, *cast(i32*)value.data);
+		set = 1;
+	}
+
+	if value.type == mat4 {
+		Shader_SetMat4(shader, name, cast(mat4*)value.data);
+		set = 1;
+	}
+
+	print("Type Is %\n", type_info(value.type).name);
+	assert(cast(i32) set, " :: Shader_Set() :: unsupported type");
+}
+
+fn Shader_SetFloat(Shader* shader, u8* name, f32 value) {
+	loc := glGetUniformLocation(shader.renderer_id, name);
+    glUniform1f(loc, value);
+}
+
+fn Shader_SetInt(Shader* shader, u8* name, i32 value) {
+	Shader_Bind(shader);
+	loc := glGetUniformLocation(shader.renderer_id, name);
+    glUniform1i(loc, value);
+}
+
+fn Shader_SetMat4(Shader* shader, u8* name, mat4* value) {
+	Shader_Bind(shader);
+	loc := glGetUniformLocation(shader.renderer_id, name);
+    glUniformMatrix4fv(loc, 1, 0, cast(f32*) value);
+}
+
+fn Shader_Bind(Shader* shader) {
+	glUseProgram(shader.renderer_id);
+}

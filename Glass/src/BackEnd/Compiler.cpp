@@ -255,6 +255,7 @@ namespace Glass
 
 	void Compiler::FirstPass()
 	{
+		m_CurrentFile = 0;
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -270,8 +271,10 @@ namespace Glass
 					break;
 				}
 			}
-		}
 
+			m_CurrentFile++;
+		}
+		m_CurrentFile = 0;
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -287,8 +290,10 @@ namespace Glass
 					break;
 				}
 			}
-		}
 
+			m_CurrentFile++;
+		}
+		m_CurrentFile = 0;
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -304,8 +309,10 @@ namespace Glass
 					break;
 				}
 			}
-		}
 
+			m_CurrentFile++;
+		}
+		m_CurrentFile = 0;
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -317,8 +324,10 @@ namespace Glass
 					ForeignCodeGen((ForeignNode*)stmt);
 				}
 			}
-		}
 
+			m_CurrentFile++;
+		}
+		m_CurrentFile = 0;
 		for (CompilerFile* file : m_Files) {
 
 			ModuleFile* module_file = file->GetAST();
@@ -330,12 +339,15 @@ namespace Glass
 					OperatorCodeGen((OperatorNode*)stmt);
 				}
 			}
+
+			m_CurrentFile++;
 		}
+		m_CurrentFile = 0;
 	}
 
 	void Compiler::HandleTopLevelFunction(FunctionNode* fnNode)
 	{
-		u64 ID = GetFunctionID();
+		FunctionMetadata* previous = m_Metadata.GetFunctionMetadata(m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol));
 
 		TypeStorage* return_type = nullptr;
 
@@ -363,16 +375,34 @@ namespace Glass
 		for (auto& arg : arguments) {
 			signature_arguments.push_back(arg.Type);
 		}
-		auto signature = TypeSystem::GetFunction(signature_arguments, return_type);
 
 		FunctionMetadata metadata;
-		metadata.Signature = signature;
+		metadata.Signature = TypeSystem::GetFunction(signature_arguments, return_type);
 		metadata.Arguments = arguments;
 		metadata.HasBody = false;
 		metadata.ReturnType = return_type;
 		metadata.Symbol = fnNode->Symbol;
 
-		m_Metadata.RegisterFunction(ID, metadata);
+		if (previous == nullptr) {
+			m_Metadata.RegisterFunction(GetFunctionID(), metadata);
+			return;
+		}
+
+		if (metadata.Signature == previous->Signature) {
+			MSG_LOC(fnNode);
+			FMT_WARN("function '{}' redefined with the same signature", fnNode->Symbol.Symbol);
+			return;
+		}
+		else {
+			FunctionMetadata* overload = previous->FindOverload((TSFunc*)metadata.Signature);
+			if (overload) {
+				MSG_LOC(fnNode);
+				FMT_WARN("function '{}' redefined with the same signature", fnNode->Symbol.Symbol);
+				return;
+			}
+		}
+
+		previous->AddOverload(metadata);
 	}
 
 	void Compiler::HandleTopLevelStruct(StructNode* strct)
@@ -652,7 +682,9 @@ namespace Glass
 		std::vector<ArgumentMetadata> args_metadata;
 
 		IRFunction* IRF = IR(IRFunction());
+
 		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
+		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
 
 		PoPIRSSA();
 
@@ -727,18 +759,19 @@ namespace Glass
 		for (auto& arg : args_metadata) {
 			signature_arguments.push_back(arg.Type);
 		}
+
 		auto signature = TypeSystem::GetFunction(signature_arguments, return_type);
 
-		FunctionMetadata metadata;
-		metadata.Symbol = fnNode->Symbol;
-		metadata.Signature = signature;
-		metadata.ReturnType = return_type;
-		metadata.Arguments = args_metadata;
-		metadata.Variadic = false;
-		metadata.HasBody = false;
-		metadata.Foreign = false;
+		if (metadata->Signature != signature) {
+			metadata = metadata->FindOverload((TSFunc*)signature);
+			IRF->Overload = metadata->Signature;
+			if (metadata == nullptr) {
+				return nullptr;
+			}
+		}
 
-		m_Metadata.RegisterFunction(IRF->ID, metadata);
+		metadata->Arguments = args_metadata;
+		metadata->HasBody = true;
 
 		for (const Statement* stmt : fnNode->GetStatements())
 		{
@@ -1090,7 +1123,7 @@ namespace Glass
 		IF.SSA = condition->SSA;
 
 		PushScope();
-
+		m_Metadata.PushContext(ContextScopeType::FUNC);
 		for (const Statement* stmt : ifNode->Scope->GetStatements())
 		{
 			auto first_inst = StatementCodeGen(stmt);
@@ -1108,7 +1141,7 @@ namespace Glass
 
 			IF.Instructions.push_back(first_inst);
 		}
-
+		m_Metadata.PopContext();
 		PopScope();
 
 		return IR(IF);
@@ -1130,6 +1163,7 @@ namespace Glass
 		WHILE.ConditionBlock = condition_ssas;
 
 		PushScope();
+		m_Metadata.PushContext(ContextScopeType::FUNC);
 
 		for (const Statement* stmt : whileNode->Scope->GetStatements())
 		{
@@ -1148,7 +1182,7 @@ namespace Glass
 
 			WHILE.Instructions.push_back(inst);
 		}
-
+		m_Metadata.PopContext();
 		PopScope();
 
 		return IR(WHILE);
@@ -1401,6 +1435,9 @@ namespace Glass
 			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
 			return IR(IRSSAValue(ssa->ID));
+		}
+		else if (symbol_type == SymbolType::Type) {
+			return TypeValueCodeGen(TypeSystem::GetBasic(identifier->Symbol.Symbol));
 		}
 
 		return nullptr;
@@ -1765,6 +1802,11 @@ namespace Glass
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(identifier_left->Symbol.Symbol);
 
+			if (symbol_type == SymbolType::None) {
+				MSG_LOC(binaryExpr);
+				FMT_WARN("undefined name: '{}'", identifier_left->Symbol.Symbol);
+			}
+
 			if (symbol_type == SymbolType::GlobVariable)
 			{
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
@@ -1899,33 +1941,76 @@ namespace Glass
 			PushMessage(CompilerMessage{ fmt::format("trying to call a undefined function '{}'", call->Function.Symbol), MessageType::Warning });
 			return nullptr;
 		}
-		else
-		{
-			if (metadata->Arguments.size() != 0)
-			{
-
-				if (metadata->Arguments[metadata->Arguments.size() - 1].Variadic == false)
-				{
-					if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic)
-					{
-						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
-						return nullptr;
-					}
-					if ((call->Arguments.size() < metadata->Arguments.size()))
-					{
-						PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
-						PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
-						return nullptr;
-					}
-				}
-			}
-		}
-
-		std::vector<IRSSAValue*> argument_expr_results;
 
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
+
+		std::vector<IRSSAValue*> argumentValueRefs;
+		std::vector<TypeStorage*> argumentTypes;
+
+		// 		if (call->Function.Symbol == "print") {
+		// 			__debugbreak();
+		// 		}
+
+		for (size_t i = 0; i < call->Arguments.size(); i++)
+		{
+			auto argument_expr = call->Arguments[i];
+
+			if (!metadata->IsOverloaded()) {
+				if (i < metadata->Arguments.size()) {
+					SetLikelyConstantType(metadata->Arguments[i].Type->BaseID);
+				}
+			}
+
+			IRSSAValue* argument_as_value_ref = (IRSSAValue*)ExpressionCodeGen(argument_expr);
+
+			if (!metadata->IsOverloaded()) {
+				ResetLikelyConstantType();
+			}
+
+			if (!argument_as_value_ref)
+				return nullptr;
+
+			argumentTypes.push_back(m_Metadata.GetExprType(argument_as_value_ref->SSA));
+			argumentValueRefs.push_back(argument_as_value_ref);
+		}
+
+		if (metadata->IsOverloaded()) {
+
+			TSFunc* overload_query = (TSFunc*)TypeSystem::GetFunction(argumentTypes, TypeSystem::GetVoid());
+			TSFunc* compare_query = (TSFunc*)TypeSystem::GetFunction(argumentTypes, ((TSFunc*)metadata->Signature)->ReturnType);
+
+			if (compare_query != metadata->Signature) {
+
+				metadata = metadata->FindOverloadForCall(overload_query);
+
+				ir_call.Overload = metadata->Signature;
+
+				if (!metadata) {
+					MSG_LOC(call);
+					FMT_WARN("function call to '{}', found no overload that could take: '{}'", call->Function.Symbol, PrintType(overload_query));
+					return nullptr;
+				}
+			}
+		}
+		else if (metadata->Arguments.size() != 0)
+		{
+			if (metadata->Arguments[metadata->Arguments.size() - 1].Variadic == false)
+			{
+				if ((call->Arguments.size() > metadata->Arguments.size()) && !metadata->Variadic)
+				{
+					PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+					PushMessage(CompilerMessage{ fmt::format("too many arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
+					return nullptr;
+				}
+				if ((call->Arguments.size() < metadata->Arguments.size()))
+				{
+					PushMessage(CompilerMessage{ PrintTokenLocation(call->GetLocation()), MessageType::Error });
+					PushMessage(CompilerMessage{ fmt::format("too few arguments for '{}()' function call ", call->Function.Symbol), MessageType::Warning });
+					return nullptr;
+				}
+			}
+		}
 
 		for (size_t i = 0; i < call->Arguments.size(); i++)
 		{
@@ -1937,21 +2022,24 @@ namespace Glass
 
 			if (decl_arg != nullptr)
 			{
-				SetLikelyConstantType(decl_arg->Type->BaseID);
-
 				if (!decl_arg->Variadic) {
 					if (decl_arg->Type->BaseID == IR_any) {
-						argument_code = PassAsAny(call->Arguments[i]);
+						argument_code = PassAsAny(call->Arguments[i], argumentValueRefs[i]);
 					}
 					else {
-						argument_code = GetExpressionByValue(call->Arguments[i]);
+						argument_code = GetExpressionByValue(call->Arguments[i], argumentValueRefs[i]);
 					}
 				}
 				else {
-					argument_code = PassAsVariadicArray(i, call->Arguments, decl_arg);
-				}
 
-				ResetLikelyConstantType();
+					std::vector<IRSSAValue*> pre_generated_variadic_arguments;
+
+					for (size_t j = i; j < argumentValueRefs.size(); j++) {
+						pre_generated_variadic_arguments.push_back(argumentValueRefs[j]);
+					}
+
+					argument_code = PassAsVariadicArray(call->Arguments, pre_generated_variadic_arguments, decl_arg);
+				}
 
 				if (argument_code == nullptr)
 					return nullptr;
@@ -1981,7 +2069,7 @@ namespace Glass
 			}
 			else
 			{
-				arg = GetExpressionByValue(call->Arguments[i]);
+				arg = GetExpressionByValue(call->Arguments[i], argumentValueRefs[i]);
 			}
 
 			ir_call.Arguments.push_back(arg);
@@ -2729,6 +2817,8 @@ namespace Glass
 
 				const auto metadata = m_Metadata.GetVariableMetadata(ir_address->SSA);
 
+				//const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(identifier->Symbol.Symbol));
+
 				IRLoad load;
 				load.AddressSSA = ir_address->SSA;
 				load.Type = metadata->Tipe;
@@ -2796,17 +2886,16 @@ namespace Glass
 		}
 	}
 
-	IRSSAValue* Compiler::PassAsAny(const Expression* expr)
+	IRSSAValue* Compiler::PassAsAny(const Expression* expr, IRSSAValue* pre_generated /*= nullptr*/)
 	{
-		IRSSAValue* expr_result = (IRSSAValue*)GetExpressionByValue(expr);
+		IRSSAValue* expr_result = (IRSSAValue*)GetExpressionByValue(expr, pre_generated);
 
 		if (expr_result == nullptr)
 			return nullptr;
 
 		auto expr_type = m_Metadata.GetExprType(expr_result->SSA);
 
-		if (expr_type->BaseID == IR_any)
-		{
+		if (expr_type->BaseID == IR_any) {
 			return expr_result;
 		}
 
@@ -2828,28 +2917,39 @@ namespace Glass
 		return IR(IRSSAValue(ir_load_ssa->ID));
 	}
 
-	IRSSAValue* Compiler::PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg)
+	IRSSAValue* Compiler::PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRSSAValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg)
 	{
 		if (decl_arg->Type->BaseID == IR_any) {
 
 			std::vector<IRAny> anys;
 			anys.reserve(arguments.size());
 
-			for (Expression* arg : arguments) {
+			for (size_t i = 0; i < arguments.size(); i++) {
 
-				IRSSAValue* arg_ssa_val = (IRSSAValue*)ExpressionCodeGen(arg);
+				Expression* arg = arguments[i];
 
-				if (!arg_ssa_val) {
+				IRSSAValue* code = nullptr;
+
+				if (i < pre_generated_arguments.size()) {
+					code = GetExpressionByValue(arg, pre_generated_arguments[i]);
+				}
+				else {
+					code = (IRSSAValue*)GetExpressionByValue(arg);
+				}
+
+				if (!code) {
 					return nullptr;
 				}
 
-				auto arg_type = m_Metadata.GetExprType(arg_ssa_val->SSA);
+				auto arg_type = m_Metadata.GetExprType(code->SSA);
+				code = CreateCopy(arg_type, code);
+				arg_type = m_Metadata.GetExprType(code->SSA);
 
-				anys.push_back(IRAny(arg_ssa_val->SSA, arg_type));
+				anys.push_back(IRAny(code->SSA, arg_type));
 			}
 
 			auto any_array_ir_ssa = CreateIRSSA();
-			any_array_ir_ssa->Value = IR(IRAnyArray(anys));;
+			any_array_ir_ssa->Value = IR(IRAnyArray(anys));
 
 			m_Metadata.RegExprType(any_array_ir_ssa->ID, TypeSystem::GetBasic(IR_array));
 
@@ -2886,19 +2986,16 @@ namespace Glass
 	{
 		auto load_ssa = CreateIRSSA();
 		load_ssa->Value = IR(IRLoad(address, type));
-
+		m_Metadata.RegExprType(load_ssa->ID, type);
 		return IR(IRSSAValue(load_ssa->ID));
 	}
-
 
 	IRSSAValue* Compiler::CreateStore(TypeStorage* type, u64 address, IRInstruction* data)
 	{
-		auto load_ssa = CreateIRSSA();
-		load_ssa->Value = IR(IRStore(address, data, type));
-
-		return IR(IRSSAValue(load_ssa->ID));
+		auto store_ssa = CreateIRSSA();
+		store_ssa->Value = IR(IRStore(address, data, type));
+		return IR(IRSSAValue(store_ssa->ID));
 	}
-
 
 	IRSSAValue* Compiler::CreateConstantInteger(u64 integer_base_type, i64 value)
 	{
@@ -2908,6 +3005,29 @@ namespace Glass
 		memcpy(&Constant->Data, &value, sizeof(i64));
 
 		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+	}
+
+	IRSSAValue* Compiler::CreateConstant(u64 base_type, i64 value_integer, double value_float)
+	{
+		IRCONSTValue* Constant = IR(IRCONSTValue());
+
+		Constant->Type = base_type;
+
+		if (m_Metadata.GetTypeFlags(base_type) & FLAG_FLOATING_TYPE) {
+			memcpy(&Constant->Data, &value_float, sizeof(double));
+		}
+		else {
+			memcpy(&Constant->Data, &value_integer, sizeof(i64));
+		}
+
+		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+	}
+
+	IRSSAValue* Compiler::CreateCopy(TypeStorage* type, IRSSAValue* loaded_value)
+	{
+		auto alloca = CreateIRSSA(IR(IRAlloca(type)), type);
+		CreateStore(type, alloca->SSA, loaded_value);
+		return alloca;
 	}
 
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)

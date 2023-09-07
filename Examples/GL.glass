@@ -1821,6 +1821,7 @@ i32 GL_TRANSFORM_FEEDBACK_STREAM_OVERFLOW = 33517;
 #foreign fn glViewport(i32 x, i32 y, i32 width, i32 height) : void {}
 
 #foreign fn glDrawArrays(i32 a, u32 b, u32 c) : void {}
+#foreign fn glDrawElements(i32 mode, u32 count, i32 type, void* indices) : void {}
 
 #foreign fn wglGetProcAddress(u8* gl_proc) : void* {}
 
@@ -1863,7 +1864,7 @@ fn GL_load_Func(void** ptr, u8* func_name){
 (i32, u32*) glDeleteBuffers;
 (i32, u32) 	glBindBuffer;
 
-(i32,u64,void*,u32) glBufferData;
+(i32,u64,void*,i32) glBufferData;
 
 //void glNamedBufferData(	GLuint buffer,
 //	GLsizeiptr size,
@@ -1929,6 +1930,47 @@ fn glTexParameteri(i32 target,i32 pname,i32 param) : void {}
 ((u32,u32,u32,u32,i32,u8*,void*):void, void*) glDebugMessageCallback;
 (i32,i32,i32,u32,u32*,i32) glDebugMessageControl;
 
+//void glShaderSource(GLuint shader,
+//	GLsizei count,
+//	const GLchar **string,
+//	const GLint *length);
+
+(u32,u32,u8**,i32*) glShaderSource;
+
+
+//GLuint glCreateShader(GLenum shaderType);
+(i32): u32 glCreateShader;
+
+//void glCreateShader(GLuint shader);
+(u32) glCompileShader;
+
+//void glCreateProgram();
+(): u32 glCreateProgram;
+
+//void glAttachShader(GLuint program,
+//	GLuint shader);
+(u32, u32) glAttachShader;
+
+//void glLinkProgram(GLuint program);
+(u32) glLinkProgram;
+
+(i32,f32) glUniform1f;
+(i32,i32) glUniform1i;
+
+//void glUniformMatrix4fv(GLint location,
+//	GLsizei count,
+//	GLboolean transpose,
+//	const GLfloat *value);
+
+(i32,u32,bool,f32*) glUniformMatrix4fv;
+
+
+//GLint glGetUniformLocation(GLuint program,
+//	const GLchar *name);
+
+(u32,u8*):i32 glGetUniformLocation;
+
+(u32) glUseProgram;
 
 fn OpenGLMessageCallback(
 	u32 source,
@@ -1981,8 +2023,24 @@ fn InitGL() : void {
 
 	GL_load_Func(cast(void**) &glNamedBufferSubData, 		"glNamedBufferSubData");
 
+	GL_load_Func(cast(void**) &glCreateShader, 				"glCreateShader");
+	GL_load_Func(cast(void**) &glShaderSource, 				"glShaderSource");
+	GL_load_Func(cast(void**) &glAttachShader, 				"glAttachShader");
+	GL_load_Func(cast(void**) &glCompileShader, 			"glCompileShader");
+	GL_load_Func(cast(void**) &glLinkProgram, 				"glLinkProgram");
+	GL_load_Func(cast(void**) &glCreateProgram, 			"glCreateProgram");
+
+	GL_load_Func(cast(void**) &glGetUniformLocation, 		"glGetUniformLocation");
+
+	GL_load_Func(cast(void**) &glUniform1f, 					"glUniform1f");
+	GL_load_Func(cast(void**) &glUniform1i, 					"glUniform1i");
+	GL_load_Func(cast(void**) &glUniformMatrix4fv, 				"glUniformMatrix4fv");
+
+	GL_load_Func(cast(void**) &glUseProgram, 				"glUseProgram");
+
 	GL_load_Func(cast(void**) &glDebugMessageCallback, 		"glDebugMessageCallback");
 	GL_load_Func(cast(void**) &glDebugMessageControl, 		"glDebugMessageControl");
+
 
 	InitOpenGLDebugging();
 }

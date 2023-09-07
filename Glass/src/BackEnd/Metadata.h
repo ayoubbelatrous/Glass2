@@ -12,6 +12,7 @@
 namespace Glass {
 
 	struct TypeStorage;
+	struct TSFunc;
 	enum class TypeStorageKind : u32;
 
 	using TypeFlags = u64;
@@ -229,6 +230,52 @@ namespace Glass {
 		bool HasBody = false;
 		bool Variadic = false;
 		bool Foreign = false;
+
+		std::map<TSFunc*, FunctionMetadata> Overloads;
+		std::map<TSFunc*, FunctionMetadata*> OverloadsArgLookUp;
+
+		bool IsOverloaded() const {
+			return Overloads.size() != 0;
+		}
+
+		void AddOverload(const FunctionMetadata& function);
+
+		FunctionMetadata* FindOverload(TSFunc* signature) {
+			GS_CORE_ASSERT(signature);
+
+			auto it = Overloads.find(signature);
+
+			if (it == Overloads.end()) {
+				return nullptr;
+			}
+			else {
+				return &it->second;
+			}
+		}
+
+		//signature return type assumed to be void for this to work
+		FunctionMetadata* FindOverloadForCall(TSFunc* signature) {
+			GS_CORE_ASSERT(signature);
+
+			auto it = OverloadsArgLookUp.find(signature);
+
+			if (it == OverloadsArgLookUp.end()) {
+				return nullptr;
+			}
+			else {
+				return it->second;
+			}
+		}
+
+		FunctionMetadata& GetOverload(TSFunc* signature) {
+			GS_CORE_ASSERT(signature, "signature is null");
+			return Overloads.at(signature);
+		}
+
+		const FunctionMetadata& GetOverload(TSFunc* signature) const {
+			GS_CORE_ASSERT(signature);
+			return Overloads.at(signature);
+		}
 
 		const ArgumentMetadata* GetArgument(u64 i) const
 		{

@@ -145,7 +145,6 @@ namespace Glass
 
 		GenerateTypeInfo();
 
-
 		for (auto i : m_Program->Instructions) {
 			if (i->GetType() == IRNodeType::File) {
 
@@ -339,9 +338,7 @@ namespace Glass
 					Function_Type, llvm::Function::LinkageTypes::ExternalLinkage,
 					metadata->Symbol.Symbol, m_LLVMModule);
 
-			//llvm_Func->setCallingConv(llvm::CallingConv::C);
-
-			InsertLLVMFunction(foreign_func_id, llvm_Func);
+			InsertLLVMFunction(GetFunctionHash(metadata->Symbol.Symbol, metadata->Signature->Hash), llvm_Func);
 		}
 	}
 
@@ -549,10 +546,11 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::FuncRefCodeGen(const IRFuncRef* func_ref)
 	{
-		auto llvm_Func = GetLLVMFunction(func_ref->FunctionID);
-		return llvm_Func;
-	}
+		auto metadata = m_Metadata->GetFunctionMetadata(func_ref->FunctionID);
 
+		auto llvm_Func = GetLLVMFunction(GetFunctionHash(metadata->Symbol.Symbol, metadata->Signature->Hash));
+		return llvm_Func.llvmFunction;
+	}
 
 	llvm::Value* LLVMBackend::CallFuncRefCodeGen(const IRCallFuncRef* func_ref)
 	{
@@ -657,6 +655,14 @@ namespace Glass
 	{
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
 
+		GS_CORE_ASSERT(func_metadata, "");
+
+		u64 function_id = GetFunctionHash(func_metadata->Symbol.Symbol, func_metadata->Signature->Hash);
+
+		if (func->Overload) {
+			func_metadata = &func_metadata->GetOverload((TSFunc*)func->Overload);
+		}
+
 		std::vector<llvm::Type*> Parameters;
 
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
@@ -671,17 +677,37 @@ namespace Glass
 		llvm::FunctionType* Function_Type =
 			llvm::FunctionType::get(GetLLVMType(func_metadata->ReturnType), Parameters, false);
 
-		llvm::Function* llvm_Func =
-			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, func_metadata->Symbol.Symbol, m_LLVMModule);
+		std::string exported_name;
+		if (func_metadata->Symbol.Symbol == "main") {
+			exported_name = "main";
+		}
+		else {
+			exported_name = MangleName(func_metadata->Symbol.Symbol, (TSFunc*)func_metadata->Signature);
+		}
 
-		InsertLLVMFunction(func->ID, llvm_Func);
+		llvm::Function* llvm_Func =
+			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, exported_name, m_LLVMModule);
+
+		if (!func->Overload) {
+			InsertLLVMFunction(function_id, llvm_Func);
+		}
+		else {
+			InsertLLVMFunctionOverload(function_id, (TSFunc*)func->Overload, llvm_Func);
+		}
 	}
 
 	llvm::Value* LLVMBackend::FunctionCodeGen(const IRFunction* func)
 	{
-		SetFunctionID(func->ID);
-
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
+
+		GS_CORE_ASSERT(func_metadata, "");
+
+		SetFunctionID(GetFunctionHash(func_metadata->Symbol.Symbol, func_metadata->Signature->Hash));
+
+		if (func->Overload) {
+			func_metadata = &func_metadata->GetOverload((TSFunc*)func->Overload);
+		}
+
 
 		std::vector<llvm::Type*> Parameters;
 
@@ -697,7 +723,14 @@ namespace Glass
 		llvm::FunctionType* Function_Type =
 			llvm::FunctionType::get(GetLLVMType(func_metadata->ReturnType), Parameters, false);
 
-		llvm::Function* llvm_Func = GetLLVMFunction(m_CurrentFunctionID);
+		llvm::Function* llvm_Func = nullptr;
+
+		if (func->Overload == nullptr) {
+			llvm_Func = GetLLVMFunction(m_CurrentFunctionID).llvmFunction;
+		}
+		else {
+			llvm_Func = GetLLVMFunction(m_CurrentFunctionID).Overloads[(TSFunc*)func->Overload];
+		}
 
 		//BODY CODE GEN///////////////////////////
 
@@ -705,7 +738,7 @@ namespace Glass
 		m_LLVMBuilder->SetInsertPoint(BB);
 
 		//@Debuggging
-		FunctionDebugInfo(func->ID, llvm_Func);
+		FunctionDebugInfo(func_metadata, llvm_Func);
 		m_LLVMBuilder->SetCurrentDebugLocation(llvm::DebugLoc());
 
 		std::vector<llvm::Value*> argument_names;
@@ -714,7 +747,7 @@ namespace Glass
 		}
 
 		InsertFunctionArgNames(m_CurrentFunctionID, argument_names);
-		InsertLLVMFunction(m_CurrentFunctionID, llvm_Func);
+		//InsertLLVMFunction(m_CurrentFunctionID, llvm_Func);
 
 		//Argument Stack Storage
 		u64 argument_id = 0;
@@ -728,8 +761,6 @@ namespace Glass
 			else {
 				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array));
 			}
-
-
 
 			InsertName(arg_metadata.SSAID, argument_Alloca);
 
@@ -1077,7 +1108,23 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::CallCodeGen(const IRFunctionCall* call)
 	{
-		llvm::Function* llvm_Func = GetLLVMFunction(call->FuncID);
+		auto metadata = m_Metadata->GetFunctionMetadata(call->FuncID);
+		u64 function_id = GetFunctionHash(metadata->Symbol.Symbol, metadata->Signature->Hash);
+
+		if (call->Overload) {
+			metadata = &metadata->GetOverload((TSFunc*)call->Overload);
+		}
+
+		llvm::Function* llvm_Func = nullptr;
+
+		if (call->Overload) {
+			llvm_Func = GetLLVMFunction(function_id).Overloads[(TSFunc*)metadata->Signature];
+		}
+		else
+		{
+			llvm_Func = GetLLVMFunction(function_id).llvmFunction;
+		}
+
 		GS_CORE_ASSERT(llvm_Func, "LLVM Function Must Exist At This Point");
 
 		std::vector<llvm::Value*> llvm_Arguments;
@@ -1368,6 +1415,11 @@ namespace Glass
 			function->getEntryBlock().begin());
 		auto alloca = TmpB.CreateAlloca(type, arraySize);
 		return alloca;
+	}
+
+	std::string LLVMBackend::MangleName(const std::string& name, TSFunc* signature)
+	{
+		return fmt::format("{}_{}", name, (void*)signature->Hash);
 	}
 
 	llvm::Value* LLVMBackend::ReturnCodeGen(const IRReturn* ret) {

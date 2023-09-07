@@ -10,18 +10,12 @@ enum File_Seek_Mode
 	END;
 };
 
-fn open_file(string path, File_Open_Mode mode) : u64* {
+fn open_file(u8* path, File_Open_Mode mode) : u64* {
 
-	u8* open_mode = malloc(3);
-
-	u8 null = "\0"[0];
-
-	open_mode[0] = null;
-	open_mode[1] = null;
-	open_mode[2] = null;
+	i32 mode_buffer = 0;
+	u8* open_mode = cast(u8*) &mode_buffer;
 
 	u8 i = 0;
-
 	if mode | File_Open_Mode.Read {
 		open_mode[i] = "r"[0];
 		i = i + 1;
@@ -32,11 +26,7 @@ fn open_file(string path, File_Open_Mode mode) : u64* {
 		i = i + 1;
 	}
 
-	assert(path.data[path.count] == null, " :: open_file() :: string is not null terminated");
-
-	file := fopen(path.data, open_mode);
-
-	free(open_mode);
+	file := fopen(path, open_mode);
 
 	return file;
 }
@@ -46,7 +36,7 @@ fn close_file(u64* file) {
 }
 
 fn get_file_size(u64* file) : u64 {
-	assert(file," :: get_file_size() :: file is set null");
+	assert(cast(i32)file," :: get_file_size() :: file is null");
 
 	fseek(file, 0, cast(i32) File_Seek_Mode.END);
     file_size := ftell(file);
@@ -55,22 +45,23 @@ fn get_file_size(u64* file) : u64 {
 	return file_size;
 }
 
-//this gets freed by the user
-fn read_entire_file(u64* file) : string {
+fn read_entire_file(u64* file, u64* size) : u8[..] {
 
-	assert(file," :: read_entire_file() :: file is set null");
+	assert(cast(i32) file," :: read_entire_file() :: file is null");
 
 	file_size := get_file_size(file);
 
-	u8* buffer = malloc(file_size + 1);
+	u8* buffer = cast(u8*) malloc(file_size + 1);
 
 	fread(buffer, 1, file_size, file);
 
-    buffer[file_size] = '\0';
+	*size = file_size;
 
-	string res;
-	res.data = buffer;
-	res.count = file_size;
+	buffer[file_size] = cast(u8) 0;
 
-	return res;
+	u8[..] array;
+	array.data = cast(void*) buffer;
+	array.count = file_size;
+
+	return array;
 }

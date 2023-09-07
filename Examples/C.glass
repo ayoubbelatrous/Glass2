@@ -19,7 +19,7 @@
 #foreign fn isdigit		(i32 c) 										: i32 {}
 #foreign fn isspace		(i32 c) 										: i32 {}
 
-#foreign fn fseek		(u64* stream, i64 offset, int whence) 			: i32 {}
+#foreign fn fseek		(u64* stream, i64 offset, i32 whence) 			: i32 {}
 #foreign fn ftell		(u64* stream) : u64 {}
 #foreign fn fread		(u8 *ptr, u64 size, u64 nmemb, u64* stream) 	: u64 {}
 

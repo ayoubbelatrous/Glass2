@@ -502,6 +502,7 @@ namespace Glass
 	struct IRFunction : public IRInstruction {
 		u64 ID = 0;
 
+		TypeStorage* Overload = nullptr;
 		std::vector<IRSSA*> Arguments;
 		std::vector<IRInstruction*> Instructions;
 
@@ -560,6 +561,7 @@ namespace Glass
 	struct IRFunctionCall : public IRInstruction {
 		u64 ID = 0;
 		u64 FuncID = 0;
+		TypeStorage* Overload = nullptr;
 
 		std::vector<IRInstruction*> Arguments;
 

@@ -126,8 +126,8 @@ namespace Glass
 		IRInstruction* DeRefCodeGen(const DeRefNode* deRefNode);
 
 		IRSSAValue* GetExpressionByValue(const Expression* expr, IRSSAValue* generated_code = nullptr);
-		IRSSAValue* PassAsAny(const Expression* expr);
-		IRSSAValue* PassAsVariadicArray(u64 start, const std::vector<Expression*>& arguments, const ArgumentMetadata* decl_arg);
+		IRSSAValue* PassAsAny(const Expression* expr, IRSSAValue* pre_generated = nullptr);
+		IRSSAValue* PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRSSAValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg);
 		IRSSAValue* TypeExpressionCodeGen(TypeExpression* type_expr);
 		IRSSAValue* TypeValueCodeGen(TypeStorage* type);
 
@@ -135,30 +135,15 @@ namespace Glass
 		IRSSAValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
 		IRSSAValue* CreateConstantInteger(u64 integer_base_type, i64 value);
+		IRSSAValue* CreateConstant(u64 base_type, i64 value_integer, double value_float);
 
-		IRSSAValue* CreateConstant(u64 base_type, i64 value_integer, double value_float)
-		{
-			IRCONSTValue* Constant = IR(IRCONSTValue());
-
-			Constant->Type = base_type;
-
-			if (m_Metadata.GetTypeFlags(base_type) & FLAG_FLOATING_TYPE) {
-				memcpy(&Constant->Data, &value_float, sizeof(double));
-			}
-			else {
-				memcpy(&Constant->Data, &value_integer, sizeof(i64));
-			}
-
-			return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
-		}
+		IRSSAValue* CreateCopy(TypeStorage* type, IRSSAValue* loaded_value);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
 		IRSSA* CreateIRSSA();
 		IRSSAValue* CreateIRSSA(IRInstruction* value);
 		IRSSAValue* CreateIRSSA(IRInstruction* value, TypeStorage* semantic_type);
 		IRData* CreateIRData();
-
-		IRFunction* CreatePolyMorhOverload(u64 ID, const PolyMorphOverloads& overloads);
 
 		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
 

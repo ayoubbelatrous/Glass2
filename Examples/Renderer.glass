@@ -1,184 +1,11 @@
-fn GetShaderDataType(Type type) : ShaderDataType {
-	t := ShaderDataType.Invalid;
-	if type == f32 {
-		t = ShaderDataType.Float;
-	}
-	if type == vec2 {
-		t = ShaderDataType.Float2;
-	}
-	if type == vec3 {
-		t = ShaderDataType.Float3;
-	}
-	if type == vec4 {
-		t = ShaderDataType.Float4;
-	}
-	return t;
-}
-
-fn GetComponentCount(ShaderDataType shader_data_type) : u32 {
-	u32 component_type = 0;
-	if ShaderDataType.Float == shader_data_type {
-		component_type = 1;
-	}
-	if ShaderDataType.Float2 == shader_data_type {
-		component_type = 2;
-	}
-	if ShaderDataType.Float3 == shader_data_type {
-		component_type = 3;
-	}
-	if ShaderDataType.Float4 == shader_data_type {
-		component_type = 4;
-	}
-	return component_type;
-}
-
-fn BufferLayout_Create(Type type, u64 type_size)
-	: BufferLayout {
-
-	BufferLayout layout;
-
-	layout.elements.data = malloc(sizeof(VertexBufferElement) * 64);
-
-	struct_info := cast(TypeInfo_Struct*) type_info(type);
-
-	u64 i = 0;
-	u32 offset = 0;
-
-	while i < struct_info.member_count {
-
-		current := *struct_info.members;
-
-		element_type_type_info := type_info(current.type);
-
-		VertexBufferElement element;
-		element.type = GetShaderDataType(current.type);
-		element.offset = offset;
-
-		if element.type == ShaderDataType.Invalid {
-
-			print("Element of type '%' :: '%.%'\n",
-				element_type_type_info.name, struct_info.name, current.name);
-
-			assert(0," BufferLayout_Create() :: un-supported layout element type");
-		}
-
-		layout.elements[i] = element;
-
-		element_size := GetComponentCount(element.type) * 4;
-		offset = offset + element_size;
-
-		i = i + 1;
-	}
-
-	layout.elements.count = i;
-
-	layout.stride = offset;
-
-	return layout;
-}
-
-fn BufferLayout_Free(BufferLayout layout) {
-	free(layout.elements.data);
-	layout.elements.data = null;
-	layout.elements.count = 0;
-}
-
-fn VertexArray_Create() : VertexArray {
-
-	VertexArray va;
-
-	va.vertex_buffer_index 		= 0;
-	va.renderer_id				= 0;
-
-	glGenVertexArrays(1, &va.renderer_id);
-
-	if va.renderer_id == 0 {
-		assert(0, " :: VertexArray_Create() :: Failed to create gl VertexArray")
-	}
-
-	return va;
-}
-
-fn VertexBuffer_Create(void* data, u64 size) : VertexBuffer {
-
-	VertexBuffer vb;
-	vb.renderer_id = 0;
-	vb.size = size;
-
-	printf("Size :: %i\n", vb.size);
-
-	glGenBuffers(1, &vb.renderer_id);
-
-	if vb.renderer_id == 0 {
-		assert(0, " :: VertexBuffer_Create() :: Failed to create gl vertex buffer");
-	}
-
-	glNamedBufferData(vb.renderer_id, size, data, GL_DYNAMIC_DRAW);
-
-	return vb;
-}
-
-fn VertexArray_AddVertexBuffer(VertexArray* va, VertexBuffer* vb, BufferLayout* ly) {
-
-	glBindVertexArray(va.renderer_id);
-	glBindBuffer(GL_ARRAY_BUFFER, vb.renderer_id);
-
-	u64 i = 0;
-
-	while i < ly.elements.count {
-
-		element := ly.elements[i];
-
-		bool normalized = 0;
-
-		glEnableVertexAttribArray(va.vertex_buffer_index);
-
-		print("Test");
-
-		glVertexAttribPointer(
-			va.vertex_buffer_index,
-			GetComponentCount(element.type),
-			GL_FLOAT,
-			normalized,
-			ly.stride,
-			element.offset
-		);
-
-		//print("Elem :: \n%\n", element);
-
-		vertex_buffer_index = vertex_buffer_index + 1;
-		i = i + 1;
-	}
-
-	va.vertex_buffer = *vb;
-}
-
-fn VertexArray_Bind(VertexArray* va) {
-	glBindVertexArray(va.renderer_id);
-	glBindBuffer(GL_ARRAY_BUFFER, va.vertex_buffer.renderer_id);
-}
-
-fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Texture {
-	Texture t;
-
-	t.width 	= width;
-	t.height 	= height;
-	t.format 	= format;
-
-	return t;
-}
-
-fn _Vertex(vec3 pos) : Vertex {
-	Vertex v;
-	v.position = pos;
-	return v;
-}
-
-u64 R2D_QUAD_COUNT = 5000;
+u64 R2D_QUAD_COUNT 			= 5000;
+u64 R2D_VERTECIS_PER_QUAD 	= 4;
 
 fn Renderer2D_init(Renderer2D* r) {
 
-	u64 quad_buffer_size = 6 * sizeof(Vertex);
+	R2D_INDICES_COUNT := R2D_QUAD_COUNT * 6;
+
+	u64 quad_buffer_size = R2D_VERTECIS_PER_QUAD * sizeof(Vertex);
 	quad_buffer_size = quad_buffer_size * R2D_QUAD_COUNT;
 
 	r.quad_vertex_base = malloc(quad_buffer_size);
@@ -191,33 +18,46 @@ fn Renderer2D_init(Renderer2D* r) {
 
 	VertexArray_AddVertexBuffer(&r.quad_vertex_array, &r.quad_vertex_buffer, &quad_v_ly);
 
-	r.quad_vertices.data 	= malloc(6 * sizeof(Vertex));
-	r.quad_vertices.count 	= 6;
+	r.quad_vertices.data 	= malloc(R2D_VERTECIS_PER_QUAD * sizeof(vec4));
+	r.quad_vertices.count 	= R2D_VERTECIS_PER_QUAD;
 
-	f32 nh = -0.5;
+	r.quad_vertices[0] = Vec4(-0.5, 	-0.5, 	0.0, 	1.0);
+	r.quad_vertices[1] = Vec4(0.5, 		-0.5, 	0.0, 	1.0);
+	r.quad_vertices[2] = Vec4(0.5, 		0.5, 	0.0, 	1.0);
+	r.quad_vertices[3] = Vec4(-0.5, 	0.5, 	0.0, 	1.0);
 
-	r.quad_vertices[0] = _Vertex(Vec3(nh,	nh,0.0));
-	r.quad_vertices[1] = _Vertex(Vec3(0.5,	nh,0.0));
-	r.quad_vertices[2] = _Vertex(Vec3(nh,	0.5,0.0));
+	r.shader = Shader_Create("Examples/quad.glsl");
 
-	r.quad_vertices[3] = _Vertex(Vec3(0.5,	nh,0.0));
-	r.quad_vertices[4] = _Vertex(Vec3(nh,	0.5,0.0));
-	r.quad_vertices[5] = _Vertex(Vec3(0.5,	0.5,0.0));
+	u32[..] quadIndices;
+	quadIndices.data = malloc(R2D_INDICES_COUNT * sizeof(u32));
+	quadIndices.count = R2D_INDICES_COUNT;
+
+	u32 offset = 0;
+	u32 i = 0;
+
+	while i < cast(u32) R2D_INDICES_COUNT
+	{
+		quadIndices[(i + 0)] = offset + 0;
+		quadIndices[(i + 1)] = offset + 1;
+		quadIndices[(i + 2)] = offset + 2;
+		quadIndices[(i + 3)] = offset + 2;
+		quadIndices[(i + 4)] = offset + 3;
+		quadIndices[(i + 5)] = offset + 0;
+
+		offset = offset + 4;
+		i = i + 6;
+	}
+
+	r.quad_index_buffer = IndexBuffer_Create(quadIndices);
 }
 
 fn Renderer2D_flush(Renderer2D* r) {
 	//Draw
 
+	IndexBuffer_Bind(&r.quad_index_buffer);
 	VertexArray_Bind(&r.quad_vertex_array);
 
 	u64 buffer_size = r.vertex_count * sizeof(Vertex);
-
-	//glNamedBufferSubData(
-	//	r.quad_vertex_buffer.renderer_id,
-	//	0,
-	//	buffer_size,
-	//	r.quad_vertex_base
-	//);
 
 	glBufferSubData(
 		GL_ARRAY_BUFFER,
@@ -226,83 +66,47 @@ fn Renderer2D_flush(Renderer2D* r) {
 		r.quad_vertex_base
 	);
 
-	vtx_to_draw := cast(u32) r.vertex_count;
-	//print("vtx_to_draw :: %\n", vtx_to_draw);
+	Shader_Bind(&r.shader);
+	Shader_SetMat4(&r.shader, "u_ViewProjection", &r.projection);
 
-	glDrawArrays(GL_TRIANGLES, 0, vtx_to_draw);
+	//@Note we are not resetting the ssa counter after firstpass()
+
+	glDrawElements(GL_TRIANGLES, cast(u32) r.index_count, GL_UNSIGNED_INT, null);
 
 	r.quad_vertex_pointer = r.quad_vertex_base;
-	r.vertex_count = 0;
 
+	r.vertex_count = 0;
+	r.index_count = 0;
 }
 
 fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 
-	u32 i = 0;
-
 	Vertex* qvp = cast(Vertex*) r.quad_vertex_pointer;
 
-	while i < 6 {
+	for 0..R2D_VERTECIS_PER_QUAD
+	{
+		t := translation(Vec3(position.x + size.x * 0.5, -position.y - size.y * 0.5, 0.0));
+		s := scaling(Vec3(size.x, size.y, 1.0));
 
-		v := r.quad_vertices[i];
+		ts := s * t;
 
-		//@Fix currently the left type dominates inference switch to result of op if overloaded
-		//p := r.projection * v.position;
-		//vec2 p = r.projection * (v.position + position);
+		vec4 p = ts * r.quad_vertices[it_index];
 
-		mat4 transform = scaling(Vec3(size.x,size.y,0.0)) * translation(Vec3(position.x,-position.y,0.0));
+		vertex := _Vertex(Vec3(p.x, p.y, p.z));
 
-		vec3 p = transform * v.position;
-		p = r.projection * p;
-
-		//print("P :: %\n", p);
-		//print("Transform :: %\n", transform);
-
-		v.position = p;
-
-		*qvp = v;
-
-		i = i + 1;
+		*qvp = vertex;
 		qvp = &qvp[1];
 	}
 
-	quad_vertex_pointer = cast(void*) qvp;
-	r.vertex_count = r.vertex_count + 6;
+	r.quad_vertex_pointer = cast(void*) qvp;
+
+	r.vertex_count = r.vertex_count + R2D_VERTECIS_PER_QUAD;
+	r.index_count = r.index_count + 6;
 }
 
 fn Renderer2D_begin(Renderer2D* r, mat4 p) {
 	r.projection = p;
 }
-
-struct VertexBufferElement {
-	ShaderDataType type;
-	u32 offset;
-};
-
-struct BufferLayout {
-	VertexBufferElement[..] elements;
-	u32 stride;
-};
-
-struct VertexBuffer {
-	BufferLayout layout;
-	u32 renderer_id;
-	u64 size;
-};
-
-struct VertexArray {
-	VertexBuffer vertex_buffer;
-	u32	vertex_buffer_index;
-	u32 renderer_id;
-};
-
-struct Texture {
-	u32 renderer_id;
-
-	u32 width;
-	u32 height;
-	TextureFormat format;
-};
 
 struct Vertex {
 	vec3 position;
@@ -313,25 +117,21 @@ struct Renderer2D
 	void* 			quad_vertex_base;
 	void* 			quad_vertex_pointer;
 	u64 			vertex_count;
+	u64 			index_count;
 
 	VertexBuffer 	quad_vertex_buffer;
 	VertexArray 	quad_vertex_array;
+	IndexBuffer 	quad_index_buffer;
 
-	Vertex[..]  	quad_vertices;
+	vec4[..]  		quad_vertices;
 
 	mat4 			projection;
+
+	Shader shader;
 };
 
-enum ShaderDataType {
-	Invalid	;
-	Float	;
-	Float2	;
-	Float3	;
-	Float4	;
-};
-
-enum TextureFormat
-{
-	RGB8;
-	RGBA8;
-};
+fn _Vertex(vec3 pos) : Vertex {
+	Vertex v;
+	v.position = pos;
+	return v;
+}
