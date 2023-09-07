@@ -75,167 +75,39 @@ namespace Glass {
 
 	struct TypeSystem {
 
-		TypeSystem(const MetaData& metadata)
-			:m_Metadata(metadata)
-		{
-		}
+		TypeSystem(const MetaData& metadata);
 
-		static void Init(const MetaData& metadata) {
-			GS_CORE_ASSERT(!m_Instance);
-			m_Instance = new TypeSystem(metadata);
-		}
+		static void Init(const MetaData& metadata);
 
-		static TypeStorage* GetBasic(const std::string& type_name) {
+		static TypeStorage* GetBasic(const std::string& type_name);
 
-			u64 type_id = m_Instance->m_Metadata.GetType(type_name);
-			if (type_id == -1) {
-				return nullptr;
-			}
+		static TSPtr* GetPtr(TypeStorage* pointee, u32 indirection);
 
-			return GetBasic(type_id);
-		}
+		static TSDynArray* GetDynArray(TypeStorage* element);
 
-		static TSPtr* GetPtr(TypeStorage* pointee, u32 indirection) {
-			GS_CORE_ASSERT(indirection, "Cannot Have 0 Indirection");
-			GS_CORE_ASSERT(pointee);
+		static TypeStorage* GetBasic(u64 type_id);
 
-			u64 hash = PtrHash(pointee->Hash, indirection);
+		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type);
 
-			auto it = m_Instance->m_Types.find(hash);
+		static TypeStorage* GetVoid();
 
-			if (it != m_Instance->m_Types.end()) {
-				return (TSPtr*)it->second;
-			}
+		static TypeStorage* IncreaseIndirection(TypeStorage* type);
 
-			TSPtr* new_type = TYPE(TSPtr());
-			new_type->BaseID = pointee->BaseID;
-			new_type->Kind = TypeStorageKind::Pointer;
-			new_type->Hash = hash;
-			new_type->Pointee = pointee;
-			new_type->Indirection = indirection;
+		static TypeStorage* ReduceIndirection(TSPtr* pointer);
 
-			m_Instance->m_Types.emplace(hash, new_type);
-			return new_type;
-		}
+		static u16 IndirectionCount(TypeStorage* type);
 
-		static TSDynArray* GetDynArray(TypeStorage* element) {
+		static bool IsPointer(TypeStorage* type);
 
-			GS_CORE_ASSERT(element);
+		static bool IsArray(TypeStorage* type);
 
-			u64 hash = DynArrayHash(element->Hash);
+		static TypeStorage* GetArrayElementTy(TypeStorage* type);
 
-			auto it = m_Instance->m_Types.find(hash);
+		static std::unordered_map<u64, TypeStorage*>& GetTypeMap();
 
-			if (it != m_Instance->m_Types.end()) {
-				return (TSDynArray*)it->second;
-			}
+		static u64 GetTypeInfoIndex(TypeStorage* ts);
 
-			TSDynArray* new_type = TYPE(TSDynArray());
-			new_type->BaseID = element->BaseID;
-			new_type->Kind = TypeStorageKind::DynArray;
-			new_type->Hash = hash;
-			new_type->ElementType = element;
-
-			m_Instance->m_Types.emplace(hash, new_type);
-
-			return new_type;
-		}
-
-		static TypeStorage* GetBasic(u64 type_id) {
-			u64 hash = BasicTypeHash((u32)type_id);
-
-			auto it = m_Instance->m_Types.find(hash);
-
-			if (it != m_Instance->m_Types.end()) {
-				return it->second;
-			}
-
-			TypeStorage* new_type = TYPE(TypeStorage());
-			new_type->BaseID = (u32)type_id;
-			new_type->Kind = TypeStorageKind::Base;
-			new_type->Hash = hash;
-
-			m_Instance->m_Types.emplace(hash, new_type);
-
-			return new_type;
-		}
-
-		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type) {
-
-			u64 hash = FunctionArgumentsHash(arguments, return_type);
-
-			auto it = m_Instance->m_Types.find(hash);
-
-			if (it != m_Instance->m_Types.end()) {
-				return it->second;
-			}
-
-			TSFunc* new_type = TYPE(TSFunc());
-			new_type->BaseID = -1;
-			new_type->Kind = TypeStorageKind::Function;
-			new_type->Hash = hash;
-			new_type->Arguments = arguments;
-			new_type->ReturnType = return_type;
-
-			m_Instance->m_Types.emplace(hash, new_type);
-
-			return new_type;
-		}
-
-		static TypeStorage* GetVoid() {
-			return GetBasic(IR_void);
-		}
-
-		static TypeStorage* IncreaseIndirection(TypeStorage* type) {
-			if (type->Kind == TypeStorageKind::Pointer) {
-				return TypeSystem::GetPtr(((TSPtr*)type)->Pointee, ((TSPtr*)type)->Indirection + 1);
-			}
-			else {
-				return TypeSystem::GetPtr(type, 1);
-			}
-		}
-
-		static TypeStorage* ReduceIndirection(TSPtr* pointer) {
-			if (pointer->Indirection - 1 != 0) {
-				return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);
-			}
-			else {
-				return pointer->Pointee;
-			}
-		}
-
-		static u16 IndirectionCount(TypeStorage* type) {
-			if (type->Kind != TypeStorageKind::Pointer) {
-				return 0;
-			}
-			else {
-				return ((TSPtr*)type)->Indirection;
-			}
-		}
-
-		static bool IsPointer(TypeStorage* type) {
-			return type->Kind == TypeStorageKind::Pointer;
-		}
-
-		static bool IsArray(TypeStorage* type) {
-			return type->Kind == TypeStorageKind::DynArray;
-		}
-
-		static TypeStorage* GetArrayElementTy(TypeStorage* type) {
-			if (type->Kind == TypeStorageKind::DynArray) {
-				auto as_dyn_array = (TSDynArray*)type;
-				return as_dyn_array->ElementType;
-			}
-			return nullptr;
-		}
-
-		static std::unordered_map<u64, TypeStorage*>& GetTypeMap() {
-			return m_Instance->m_Types;
-		}
-
-		static u64 GetTypeInfoIndex(TypeStorage* ts) {
-			return std::distance(m_Instance->m_Types.begin(), m_Instance->m_Types.find(ts->Hash));
-		}
+		static bool StrictPromotion(TypeStorage* A, TypeStorage* B);
 
 	private:
 

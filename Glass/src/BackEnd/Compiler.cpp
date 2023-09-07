@@ -426,7 +426,7 @@ namespace Glass
 		metadata.Name = enmNode->Name;
 
 		u64 enum_id = GetEnumID();
-		u64 type_id = enum_id;
+		u64 type_id = GetTypeID();
 
 		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
 		EnumCodeGen(enmNode);
@@ -1059,13 +1059,14 @@ namespace Glass
 		//}
 
 
-		EnumMetadata metadata;
-		metadata.Name = enumNode->Name;
+		EnumMetadata* metadata = m_Metadata.GetEnum(enumNode->Name.Symbol);
 
-		u64 enum_id = m_Metadata.GetEnumID(enumNode->Name.Symbol);
+		if (metadata == nullptr) {
+			EnumMetadata new_enum;
+			new_enum.Name = enumNode->Name;
+			m_Metadata.RegisterEnum(GetEnumID(), type_id, new_enum);
 
-		if (type_id == NULL_ID) {
-			type_id = enum_id;
+			metadata = m_Metadata.GetEnum(enumNode->Name.Symbol);
 		}
 
 		u64 IOTA = 0;
@@ -1088,19 +1089,17 @@ namespace Glass
 				member_metadata.Value = IOTA;
 			}
 
-			if (metadata.GetMember(member_metadata.Name)) {
+			if (metadata->GetMember(member_metadata.Name)) {
 				MSG_LOC(enumNode);
 				MSG_LOC(identifier);
 				FMT_WARN("enum '{}' .member already declared before", enumNode->Name.Symbol);
 				return nullptr;
 			}
 
-			metadata.InsertMember(member_metadata.Name, member_metadata);
+			metadata->InsertMember(member_metadata.Name, member_metadata);
 
 			IOTA++;
 		}
-
-		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
 
 		return nullptr;
 	}
@@ -1982,14 +1981,56 @@ namespace Glass
 
 			if (compare_query != metadata->Signature) {
 
-				metadata = metadata->FindOverloadForCall(overload_query);
+				FunctionMetadata* overload_metadata = metadata->FindOverloadForCall(overload_query);
 
-				ir_call.Overload = metadata->Signature;
+				TSFunc* first_signature = (TSFunc*)metadata->Signature;
 
-				if (!metadata) {
+				FunctionMetadata* promotion = nullptr;
+
+				bool overloaded_call = true;
+
+				if (!overload_metadata) {
+					for (auto& [sig, func] : metadata->Overloads) {
+						if (sig->Arguments.size() == overload_query->Arguments.size()) {
+							bool promotable = true;
+							for (size_t i = 0; i < sig->Arguments.size(); i++)
+							{
+								bool check_result = TypeSystem::StrictPromotion(overload_query->Arguments[i], sig->Arguments[i]);
+								promotable = promotable && check_result;
+							}
+							if (promotable) {
+								promotion = &func;
+							}
+						}
+					}
+				}
+
+				if (compare_query->Arguments.size() == first_signature->Arguments.size()) {
+					bool promotable = true;
+					for (size_t i = 0; i < compare_query->Arguments.size(); i++)
+					{
+						bool check_result = TypeSystem::StrictPromotion(overload_query->Arguments[i], first_signature->Arguments[i]);
+						promotable = promotable && check_result;
+					}
+					if (promotable) {
+						promotion = metadata;
+						overloaded_call = false;
+					}
+				}
+
+				if (promotion) {
+					overload_metadata = promotion;
+				}
+
+				if (!overload_metadata) {
 					MSG_LOC(call);
 					FMT_WARN("function call to '{}', found no overload that could take: '{}'", call->Function.Symbol, PrintType(overload_query));
 					return nullptr;
+				}
+
+				metadata = overload_metadata;
+				if (overloaded_call) {
+					ir_call.Overload = metadata->Signature;
 				}
 			}
 		}
@@ -2048,7 +2089,7 @@ namespace Glass
 
 				if (decl_arg->Type->BaseID != IR_any && !decl_arg->Variadic)
 				{
-					bool type_mismatch = decl_arg->Type != type;
+					bool type_mismatch = !TypeSystem::StrictPromotion(decl_arg->Type, type);
 
 					if (type_mismatch)
 					{

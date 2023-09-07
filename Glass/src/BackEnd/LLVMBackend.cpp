@@ -128,6 +128,7 @@ namespace Glass
 			InsertLLVMDebugType(IR_bool, m_DBuilder->createBasicType("bool", 8, llvm::dwarf::DW_ATE_unsigned));
 
 			InsertLLVMDebugType(IR_int, m_DBuilder->createBasicType("int", 32, llvm::dwarf::DW_ATE_signed));
+			InsertLLVMDebugType(IR_float, m_DBuilder->createBasicType("float", 32, llvm::dwarf::DW_ATE_float));
 		}
 
 		//Opaque_Type = llvm::Type::getInt8PtrTy(*m_LLVMContext);
@@ -707,7 +708,6 @@ namespace Glass
 		if (func->Overload) {
 			func_metadata = &func_metadata->GetOverload((TSFunc*)func->Overload);
 		}
-
 
 		std::vector<llvm::Type*> Parameters;
 

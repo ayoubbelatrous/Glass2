@@ -44,6 +44,8 @@ fn start() {
 
 fn update() {
 
+	print("Vec3: %\n", Vec3(10.0));
+
 	f32 width 		= cast(f32) a.WindowWidth;
 	f32 height 		= cast(f32) a.WindowHeight;
 
@@ -86,18 +88,7 @@ fn key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : voi
 i32 GLFW_CONTEXT_VERSION_MAJOR = 139266;
 i32 GLFW_CONTEXT_VERSION_MINOR = 139267;
 
-fn test() {
-	print("A\n");
-}
-
-fn test(i32 arg) {
-	print("B %\n",arg);
-}
-
 fn main() : i32 {
-
-	test();
-	test(1);
 
 	a.running = 1;
 
@@ -115,8 +106,7 @@ fn main() : i32 {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-	GLFWwindow* window
-		= glfwCreateWindow(a.WindowWidth, a.WindowHeight, "A Window", null, null);
+	GLFWwindow* window = glfwCreateWindow(a.WindowWidth, a.WindowHeight, "A Window", null, null);
 
 	glfwSetKeyCallback(window, key_cb);
 	glfwSetWindowSizeCallback(window, resize_cb);

@@ -766,5 +766,15 @@ namespace Glass {
 
 			return nullptr;
 		}
+
+		EnumMetadata* GetEnum(const std::string& name) {
+			auto it = m_EnumNames.find(name);
+
+			if (it != m_EnumNames.end()) {
+				return &m_Enums.at(it->second);
+			}
+
+			return nullptr;
+		}
 	};
 }
