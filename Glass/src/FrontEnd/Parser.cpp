@@ -268,6 +268,24 @@ namespace Glass
 				continue;
 			}
 
+			if (tk_type == TokenType::Dollar) {
+
+				Consume();
+
+				if (current) {
+					Abort("Unexpected $");
+				}
+
+				current = (TypeExpression*)ParseTypeExpr();
+
+				auto dollar = AST(TypeExpressionDollar());
+
+				dollar->TypeName = current;
+				current = dollar;
+
+				continue;
+			}
+
 			if (tk_type == TokenType::OpenBracket) {
 
 				Consume();

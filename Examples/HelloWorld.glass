@@ -36,10 +36,10 @@ struct stbtt__buf
 struct stbtt_fontinfo
 {
 	void* 	userdata;
-	void* 	data; // pointer to .ttf file
-	i32 	fontstart;       // offset of start of font
+	void* 	data;		// pointer to .ttf file
+	i32 	fontstart;	// offset of start of font
 
-	i32 numGlyphs; // number of glyphs, needed for range checking
+	i32 numGlyphs;		// number of glyphs, needed for range checking
 
 	// table locations as offset from start of .ttf
 	i32 loca;
@@ -52,8 +52,8 @@ struct stbtt_fontinfo
 	i32 svg;
 	/////////////////////////////
 
-	i32 index_map;                                     // a cmap mapping for our chosen character encoding
-	i32 indexToLocFormat;                              // format needed to map from glyph index to glyph
+	i32 index_map;			// a cmap mapping for our chosen character encoding
+	i32 indexToLocFormat;	// format needed to map from glyph index to glyph
 
 	stbtt__buf cff;         // cff font data
 	stbtt__buf charstrings; // the charstring index
@@ -148,20 +148,6 @@ i32 GLFW_CONTEXT_VERSION_MINOR = 139267;
 
 fn main() : i32 {
 
-	u32[..] atlas_data;
-	atlas_data.data = malloc(10 * sizeof(i32));
-	atlas_data.count = 10;
-
-	atlas_data[0] = 50;
-	atlas_data[1] = 500;
-	atlas_data[2] = 5000;
-	atlas_data[3] = 50000;
-
-	for atlas_data {
-		print("Data: %,%\n", it_index, it);
-		it = 60;
-	}
-
 	a.running = 1;
 
 	i32 init_result = glfwInit();
@@ -178,7 +164,7 @@ fn main() : i32 {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-	GLFWwindow* window = glfwCreateWindow(a.WindowWidth, a.WindowHeight, "A Window", null, null);
+	GLFWwindow* window = glfwCreateWindow(a.WindowWidth, a.WindowHeight, "Editor", null, null);
 
 	glfwSetKeyCallback(window, key_cb);
 	glfwSetWindowSizeCallback(window, resize_cb);

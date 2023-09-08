@@ -360,6 +360,8 @@ namespace Glass
 
 		std::vector<ArgumentMetadata> arguments;
 
+		bool poly_morphic = false;
+
 		for (const Statement* a : fnNode->GetArgList()->GetArguments())
 		{
 			const ArgumentNode* decl_arg = (ArgumentNode*)a;
@@ -367,6 +369,10 @@ namespace Glass
 			ArgumentMetadata argument;
 			argument.Name = decl_arg->Symbol.Symbol;
 			argument.Type = TypeExpressionGetType(decl_arg->Type);
+
+			if (argument.Type->Kind == TypeStorageKind::Poly) {
+				poly_morphic = poly_morphic && true;
+			}
 
 			arguments.push_back(argument);
 		}
@@ -3265,6 +3271,18 @@ namespace Glass
 			type = TypeSystem::GetPtr(type, indirection);
 		}
 
+		if (type_expr->GetType() == NodeType::TE_Dollar) {
+
+			TypeExpressionDollar* dollar_expression = (TypeExpressionDollar*)type_expr;
+
+			GS_CORE_ASSERT(dollar_expression->TypeName);
+			GS_CORE_ASSERT(dollar_expression->TypeName->GetType() == NodeType::TE_TypeName);
+
+			auto& name = ((TypeExpressionTypeName*)dollar_expression->TypeName)->Symbol.Symbol;
+
+			type = TypeSystem::GetPoly(name);
+		}
+
 		return type;
 	}
 
@@ -3284,7 +3302,6 @@ namespace Glass
 
 		return legacy;
 	}
-
 
 	TypeStorage* Compiler::LegacyToTS(const Glass::Type& type)
 	{

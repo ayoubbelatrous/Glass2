@@ -1,12 +1,2 @@
-
-#load "Print.glass"
-#load "C.glass"
-
-fn main() : i32 {
-
-	i32 data = 500;
-
-	print("I: %", data);
-
-	return 0;
+fn test($T integer) {
 }

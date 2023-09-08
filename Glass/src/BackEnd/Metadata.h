@@ -173,53 +173,6 @@ namespace Glass {
 		u64 ID;
 	};
 
-	struct PolyMorphOverloads
-	{
-		std::vector<std::pair<PolyMorphicType, Type>> TypeArguments;
-
-		bool operator==(const PolyMorphOverloads& other) const
-		{
-			if (other.TypeArguments.size() != other.TypeArguments.size())
-				return false;
-
-			for (size_t i = 0; i < other.TypeArguments.size(); i++)
-			{
-				const auto& [other_a, other_b] = other.TypeArguments[i];
-				const auto& [a, b] = TypeArguments[i];
-
-				if (a.ID != other_a.ID) {
-					return false;
-				}
-
-				if (b.ID != other_b.ID) {
-					return false;
-				}
-
-				if (b.Pointer != other_b.Pointer) {
-					return false;
-				}
-
-				if (b.Array != other_b.Array) {
-					return false;
-				}
-			}
-
-			return true;
-		}
-	};
-
-	struct PolyMorphOverloadsHasher
-	{
-		std::size_t operator()(const PolyMorphOverloads& key) const {
-			size_t hash = 0;
-			for (const auto& [T, arg] : key.TypeArguments) {
-				size_t a = arg.ID + arg.Array + (u64)arg.Pointer;
-				hash += a / 3;
-			}
-			return hash;
-		}
-	};
-
 	struct FunctionMetadata
 	{
 		Token Symbol;
@@ -234,58 +187,18 @@ namespace Glass {
 		std::map<TSFunc*, FunctionMetadata> Overloads;
 		std::map<TSFunc*, FunctionMetadata*> OverloadsArgLookUp;
 
-		bool IsOverloaded() const {
-			return Overloads.size() != 0;
-		}
-
+		////////////////////////////////////////////////////////////
+		///OVER LOADING/////////////////////////////////
+		bool IsOverloaded() const;
 		void AddOverload(const FunctionMetadata& function);
-
-		FunctionMetadata* FindOverload(TSFunc* signature) {
-			GS_CORE_ASSERT(signature);
-
-			auto it = Overloads.find(signature);
-
-			if (it == Overloads.end()) {
-				return nullptr;
-			}
-			else {
-				return &it->second;
-			}
-		}
-
+		FunctionMetadata* FindOverload(TSFunc* signature);
 		//signature return type assumed to be void for this to work
-		FunctionMetadata* FindOverloadForCall(TSFunc* signature) {
-			GS_CORE_ASSERT(signature);
-
-			auto it = OverloadsArgLookUp.find(signature);
-
-			if (it == OverloadsArgLookUp.end()) {
-				return nullptr;
-			}
-			else {
-				return it->second;
-			}
-		}
-
-		FunctionMetadata& GetOverload(TSFunc* signature) {
-			GS_CORE_ASSERT(signature, "signature is null");
-			return Overloads.at(signature);
-		}
-
-		const FunctionMetadata& GetOverload(TSFunc* signature) const {
-			GS_CORE_ASSERT(signature);
-			return Overloads.at(signature);
-		}
-
-		const ArgumentMetadata* GetArgument(u64 i) const
-		{
-			if (i > Arguments.size() - 1) {
-				return nullptr;
-			}
-			else {
-				return &Arguments[i];
-			}
-		}
+		FunctionMetadata* FindOverloadForCall(TSFunc* signature);
+		FunctionMetadata& GetOverload(TSFunc* signature);
+		const FunctionMetadata& GetOverload(TSFunc* signature) const;
+		////////////////////////////////////////////////////////////
+		const ArgumentMetadata* GetArgument(u64 i) const;
+		////////////////////////////////////////////////////////////
 	};
 
 	struct OperatorQuery

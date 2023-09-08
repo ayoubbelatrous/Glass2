@@ -32,6 +32,11 @@ namespace Glass {
 		}
 	}
 
+	bool FunctionMetadata::IsOverloaded() const
+	{
+		return Overloads.size() != 0;
+	}
+
 	void FunctionMetadata::AddOverload(const FunctionMetadata& function)
 	{
 		GS_CORE_ASSERT(function.Signature, "function.Signature is null");
@@ -42,4 +47,55 @@ namespace Glass {
 
 		OverloadsArgLookUp[arguments_only_type] = &Overloads[(TSFunc*)function.Signature];
 	}
+
+	FunctionMetadata* FunctionMetadata::FindOverload(TSFunc* signature)
+	{
+		GS_CORE_ASSERT(signature);
+
+		auto it = Overloads.find(signature);
+
+		if (it == Overloads.end()) {
+			return nullptr;
+		}
+		else {
+			return &it->second;
+		}
+	}
+
+	FunctionMetadata* FunctionMetadata::FindOverloadForCall(TSFunc* signature)
+	{
+		GS_CORE_ASSERT(signature);
+
+		auto it = OverloadsArgLookUp.find(signature);
+
+		if (it == OverloadsArgLookUp.end()) {
+			return nullptr;
+		}
+		else {
+			return it->second;
+		}
+	}
+
+	FunctionMetadata& FunctionMetadata::GetOverload(TSFunc* signature)
+	{
+		GS_CORE_ASSERT(signature, "signature is null");
+		return Overloads.at(signature);
+	}
+
+	const FunctionMetadata& FunctionMetadata::GetOverload(TSFunc* signature) const
+	{
+		GS_CORE_ASSERT(signature);
+		return Overloads.at(signature);
+	}
+
+	const ArgumentMetadata* FunctionMetadata::GetArgument(u64 i) const
+	{
+		if (i > Arguments.size() - 1) {
+			return nullptr;
+		}
+		else {
+			return &Arguments[i];
+		}
+	}
+
 }

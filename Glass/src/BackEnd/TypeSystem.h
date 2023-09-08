@@ -13,6 +13,8 @@ namespace Glass {
 		DynArray,
 
 		Function,
+
+		Poly,
 	};
 
 	//Basic-Types-----------------------------------------//////////////////
@@ -42,6 +44,10 @@ namespace Glass {
 	struct TSFunc : public TypeStorage {
 		TypeStorage* ReturnType = nullptr;
 		std::vector<TypeStorage*> Arguments;
+	};
+
+	struct TSPoly : public TypeStorage {
+		std::string Name;
 	};
 	//////////////////////////////////////////////////////////////////////////
 
@@ -73,6 +79,10 @@ namespace Glass {
 		}
 	}
 
+	inline u64 PolyMorphicTypeHash(const std::string& name) {
+		return Combine2Hashes(std::hash<std::string>{}(name), std::hash<std::string>{}("$$$"));
+	}
+
 	struct TypeSystem {
 
 		TypeSystem(const MetaData& metadata);
@@ -86,6 +96,8 @@ namespace Glass {
 		static TSDynArray* GetDynArray(TypeStorage* element);
 
 		static TypeStorage* GetBasic(u64 type_id);
+
+		static TypeStorage* GetPoly(const std::string& name);
 
 		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type);
 

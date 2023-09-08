@@ -20,6 +20,8 @@ namespace Glass
 		TE_Pointer,
 		TE_Array,
 
+		TE_Dollar,
+
 		TE_Func,
 
 		Scope,
@@ -301,6 +303,25 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return ElementType->GetLocation();
+		}
+	};
+
+	class TypeExpressionDollar : public TypeExpression
+	{
+	public:
+
+		TypeExpression* TypeName = nullptr;
+
+		virtual NodeType GetType() const override {
+			return NodeType::TE_Dollar;
+		}
+
+		virtual std::string ToString() const {
+			return "";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return TypeName->GetLocation();
 		}
 	};
 

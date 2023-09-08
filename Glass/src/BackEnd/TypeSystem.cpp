@@ -65,6 +65,26 @@ namespace Glass {
 		return GetBasic(type_id);
 	}
 
+	TypeStorage* TypeSystem::GetPoly(const std::string& name) {
+
+		u64 hash = PolyMorphicTypeHash(name);
+
+		auto it = m_Instance->m_Types.find(hash);
+
+		if (it != m_Instance->m_Types.end()) {
+			return it->second;
+		}
+
+		TSPoly* new_type = TYPE(TSPoly());
+		new_type->BaseID = -1;
+		new_type->Kind = TypeStorageKind::Poly;
+		new_type->Hash = hash;
+
+		m_Instance->m_Types.emplace(hash, new_type);
+
+		return new_type;
+	}
+
 	TSPtr* TypeSystem::GetPtr(TypeStorage* pointee, u32 indirection)
 	{
 		GS_CORE_ASSERT(indirection, "Cannot Have 0 Indirection");

@@ -429,15 +429,19 @@ namespace Glass
 
 			u64 struct_id = m_Metadata->GetStructIDFromType(typeinfo->BaseID);
 
-			bool function_ptr = false;
+			bool skip = false;
 
 			if (typeinfo->Kind == TypeStorageKind::Pointer) {
 				if (((TSPtr*)typeinfo)->Pointee->Kind == TypeStorageKind::Function) {
-					function_ptr = true;
+					skip = true;
 				}
 			}
 
-			if (typeinfo->Kind == TypeStorageKind::Function || function_ptr) {
+			if (typeinfo->Kind == TypeStorageKind::Poly) {
+				skip = true;
+			}
+
+			if (typeinfo->Kind == TypeStorageKind::Function || skip) {
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),

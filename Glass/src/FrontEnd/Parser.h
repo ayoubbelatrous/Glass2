@@ -23,12 +23,7 @@ namespace Glass
 		Statement* ParseFor();
 
 		Statement* ParseTypeExpr();
-
 		Statement* ParseFuncTypeExpr();
-
-		Statement* ParseTypeExprName();
-		Statement* ParseTypeExprPointer();
-		Statement* ParseTypeExprArray();
 
 		Statement* ParseScope();
 		Statement* ParseArgument();
