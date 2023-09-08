@@ -370,9 +370,7 @@ namespace Glass
 			argument.Name = decl_arg->Symbol.Symbol;
 			argument.Type = TypeExpressionGetType(decl_arg->Type);
 
-			if (argument.Type->Kind == TypeStorageKind::Poly) {
-				poly_morphic = poly_morphic && true;
-			}
+			poly_morphic |= argument.Type->Kind == TypeStorageKind::Poly;
 
 			arguments.push_back(argument);
 		}
@@ -388,6 +386,8 @@ namespace Glass
 		metadata.HasBody = false;
 		metadata.ReturnType = return_type;
 		metadata.Symbol = fnNode->Symbol;
+		metadata.PolyMorphic = poly_morphic;
+		metadata.Ast = fnNode;
 
 		if (previous == nullptr) {
 			m_Metadata.RegisterFunction(GetFunctionID(), metadata);
@@ -669,6 +669,15 @@ namespace Glass
 	{
 		ResetSSAIDCounter();
 
+		IRFunction* IRF = IR(IRFunction());
+
+		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
+		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
+
+		if (metadata->PolyMorphic) {
+			return nullptr;
+		}
+
 		TypeStorage* return_type;
 		return_type = TypeSystem::GetBasic(IR_void);
 
@@ -687,11 +696,6 @@ namespace Glass
 
 		std::vector<ArgumentMetadata> args_metadata;
 
-		IRFunction* IRF = IR(IRFunction());
-
-		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
-		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
-
 		PoPIRSSA();
 
 		//////////////////////////////////////////////////////////////////////////
@@ -701,7 +705,6 @@ namespace Glass
 
 		for (auto a : fnNode->GetArgList()->GetArguments())
 		{
-
 			IRSSA* arg_ssa = IR(IRSSA());
 			arg_ssa->ID = m_SSAIDCounter;
 
@@ -2029,6 +2032,10 @@ namespace Glass
 			return nullptr;
 		}
 
+		if (metadata->PolyMorphic) {
+			CallPolyMorphicFunction(call);
+		}
+
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
 
@@ -2232,6 +2239,29 @@ namespace Glass
 		}
 	}
 
+	IRInstruction* Compiler::CallPolyMorphicFunction(const FunctionCall* call)
+	{
+		u64 function_id = m_Metadata.GetFunctionMetadata(call->Function.Symbol);
+		FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(function_id);
+
+		GS_CORE_ASSERT(metadata);
+
+		ASTCopier copier(metadata->Ast);
+		auto ast_copy = copier.Copy();
+
+		//Poly ast
+
+		//Generate function
+
+		//register function 
+
+		//check if function has already been poly morphed
+
+		//repeat
+
+		GS_CORE_ASSERT(0);
+		return nullptr;
+	}
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
 	{

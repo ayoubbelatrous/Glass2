@@ -184,6 +184,10 @@ namespace Glass {
 		bool Variadic = false;
 		bool Foreign = false;
 
+		bool PolyMorphic = false;
+
+		FunctionNode* Ast = nullptr;
+
 		std::map<TSFunc*, FunctionMetadata> Overloads;
 		std::map<TSFunc*, FunctionMetadata*> OverloadsArgLookUp;
 

@@ -100,6 +100,9 @@ namespace Glass
 		IRInstruction* BinaryExpressionCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* AssignmentCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
+
+		IRInstruction* CallPolyMorphicFunction(const FunctionCall* call);
+
 		IRInstruction* MemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* EnumMemberAccessCodeGen(const MemberAccess* memberAccess);
 		IRInstruction* SizeOfCodeGen(const SizeOfNode* size_of);

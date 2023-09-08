@@ -1,2 +1,7 @@
-fn test($T integer) {
+fn test($T integer, (int*[..]) pointer) {
+
+}
+
+fn main() {
+	test(10);
 }

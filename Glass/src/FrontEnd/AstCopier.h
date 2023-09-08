@@ -15,6 +15,7 @@ namespace Glass
 
 		Statement* CopyFunction(FunctionNode* func);
 		Statement* CopyScope(ScopeNode* scope);
+		Statement* CopyArgument(ArgumentNode* argument);
 		Statement* CopyArgumentList(ArgumentList* arg_list);
 		Statement* CopyVariable(VariableNode* var);
 
@@ -22,6 +23,7 @@ namespace Glass
 
 		Statement* CopyIf(IfNode* ifNode);
 		Statement* CopyWhile(WhileNode* whil);
+		Statement* CopyFor(ForNode* forNode);
 
 		Statement* CopyTypeOf(TypeOfNode* typeof);
 
@@ -32,6 +34,8 @@ namespace Glass
 		Statement* CopyCallExpr(FunctionCall* expr);
 		Statement* CopyTypeExpr(TypeExpression* expr);
 		Statement* CopyArrayAccess(ArrayAccess* expr);
+
+		Statement* CopyRange(RangeNode* expr);
 
 		Statement* CopyRef(RefNode* expr);
 		Statement* CopyDeRef(DeRefNode* expr);

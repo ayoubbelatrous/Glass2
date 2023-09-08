@@ -36,7 +36,6 @@ namespace Glass
 		case NodeType::TypeOf:
 			return CopyTypeOf((TypeOfNode*)stmt);
 			break;
-
 		case NodeType::ArgumentList:
 			return CopyArgumentList((ArgumentList*)stmt);
 			break;
@@ -46,22 +45,17 @@ namespace Glass
 		case NodeType::Scope:
 			return CopyScope((ScopeNode*)stmt);
 			break;
-
 		case NodeType::Variable:
 			return CopyVariable((VariableNode*)stmt);
 			break;
-
 		case NodeType::Return:
 			return CopyReturn((ReturnNode*)stmt);
 			break;
-
 		case NodeType::If:
 			return CopyIf((IfNode*)stmt);
 			break;
 		case NodeType::While:
 			return CopyWhile((WhileNode*)stmt);
-			break;
-		case NodeType::For:
 			break;
 		case NodeType::Break:
 		{
@@ -69,10 +63,22 @@ namespace Glass
 		}
 		break;
 
-		default:
-			return stmt;
+		case NodeType::Argument:
+			return CopyArgument((ArgumentNode*)stmt);
+			break;
+		case NodeType::TE_TypeName:
+		case NodeType::TE_Pointer:
+		case NodeType::TE_Array:
+		case NodeType::TE_Func:
+		case NodeType::TE_Dollar:
+			return CopyTypeExpr((TypeExpression*)stmt);
+			break;
+		case NodeType::For:
+			return CopyFor((ForNode*)stmt);
 			break;
 		}
+
+		GS_CORE_ASSERT(0, "Un-Reachable");
 
 		return nullptr;
 	}
@@ -100,6 +106,13 @@ namespace Glass
 		}
 
 		return new_scope;
+	}
+
+	Statement* ASTCopier::CopyArgument(ArgumentNode* argument)
+	{
+		ArgumentNode* copy = AST(*argument);
+		copy->Type = (TypeExpression*)CopyStatement(argument->Type);
+		return copy;
 	}
 
 	Statement* ASTCopier::CopyArgumentList(ArgumentList* arg_list)
@@ -149,10 +162,20 @@ namespace Glass
 	{
 		WhileNode* new_while = Application::AllocateAstNode(*whil);
 
-		new_while->Condition = (Expression*)CopyExpression(new_while->Condition);
-		new_while->Scope = (ScopeNode*)CopyStatement(new_while->Scope);
+		new_while->Condition = (Expression*)CopyExpression(whil->Condition);
+		new_while->Scope = (ScopeNode*)CopyStatement(whil->Scope);
 
 		return new_while;
+	}
+
+	Statement* ASTCopier::CopyFor(ForNode* forNode)
+	{
+		ForNode* new_for = AST(*forNode);
+
+		new_for->Condition = (Expression*)CopyExpression(forNode->Condition);
+		new_for->Scope = (ScopeNode*)CopyStatement(forNode->Scope);
+
+		return new_for;
 	}
 
 	Statement* ASTCopier::CopyTypeOf(TypeOfNode* typeof)
@@ -201,7 +224,13 @@ namespace Glass
 		case NodeType::Call:
 			return CopyCallExpr((FunctionCall*)expr);
 			break;
+		case NodeType::Range:
+			return CopyRange((RangeNode*)expr);
+			break;
 		}
+
+		GS_CORE_ASSERT(0, "Un-Reachable");
+
 		return nullptr;
 	}
 
@@ -240,7 +269,55 @@ namespace Glass
 
 	Statement* ASTCopier::CopyTypeExpr(TypeExpression* expr)
 	{
-		//return Application::AllocateAstNode(*expr);
+		NodeType node_type = expr->GetType();
+
+		switch (node_type) {
+		case NodeType::TE_TypeName: {
+			return AST(*(TypeExpressionTypeName*)expr);
+		}
+								  break;
+		case NodeType::TE_Dollar: {
+
+			TypeExpressionDollar* dollar = (TypeExpressionDollar*)expr;
+			auto copy = AST(*dollar);
+			copy->TypeName = (TypeExpression*)CopyStatement(dollar->TypeName);
+			return copy;
+		}
+								break;
+		case NodeType::TE_Pointer: {
+
+			TypeExpressionPointer* pointer = (TypeExpressionPointer*)expr;
+			auto copy = AST(*pointer);
+			copy->Pointee = (TypeExpression*)CopyStatement(pointer->Pointee);
+			return copy;
+		}
+								 break;
+		case NodeType::TE_Array: {
+
+			TypeExpressionArray* array = (TypeExpressionArray*)expr;
+			auto copy = AST(*array);
+			copy->ElementType = (TypeExpression*)CopyStatement(array->ElementType);
+			return copy;
+		}
+							   break;
+		case NodeType::TE_Func: {
+
+			TypeExpressionFunc* func = (TypeExpressionFunc*)expr;
+			auto copy = AST(*func);
+
+			u32 i = 0;
+			for (auto arg : func->Arguments) {
+				func->Arguments[i] = (TypeExpression*)CopyStatement(arg);
+				i++;
+			}
+
+			copy->ReturnType = (TypeExpression*)CopyStatement(func->ReturnType);
+			return copy;
+		}
+							  break;
+		}
+
+		GS_CORE_ASSERT(0);
 		return nullptr;
 	}
 
@@ -252,6 +329,14 @@ namespace Glass
 		new_expr->Index = (Expression*)CopyExpression(expr->Index);
 
 		return new_expr;
+	}
+
+	Statement* ASTCopier::CopyRange(RangeNode* range)
+	{
+		RangeNode* new_range = AST(*range);
+		new_range->Begin = (Expression*)CopyExpression(range->Begin);
+		new_range->End = (Expression*)CopyExpression(range->End);
+		return new_range;
 	}
 
 	Statement* ASTCopier::CopyRef(RefNode* expr)

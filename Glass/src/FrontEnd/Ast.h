@@ -773,7 +773,7 @@ namespace Glass
 		}
 
 		virtual std::string ToString() const {
-			return "if" + Condition->ToString();
+			return "while" + Condition->ToString();
 		}
 
 		virtual const Token& GetLocation() const override {
