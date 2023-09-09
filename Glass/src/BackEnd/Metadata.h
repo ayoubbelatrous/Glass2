@@ -186,6 +186,9 @@ namespace Glass {
 
 		bool PolyMorphic = false;
 
+		std::vector<IRFunction*> Instantiations;
+		std::map<u64, IRFunction*> PolyMotphicOverloads;
+
 		FunctionNode* Ast = nullptr;
 
 		std::map<TSFunc*, FunctionMetadata> Overloads;
@@ -202,6 +205,9 @@ namespace Glass {
 		const FunctionMetadata& GetOverload(TSFunc* signature) const;
 		////////////////////////////////////////////////////////////
 		const ArgumentMetadata* GetArgument(u64 i) const;
+		////////////////////////////////////////////////////////////
+		///Poly Morphism/////////////////////////////////
+
 		////////////////////////////////////////////////////////////
 	};
 

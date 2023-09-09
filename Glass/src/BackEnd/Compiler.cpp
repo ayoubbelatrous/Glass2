@@ -247,6 +247,7 @@ namespace Glass
 					LoadCodeGen((LoadNode*)stmt);
 				}
 			}
+
 			m_CurrentFile++;
 		}
 
@@ -2031,11 +2032,11 @@ namespace Glass
 			PushMessage(CompilerMessage{ fmt::format("trying to call a undefined function '{}'", call->Function.Symbol), MessageType::Warning });
 			return nullptr;
 		}
-
+#if 0
 		if (metadata->PolyMorphic) {
 			CallPolyMorphicFunction(call);
 		}
-
+#endif
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
 
@@ -2241,23 +2242,62 @@ namespace Glass
 
 	IRInstruction* Compiler::CallPolyMorphicFunction(const FunctionCall* call)
 	{
+		GS_CORE_ASSERT(0);
+
 		u64 function_id = m_Metadata.GetFunctionMetadata(call->Function.Symbol);
 		FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(function_id);
 
 		GS_CORE_ASSERT(metadata);
+		GS_CORE_ASSERT(metadata->PolyMorphic);
+
+		std::vector<IRSSAValue*> call_values;
+		std::vector<TypeStorage*> call_types;
+
+		for (auto arg : call->Arguments) {
+
+			auto argument_value = GetExpressionByValue(arg);
+
+			if (!argument_value)
+				return nullptr;
+
+			auto argument_type = m_Metadata.GetExprType(argument_value->SSA);
+
+			call_values.push_back(argument_value);
+			call_types.push_back(argument_type);
+		}
+
+		std::vector<TypeExpression*> caller_arguments;
+
+		for (auto t : call_types) {
+			auto te_result = TypeGetTypeExpression(t);
+			GS_CORE_ASSERT(te_result);
+			caller_arguments.push_back(te_result);
+		}
+
+		std::unordered_map<std::string, TypeExpression*> replacements;
+
+		u32 i = 0;
+		for (ArgumentMetadata& argument : metadata->Arguments) {
+			if (argument.Type->Kind == TypeStorageKind::Poly) {
+				TSPoly* poly_arg = (TSPoly*)argument.Type;
+				replacements[poly_arg->Name] = caller_arguments[i];
+			}
+			i++;
+		}
 
 		ASTCopier copier(metadata->Ast);
 		auto ast_copy = copier.Copy();
 
-		//Poly ast
+		ASTPolyMorpher poly_morpher(ast_copy, replacements);
+		poly_morpher.Poly();
 
-		//Generate function
+		GS_CORE_ASSERT(ast_copy->GetType() == NodeType::Function);
+		auto ast_as_function = (FunctionNode*)ast_copy;
 
-		//register function 
+		ast_as_function->Symbol.Symbol = ast_as_function->Symbol.Symbol + "poly";
 
-		//check if function has already been poly morphed
-
-		//repeat
+		HandleTopLevelFunction(ast_as_function);
+		IRFunction* ir_func = (IRFunction*)FunctionCodeGen(ast_as_function);
 
 		GS_CORE_ASSERT(0);
 		return nullptr;
@@ -3314,6 +3354,59 @@ namespace Glass
 		}
 
 		return type;
+	}
+
+	TypeExpression* Compiler::TypeGetTypeExpression(TypeStorage* type)
+	{
+		GS_CORE_ASSERT(type);
+
+		TypeStorageKind kind = type->Kind;
+
+		switch (kind) {
+		case TypeStorageKind::Base: {
+			TypeExpressionTypeName* type_name = AST(TypeExpressionTypeName());
+			type_name->Symbol.Symbol = m_Metadata.GetType(type->BaseID);
+			return type_name;
+		}
+								  break;
+		case TypeStorageKind::Pointer: {
+
+			TSPtr* as_pointer = (TSPtr*)type;
+
+			TypeExpressionPointer* pointer = AST(TypeExpressionPointer());
+			pointer->Indirection = TypeSystem::IndirectionCount(as_pointer);
+			pointer->Pointee = TypeGetTypeExpression(as_pointer->Pointee);
+
+			return pointer;
+		}
+									 break;
+		case TypeStorageKind::DynArray: {
+
+			TSDynArray* as_array = (TSDynArray*)type;
+			TypeExpressionArray* array = AST(TypeExpressionArray());
+			array->ElementType = TypeGetTypeExpression(as_array->ElementType);
+
+			return array;
+		}
+									  break;
+		case TypeStorageKind::Function: {
+
+			TSFunc* as_func = (TSFunc*)type;
+			TypeExpressionFunc* func = AST(TypeExpressionFunc());
+
+			for (auto arg : as_func->Arguments) {
+				func->Arguments.push_back(TypeGetTypeExpression(arg));
+			}
+
+			func->ReturnType = TypeGetTypeExpression(as_func->ReturnType);
+
+			return func;
+		}
+									  break;
+		}
+
+		GS_CORE_ASSERT(0);
+		return nullptr;
 	}
 
 	Glass::Type Compiler::TSToLegacy(TypeStorage* type)

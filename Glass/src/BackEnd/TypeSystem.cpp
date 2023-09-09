@@ -79,6 +79,7 @@ namespace Glass {
 		new_type->BaseID = -1;
 		new_type->Kind = TypeStorageKind::Poly;
 		new_type->Hash = hash;
+		new_type->Name = name;
 
 		m_Instance->m_Types.emplace(hash, new_type);
 

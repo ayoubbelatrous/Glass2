@@ -155,6 +155,7 @@ namespace Glass
 		IRData* CreateIRData();
 
 		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
+		TypeExpression* TypeGetTypeExpression(TypeStorage* type);
 
 		Glass::Type TSToLegacy(TypeStorage* type);
 		TypeStorage* LegacyToTS(const Glass::Type& type);

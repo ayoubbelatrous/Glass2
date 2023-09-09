@@ -30,6 +30,9 @@ namespace Glass {
 		if (type->Kind == TypeStorageKind::Base) {
 			return GetTypeSize(type->BaseID);
 		}
+
+		GS_CORE_ASSERT(0);
+		return -1;
 	}
 
 	bool FunctionMetadata::IsOverloaded() const

@@ -90,33 +90,22 @@ namespace Glass {
 		static void Init(const MetaData& metadata);
 
 		static TypeStorage* GetBasic(const std::string& type_name);
-
 		static TSPtr* GetPtr(TypeStorage* pointee, u32 indirection);
-
 		static TSDynArray* GetDynArray(TypeStorage* element);
-
 		static TypeStorage* GetBasic(u64 type_id);
-
 		static TypeStorage* GetPoly(const std::string& name);
-
 		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type);
-
 		static TypeStorage* GetVoid();
 
 		static TypeStorage* IncreaseIndirection(TypeStorage* type);
-
 		static TypeStorage* ReduceIndirection(TSPtr* pointer);
-
 		static u16 IndirectionCount(TypeStorage* type);
 
 		static bool IsPointer(TypeStorage* type);
-
 		static bool IsArray(TypeStorage* type);
-
 		static TypeStorage* GetArrayElementTy(TypeStorage* type);
 
 		static std::unordered_map<u64, TypeStorage*>& GetTypeMap();
-
 		static u64 GetTypeInfoIndex(TypeStorage* ts);
 
 		static bool StrictPromotion(TypeStorage* A, TypeStorage* B);

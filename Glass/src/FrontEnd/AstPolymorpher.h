@@ -7,7 +7,7 @@ namespace Glass
 	class ASTPolyMorpher
 	{
 	public:
-		ASTPolyMorpher(Statement* statement, std::unordered_map <std::string, std::string> replacements);
+		ASTPolyMorpher(Statement* statement, std::unordered_map<std::string, TypeExpression*> remplacements);
 
 		void Poly();
 
@@ -17,6 +17,7 @@ namespace Glass
 		void PolyScope(ScopeNode* scope);
 		void PolyArgumentList(ArgumentList* arg_list);
 		void PolyVariable(VariableNode* var);
+		void PolyArgument(ArgumentNode* argument);
 
 		void PolyReturn(ReturnNode* ret);
 
@@ -28,18 +29,20 @@ namespace Glass
 		void PolyBinaryExpression(BinaryExpression* binExpr);
 		void PolyMemberAccess(MemberAccess* expr);
 		void PolyCallExpr(FunctionCall* expr);
-		void PolyTypeExpr(TypeExpression* expr);
+		void PolyTypeExpr(TypeExpression** expr);
 		void PolyArrayAccess(ArrayAccess* expr);
+
+		void PolyTypeExpression(TypeExpression** type);
 
 		void PolyRef(RefNode* expr);
 		void PolyDeRef(DeRefNode* expr);
 
 	private:
 
-		void ReplaceIfMatch(std::string& str);
+		void ReplaceIfMatch(const std::string& selector, TypeExpression** type);
 
 		Statement* m_Statement;
-		std::unordered_map <std::string, std::string> m_Replacements;
+		std::unordered_map <std::string, TypeExpression*> m_Replacements;
 	};
 
 }

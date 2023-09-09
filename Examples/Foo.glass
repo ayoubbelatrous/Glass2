@@ -1,7 +1,6 @@
-fn test($T integer, (int*[..]) pointer) {
-
-}
+#load "Print.glass"
+#load "C.glass"
 
 fn main() {
-	test(10);
+	print("%", 10);
 }
