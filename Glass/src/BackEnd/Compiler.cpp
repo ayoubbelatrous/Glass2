@@ -861,15 +861,29 @@ namespace Glass
 
 		ResetLikelyConstantType();
 
+		TypeStorage* assignment_type = nullptr;
+
+		if (variableNode->Assignment) {
+			assignment_type = m_Metadata.GetExprType(value->SSA);
+		}
+
 		if (variableNode->Type == nullptr) {
-			TypeStorage* assignment_type = m_Metadata.GetExprType(value->SSA);
 			VariableType = assignment_type;
 		}
 
 		if (!VariableType) {
 			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
-			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type '@TODO'"), MessageType::Warning });
+			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type"), MessageType::Warning });
 			return nullptr;
+		}
+
+		if (variableNode->Assignment) {
+			if (!TypeSystem::StrictPromotion(assignment_type, VariableType)) {
+				MSG_LOC(variableNode->Assignment);
+				MSG_LOC(variableNode);
+				FMT_WARN("variable assigned to incompatible type: '{}' and the variable type is: '{}'", PrintType(assignment_type), PrintType(VariableType));
+				return nullptr;
+			}
 		}
 
 		auto alloca = IR(IRAlloca(VariableType));
@@ -1756,7 +1770,7 @@ namespace Glass
 
 					IRSSAValue* op_result = (IRSSAValue*)ExpressionCodeGen(AST(call));
 
-					m_Metadata.RegExprType(op_result->SSA, left_type);
+					m_Metadata.RegExprType(op_result->SSA, op_func_metadata->ReturnType);
 
 					return op_result;
 				}
@@ -1887,6 +1901,11 @@ namespace Glass
 		auto left = binaryExpr->Left;
 		auto right = binaryExpr->Right;
 
+		TypeStorage* right_type = nullptr;
+		TypeStorage* left_type = nullptr;
+
+		IRInstruction* result = nullptr;
+
 		if (left->GetType() == NodeType::Identifier)
 		{
 			Identifier* identifier_left = (Identifier*)binaryExpr->Left;
@@ -1896,27 +1915,34 @@ namespace Glass
 			if (symbol_type == SymbolType::None) {
 				MSG_LOC(binaryExpr);
 				FMT_WARN("undefined name: '{}'", identifier_left->Symbol.Symbol);
+				return nullptr;
 			}
 
 			if (symbol_type == SymbolType::GlobVariable)
 			{
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
+				if (!right_val) {
+					return nullptr;
+				}
+
+
 				u64 glob_id = m_Metadata.GetGlobalVariable(identifier_left->Symbol.Symbol);
 
 				auto ssa = CreateIRSSA();
 				ssa->Value = IR(IRGlobalAddress(glob_id));
 
-				auto type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
+				right_type = m_Metadata.GetExprType(right_val->SSA);
+				left_type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
 
 				IRStore* store = IR(IRStore());
 				{
 					store->Data = right_val;
 					store->AddressSSA = ssa->ID;
-					store->Type = type;
+					store->Type = left_type;
 				}
 
-				return store;
+				result = store;
 			}
 
 			if (symbol_type == SymbolType::Variable) {
@@ -1930,16 +1956,23 @@ namespace Glass
 
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
 
+				if (!right_val) {
+					return nullptr;
+				}
+
+				right_type = m_Metadata.GetExprType(right_val->SSA);
+				left_type = metadata->Tipe;
+
 				IRStore* store = IR(IRStore());
 				{
 					store->Data = right_val;
 					store->AddressSSA = var_ssa_id;
-					store->Type = metadata->Tipe;
+					store->Type = left_type;
 				}
 
 				ResetLikelyConstantType();
 
-				return store;
+				result = store;
 			}
 		}
 		if (left->GetType() == NodeType::MemberAccess)
@@ -1949,11 +1982,17 @@ namespace Glass
 			if (!member_access)
 				return nullptr;
 
-			TypeStorage* member_access_expr_type = m_Metadata.GetExprType(member_access->SSA);
+			left_type = m_Metadata.GetExprType(member_access->SSA);
 
-			SetLikelyConstantType(member_access_expr_type->BaseID);
+			SetLikelyConstantType(left_type->BaseID);
 
 			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+
+			if (!right_ssa) {
+				return nullptr;
+			}
+
+			right_type = m_Metadata.GetExprType(right_ssa->SSA);
 
 			if (!member_access || !right_ssa) {
 				return nullptr;
@@ -1963,12 +2002,12 @@ namespace Glass
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = member_access->SSA;
-				store->Type = member_access_expr_type;
+				store->Type = left_type;
 			}
 
 			ResetLikelyConstantType();
 
-			return store;
+			result = store;
 		}
 		if (left->GetType() == NodeType::ArrayAccess)
 		{
@@ -1981,13 +2020,16 @@ namespace Glass
 			if (!left_ssa)
 				return nullptr;
 
+			left_type = m_Metadata.GetExprType(left_ssa->SSA);
+			right_type = m_Metadata.GetExprType(right_ssa->SSA);
+
 			IRStore* store = IR(IRStore());
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = left_ssa->SSA;
-				store->Type = m_Metadata.GetExprType(right_ssa->SSA);
+				store->Type = right_type;
 			}
-			return store;
+			result = store;
 		}
 		if (left->GetType() == NodeType::DeReference)
 		{
@@ -1998,17 +2040,31 @@ namespace Glass
 				return nullptr;
 			}
 
-			auto expr_type = m_Metadata.GetExprType(right_ssa->SSA);
+			auto left_type_code_gen = m_Metadata.GetExprType(left_ssa->SSA);
+
+			left_type = TypeSystem::ReduceIndirection((TSPtr*)left_type_code_gen);
+			right_type = m_Metadata.GetExprType(right_ssa->SSA);
 
 			IRStore* store = IR(IRStore());
 			{
 				store->Data = right_ssa;
 				store->AddressSSA = left_ssa->SSA;
-				store->Type = expr_type;
+				store->Type = left_type_code_gen;
 			}
-			return store;
+			result = store;
 		}
-		return nullptr;
+
+		GS_CORE_ASSERT(left_type);
+		GS_CORE_ASSERT(right_type);
+		GS_CORE_ASSERT(result);
+
+		if (!TypeSystem::StrictPromotion(right_type, left_type)) {
+			MSG_LOC(binaryExpr);
+			FMT_WARN("incompatible types in assignment: '{}' = '{}'", PrintType(left_type), PrintType(right_type));
+			return nullptr;
+		}
+
+		return result;
 	}
 
 	IRInstruction* Compiler::FunctionCallCodeGen(const FunctionCall* call)
