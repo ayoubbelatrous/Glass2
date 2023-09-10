@@ -127,13 +127,13 @@ namespace Glass
 	private:
 
 		const Token& At(i64 ahead = 0) {
-			return m_File.GetToken(m_File.GetTokens()[m_Location + ahead]);
+			return m_File.GetTokens()[m_Location + ahead];
 		}
 
 		const Token& Consume() {
 			u64 loc = m_Location;
 			m_Location++;
-			return m_File.GetToken(m_File.GetTokens()[loc]);
+			return m_File.GetTokens()[loc];
 		}
 
 		bool ExpectedToken(TokenType Type, i64 ahead = 0) {

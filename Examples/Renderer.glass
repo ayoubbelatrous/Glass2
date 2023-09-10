@@ -1,6 +1,88 @@
 u64 R2D_QUAD_COUNT 			= 5000;
 u64 R2D_VERTECIS_PER_QUAD 	= 4;
 
+#foreign fn sqrt(f64 x) : f64 {};
+
+struct stbtt__buf
+{
+	void* data;
+	i32 cursor;
+	i32 size;
+};
+
+struct stbtt_fontinfo
+{
+	void* 	userdata;
+	void* 	data;		// pointer to .ttf file
+	i32 	fontstart;	// offset of start of font
+
+	i32 numGlyphs;		// number of glyphs, needed for range checking
+
+	// table locations as offset from start of .ttf
+	i32 loca;
+	i32 head;
+	i32 glyf;
+	i32 hhea;
+	i32 hmtx;
+	i32 kern;
+	i32 gpos;
+	i32 svg;
+	/////////////////////////////
+
+	i32 index_map;			// a cmap mapping for our chosen character encoding
+	i32 indexToLocFormat;	// format needed to map from glyph index to glyph
+
+	stbtt__buf cff;			// cff font data
+	stbtt__buf charstrings; // the charstring index
+	stbtt__buf gsubrs;      // global charstring subroutines index
+	stbtt__buf subrs;		// private charstring subroutines index
+	stbtt__buf fontdicts;	// array of font dicts
+	stbtt__buf fdselect;	// map from glyph to fontdict
+};
+
+#foreign fn stbtt_GetFontOffsetForIndex(u8* data, i32 index): i32 {};
+#foreign fn stbtt_InitFont(stbtt_fontinfo *info, u8* data, i32 offset) : i32 {};
+#foreign fn stbtt_GetCodepointBitmap(stbtt_fontinfo *info, f32 scale_x, f32 scale_y, i32* codepoint, i32* width, i32* height, i32* xoff, i32* yoff) : u8* {};
+
+struct stbtt_bakedchar
+{
+	// coordinates of bbox in bitmap
+	u16 x0;
+	u16 y0;
+	u16 x1;
+	u16 y1;
+   ////////////////////////////////
+   f32 xoff;
+   f32 yoff;
+   f32 xadvance;
+};
+
+struct stbtt_aligned_quad
+{
+   f32 x0;
+   f32 y0;
+   f32 s0;
+   f32 t0;
+
+   f32 x1;
+   f32 y1;
+   f32 s1;
+   f32 t1;
+};
+
+#foreign fn stbtt_BakeFontBitmap(u8* data, i32 offset,	// font location (use offset=0 for plain .ttf)
+f32 pixel_height,						// height of font in pixels
+u8* pixels, i32 pw, i32 ph,				// bitmap to be filled in
+i32 first_char, i32 num_chars,			// characters to bake
+stbtt_bakedchar* chardata) : i32{};		// you allocate this, it's num_chars long
+
+#foreign fn stbtt_GetBakedQuad(stbtt_bakedchar* chardata, i32 pw, i32 ph, // same data as above
+	i32 char_index,                                  // character to display
+	f32* xpos, f32* ypos,                        // pointers to current position in screen pixel space
+	stbtt_aligned_quad *q,                           // output: quad to draw
+	i32 opengl_fillrule) : void {}                           // true if opengl fill rule; false if DX9 or earlier
+
+
 fn Renderer2D_init(Renderer2D* r) {
 
 	R2D_INDICES_COUNT := R2D_QUAD_COUNT * 6;
@@ -18,6 +100,7 @@ fn Renderer2D_init(Renderer2D* r) {
 
 	VertexArray_AddVertexBuffer(&r.quad_vertex_array, &r.quad_vertex_buffer, &quad_v_ly);
 
+	//@Vertices
 	r.quad_vertices.data 	= malloc(R2D_VERTECIS_PER_QUAD * sizeof(vec4));
 	r.quad_vertices.count 	= R2D_VERTECIS_PER_QUAD;
 
@@ -25,6 +108,15 @@ fn Renderer2D_init(Renderer2D* r) {
 	r.quad_vertices[1] = Vec4(0.5, 		-0.5, 	0.0, 	1.0);
 	r.quad_vertices[2] = Vec4(0.5, 		0.5, 	0.0, 	1.0);
 	r.quad_vertices[3] = Vec4(-0.5, 	0.5, 	0.0, 	1.0);
+
+	//@UVs
+	r.texture_coords.data 	= malloc(R2D_VERTECIS_PER_QUAD * sizeof(vec2));
+	r.texture_coords.count 	= R2D_VERTECIS_PER_QUAD;
+
+	r.texture_coords[0] = Vec2(0.0, 0.0);
+	r.texture_coords[1] = Vec2(1.0, 0.0);
+	r.texture_coords[2] = Vec2(1.0, 1.0);
+	r.texture_coords[3] = Vec2(0.0, 1.0);
 
 	r.shader = Shader_Create("Examples/quad.glsl");
 
@@ -50,48 +142,48 @@ fn Renderer2D_init(Renderer2D* r) {
 
 	r.quad_index_buffer = IndexBuffer_Create(quadIndices);
 
-
 	stbtt_fontinfo font_info;
 
-	font_file := open_file("C://Windows/Fonts/Arial.ttf", File_Open_Mode.Read);
+	font_file := open_file("C://Windows/Fonts/CascadiaCode.ttf", File_Open_Mode.Read);
+
 	font_file_contents := read_entire_file(font_file);
 	close_file(font_file);
 
 	i32 font_result = stbtt_InitFont(&font_info, cast(u8*) font_file_contents.data, stbtt_GetFontOffsetForIndex(cast(u8*)font_file_contents.data,0));
 
-	u64 width  =	512;
-	u64 height =	256;
+	f32 pixel_glyph_size = 64.0;
 
 	u64 start_char 	= 32;
 	u64 num_chars 	= 96;
 
+	u64 width  =	1024;
+	u64 height =	1024;
+
 	u8* bitmap = cast(u8*) malloc(width * height);
 
-	stbtt_bakedchar* chars
-		= cast(stbtt_bakedchar*) malloc(num_chars * sizeof(stbtt_bakedchar));
+	r.chars.data = malloc(num_chars * sizeof(stbtt_bakedchar));
+	r.chars.count = num_chars;
 
 	i32 bake_result = stbtt_BakeFontBitmap(cast(u8*) font_file_contents.data, 0,
-			12.0,
+			pixel_glyph_size,
 			bitmap, cast(i32) width, cast(i32) height,
 			cast(i32) start_char, cast(i32) num_chars,
-			chars
+			cast(stbtt_bakedchar*) r.chars.data
 		);
 
 	print("Bake Result: %\n", bake_result);
 
 	u8[..] atlas_data;
-	atlas_data.data = malloc(width * height * 3);
+	atlas_data.data = malloc(width * height);
 	atlas_data.count = width * height;
 
 	for 0..width * height {
 		atlas_data[it_index] = bitmap[it_index];
-		atlas_data[(it_index + 1)] = bitmap[it_index];
-		atlas_data[(it_index + 2)] = bitmap[it_index];
 	}
 
-	r.font_atlas = Texture_Create(cast(u32) width, cast(u32) height, atlas_data, TextureFormat.RGB8);
+	r.font_atlas = Texture_Create(cast(u32) width, cast(u32) height, atlas_data, TextureFormat.R8);
 
-	Texture_Bind(&r.font_atlas);
+	//print("Font Info: % \n", font_info);
 }
 
 fn Renderer2D_flush(Renderer2D* r) {
@@ -109,11 +201,11 @@ fn Renderer2D_flush(Renderer2D* r) {
 		r.quad_vertex_base
 	);
 
+	Texture_Bind(&r.font_atlas);
+
 	Shader_Bind(&r.shader);
 	Shader_SetMat4(&r.shader, "u_ViewProjection", &r.projection);
 	Shader_SetInt(&r.shader, "u_Tex", 0);
-
-	//@Note we are not resetting the ssa counter after firstpass()
 
 	glDrawElements(GL_TRIANGLES, cast(u32) r.index_count, GL_UNSIGNED_INT, null);
 
@@ -123,7 +215,7 @@ fn Renderer2D_flush(Renderer2D* r) {
 	r.index_count = 0;
 }
 
-fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
+fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size, vec2[..] uvs) {
 
 	Vertex* qvp = cast(Vertex*) r.quad_vertex_pointer;
 
@@ -136,7 +228,7 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 
 		vec4 p = ts * r.quad_vertices[it_index];
 
-		vertex := _Vertex(Vec3(p.x, p.y, p.z));
+		vertex := _Vertex(Vec3(p.x, p.y, p.z), uvs[it_index]);
 
 		*qvp = vertex;
 		qvp = &qvp[1];
@@ -148,12 +240,82 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 	r.index_count = r.index_count + 6;
 }
 
+fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
+	Renderer2D_draw_quad(r, position, size, r.texture_coords);
+}
+
+fn Renderer2D_draw_text(Renderer2D* r, u8[..] text) {
+
+	f32 x = 0.0;
+	f32 y = 150.0;
+
+	f32 size_x = 10.0;
+	f32 size_y = 10.0;
+
+	vec2[..] uvs;
+
+	uvs.data = malloc(4 * sizeof(vec2));
+	uvs.count = 4;
+
+	stbtt_bakedchar bq;
+
+	stbtt_bakedchar* chars = cast(stbtt_bakedchar*) r.chars.data;
+
+	f32 sc = 1.0;
+
+	for text {
+
+		u8 c = it;
+
+		bq = chars[(it - 32)];
+
+		stbtt_aligned_quad q;
+		stbtt_GetBakedQuad(cast(stbtt_bakedchar*) r.chars.data, 1024, 1024, cast(i32) it - 32, &x, &y, &q, 0);
+
+		size_x = (q.x1 - q.x0) * sc;
+		size_y = (q.y1 - q.y0) * sc;
+
+		uvs[3] = Vec2(q.s0, q.t0);
+		uvs[2] = Vec2(q.s1, q.t0);
+		uvs[1] = Vec2(q.s1, q.t1);
+		uvs[0] = Vec2(q.s0, q.t1);
+
+		f32 a_x = (x*sc) + bq.xoff * sc;
+		f32 a_y = (y*sc) + bq.yoff * sc;
+
+		Renderer2D_draw_quad(r, Vec2(a_x, a_y), Vec2(size_x, size_y), uvs);
+	}
+
+	//assert(0,"");
+}
+
 fn Renderer2D_begin(Renderer2D* r, mat4 p) {
 	r.projection = p;
 }
 
 struct Vertex {
 	vec3 position;
+	vec2 texture_coords;
+};
+
+struct Font {
+	stbtt_bakedchar[..] chars;
+	stbtt_fontinfo* 	font_info;
+	Texture 			font_atlas;
+};
+
+struct Renderer2DPass {
+	void* 			vertex_base;
+	void* 			vertex_pointer;
+
+	u64 			vertex_count;
+	u64 			index_count;
+
+	VertexBuffer 	vertex_buffer;
+	VertexArray 	vertex_array;
+	IndexBuffer 	index_buffer;
+
+	Type vertex_type;
 };
 
 struct Renderer2D
@@ -168,16 +330,21 @@ struct Renderer2D
 	IndexBuffer 	quad_index_buffer;
 
 	vec4[..]  		quad_vertices;
+	vec2[..]  		texture_coords;
 
 	mat4 			projection;
 
 	Shader 			shader;
 
+	Texture[..]		textures;
+
 	Texture 		font_atlas;
+	stbtt_bakedchar[..] chars;
 };
 
-fn _Vertex(vec3 pos) : Vertex {
+fn _Vertex(vec3 pos, vec2 uv) : Vertex {
 	Vertex v;
 	v.position = pos;
+	v.texture_coords = uv;
 	return v;
 }

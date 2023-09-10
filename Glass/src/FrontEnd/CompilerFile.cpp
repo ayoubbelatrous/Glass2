@@ -26,23 +26,19 @@ namespace Glass {
 
 	void CompilerFile::SetTokens(const std::vector<Token>& tokens)
 	{
-		u64 token_counter = 0;
-
 		for (const Token& tk : tokens) {
-			token_counter++;
-			m_TokenIDs.push_back(token_counter);
-			m_Tokens.emplace(token_counter, tk);
+			m_Tokens.push_back(tk);
 		}
 	}
 
 	const Token& CompilerFile::GetToken(u64 id) const
 	{
-		return m_Tokens.at(id);
+		return m_Tokens[id];
 	}
 
-	const std::vector<u64>& CompilerFile::GetTokens() const
+	const std::vector<Glass::Token>& CompilerFile::GetTokens() const
 	{
-		return m_TokenIDs;
+		return m_Tokens;
 	}
 
 	void CompilerFile::SetAST(ModuleFile* ast) {

@@ -18,7 +18,7 @@ namespace Glass
 
 		void SetTokens(const std::vector<Token>& tokens);
 		const Token& GetToken(u64 id) const;
-		const std::vector<u64>& GetTokens() const;
+		const std::vector<Token>& GetTokens() const;
 
 		void SetAST(ModuleFile* ast);
 
@@ -31,8 +31,7 @@ namespace Glass
 		std::string m_Source = "";
 		fs_path m_Path = "";
 
-		std::map<u64, Token> m_Tokens;
-		std::vector<u64> m_TokenIDs;
+		std::vector<Token> m_Tokens;
 
 		ModuleFile* m_Ast = nullptr;
 	};

@@ -607,6 +607,8 @@ namespace Glass
 
 		Expression* Assignment = nullptr;
 
+		bool Constant = false;
+
 		virtual const Token& GetLocation() const override {
 			return Symbol;
 		}

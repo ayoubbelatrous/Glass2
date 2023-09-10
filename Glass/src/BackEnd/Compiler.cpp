@@ -9,6 +9,8 @@
 #include "FrontEnd/Parser.h"
 #include "FrontEnd/Lexer.h"
 
+#define UN_WRAP(x) if ((x) == nullptr) {return nullptr;}
+
 #define NULL_ID (u64)-1
 #define MSG_LOC(x) PushMessage(CompilerMessage{ PrintTokenLocation((x->GetLocation())), MessageType::Error })
 #define AST_LOC(x) PrintTokenLocation((x->GetLocation()))
@@ -826,6 +828,10 @@ namespace Glass
 
 	IRInstruction* Compiler::VariableCodeGen(const VariableNode* variableNode)
 	{
+		if (variableNode->Constant) {
+			return ConstantCodeGen(variableNode);
+		}
+
 		if (ContextGlobal()) {
 			return GlobalVariableCodeGen(variableNode);
 		}
@@ -919,6 +925,60 @@ namespace Glass
 		}
 
 		return nullptr;
+	}
+
+	IRInstruction* Compiler::ConstantCodeGen(const VariableNode* variableNode)
+	{
+		auto previous_symbol_type = m_Metadata.GetSymbolType(variableNode->Symbol.Symbol);
+
+		if (previous_symbol_type != SymbolType::None) {
+			MSG_LOC(variableNode);
+			FMT_WARN("name of constant '{}' already taken", variableNode->Symbol.Symbol);
+		}
+
+		if (!variableNode->Assignment) {
+			MSG_LOC(variableNode);
+			FMT_WARN("expected constant '{}' to be assigned", variableNode->Symbol.Symbol);
+		}
+
+		IRInstruction* assignment = GetExpressionByValue(variableNode->Assignment);
+		UN_WRAP(assignment);
+
+		{
+			GS_CORE_ASSERT(assignment->GetType() == IRNodeType::SSAValue);
+			IRSSA* assignment_register = GetSSA(((IRSSAValue*)assignment)->SSA);
+
+			if (assignment_register->Value->GetType() != IRNodeType::ConstValue) {
+				MSG_LOC(variableNode->Assignment);
+				FMT_WARN("expected constant '{}' to be assigned to a constant value", variableNode->Symbol.Symbol);
+				FMT_WARN("NOTE: we currently only support numeric literals as constant assignments", variableNode->Symbol.Symbol);
+			}
+
+			assignment = assignment_register->Value;
+		}
+
+		TypeStorage* constant_type = TypeExpressionGetType(variableNode->Type);
+
+		if (!constant_type) {
+			MSG_LOC(variableNode->Assignment);
+			FMT_WARN("constant '{}' is of a un-known type", variableNode->Symbol.Symbol);
+		}
+
+		ConstantDecl constant;
+		constant.Name = variableNode->Symbol;
+		constant.Type = constant_type;
+		constant.Value = assignment;
+
+		m_Metadata.InsertConstant(variableNode->Symbol.Symbol, constant);
+
+		return nullptr;
+	}
+
+	IRInstruction* Compiler::ConstantValueCodeGen(const ConstantDecl* constant)
+	{
+		GS_CORE_ASSERT(constant);
+		GS_CORE_ASSERT(constant->Value);
+		return CreateIRSSA(constant->Value, constant->Type);
 	}
 
 	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode, bool foreign /*= false*/)
@@ -1367,6 +1427,10 @@ namespace Glass
 
 		IRSSAValue* expr_result = (IRSSAValue*)ExpressionCodeGen(expr);
 
+		if (!expr_result) {
+			return nullptr;
+		}
+
 		if (m_Metadata.GetExprType(expr_result->SSA)->Kind == TypeStorageKind::DynArray) {
 			return DynArrayIteratorCodeGen(expr, expr_result);
 		}
@@ -1543,6 +1607,9 @@ namespace Glass
 		}
 		else if (symbol_type == SymbolType::Type) {
 			return TypeValueCodeGen(TypeSystem::GetBasic(identifier->Symbol.Symbol));
+		}
+		else if (symbol_type == SymbolType::Constant) {
+			return ConstantValueCodeGen(m_Metadata.GetConstant(identifier->Symbol.Symbol));
 		}
 
 		return nullptr;
@@ -2997,10 +3064,6 @@ namespace Glass
 
 			auto expr_type = m_Metadata.GetExprType(ir_address->SSA);
 
-			if (TypeSystem::IsArray(expr_type)) {
-				return ir_address;
-			}
-
 			IRSSA* value_ssa = CreateIRSSA();
 
 			IRLoad load;
@@ -3085,6 +3148,9 @@ namespace Glass
 				m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
 
 				return IR(IRSSAValue(ssa->ID));
+			}
+			else if (symbol_type == SymbolType::Constant) {
+				return generated_code;
 			}
 			else {
 
@@ -3501,6 +3567,11 @@ namespace Glass
 	{
 		if (left->GetType() != NodeType::NumericLiteral) {
 			*A = GetExpressionByValue(left);
+
+			if (!*A) {
+				return;
+			}
+
 			*left_type = m_Metadata.GetExprType((*A)->SSA);
 
 			SetLikelyConstantType((*left_type)->BaseID);
@@ -3508,6 +3579,11 @@ namespace Glass
 
 		if (right->GetType() != NodeType::NumericLiteral) {
 			*B = GetExpressionByValue(right);
+
+			if (!*B) {
+				return;
+			}
+
 			*right_type = m_Metadata.GetExprType((*B)->SSA);
 
 			SetLikelyConstantType((*right_type)->BaseID);
@@ -3515,9 +3591,15 @@ namespace Glass
 
 		if (*left_type == nullptr) {
 			*A = GetExpressionByValue(left);
+			if (!*A) {
+				return;
+			}
 		}
 		if (*right_type == nullptr) {
 			*B = GetExpressionByValue(right);
+			if (!*B) {
+				return;
+			}
 		}
 
 		*left_type = m_Metadata.GetExprType((*A)->SSA);

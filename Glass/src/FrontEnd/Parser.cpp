@@ -374,6 +374,19 @@ namespace Glass
 			Node.Assignment = ParseExpression();
 		}
 
+		if (At().Type == TokenType::Colon) {
+			Consume();
+
+			if (ExpectedToken(TokenType::Colon)) {
+				Abort("Expected a second ':',Instead Got: ");
+			}
+
+			Consume();
+
+			Node.Constant = true;
+			Node.Assignment = ParseExpression();
+		}
+
 		return Application::AllocateAstNode(Node);
 	}
 
@@ -530,7 +543,6 @@ namespace Glass
 
 		return Application::AllocateAstNode(Node);
 	}
-
 
 	Statement* Parser::ParseArgument()
 	{

@@ -3,6 +3,7 @@ enum TextureFormat
 {
 	RGB8;
 	RGBA8;
+	R8;
 };
 
 struct Texture {
@@ -13,6 +14,30 @@ struct Texture {
 
 	TextureFormat format;
 };
+
+fn TextureFormat_ToGLFormat(TextureFormat f) : i32 {
+	i32 gf = 0;
+
+	if f == TextureFormat.RGB8 { gf = GL_RGB; }
+	if f == TextureFormat.RGBA8 { gf = GL_RGBA; }
+	if f == TextureFormat.R8 { gf = GL_RED; }
+
+	assert(gf, "Unknown Texture Format");
+
+	return gf;
+}
+
+fn TextureFormat_ToGLInternalFormat(TextureFormat f) : i32 {
+	i32 gf = 0;
+
+	if f == TextureFormat.RGB8 { gf = GL_RGB8; }
+	if f == TextureFormat.RGBA8 { gf = GL_RGBA8; }
+	if f == TextureFormat.R8 { gf = GL_R8; }
+
+	assert(gf, " TextureFormat_ToGLInternalFormat() :: Unknown Texture Format");
+
+	return gf;
+}
 
 fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Texture {
 	Texture t;
@@ -26,14 +51,16 @@ fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Te
 
 	//glTexImage2D(GL_TEXTURE_2D, 1, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data);
 
-	glTextureStorage2D(t.renderer_id, 1, GL_RGB8, width, height);
+	glTextureStorage2D(t.renderer_id, 1, TextureFormat_ToGLInternalFormat(format), width, height);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	glTextureSubImage2D(t.renderer_id, 0, 0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, data.data);
+	glTextureSubImage2D(t.renderer_id, 0, 0, 0, width, height, TextureFormat_ToGLFormat(format), GL_UNSIGNED_BYTE, data.data);
+
+	//glGenerateMipmap(GL_TEXTURE_2D);
 
 	return t;
 }

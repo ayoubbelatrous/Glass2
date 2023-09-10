@@ -61,6 +61,7 @@ namespace Glass {
 		Function,
 		Type,
 		Enum,
+		Constant,
 	};
 
 	enum class MessageType
@@ -209,6 +210,12 @@ namespace Glass {
 		///Poly Morphism/////////////////////////////////
 
 		////////////////////////////////////////////////////////////
+	};
+
+	struct ConstantDecl {
+		Token Name;
+		IRInstruction* Value = nullptr;
+		TypeStorage* Type = nullptr;
 	};
 
 	struct OperatorQuery
@@ -382,6 +389,38 @@ namespace Glass {
 		std::unordered_map<u64, std::unordered_map<u64, TypeStorage*>> m_ExpressionType;
 
 		std::unordered_map<Operator, std::unordered_map<OperatorQuery, u64, OperatorQueryHasher>> m_Operators;
+
+		std::unordered_map<u64, std::unordered_map<std::string, ConstantDecl>> m_Constants;
+
+		void InsertConstant(const std::string& name, const ConstantDecl& constant) {
+			m_Constants[CurrentContextID()][name] = constant;
+		}
+
+		const ConstantDecl* GetConstant(const std::string& name, u64 ctxID = -1) const
+		{
+			if (ctxID == 0) {
+				return nullptr;
+			}
+
+			if (ctxID == -1) {
+				ctxID = CurrentContextID();
+			}
+
+			if (m_Constants.find(ctxID) == m_Constants.end()) {
+				return GetConstant(name, GetContext(ctxID)->Parent);
+			}
+
+			auto it = m_Constants.at(ctxID).find(name);
+
+			if (it != m_Constants.at(ctxID).end()) {
+				return &it->second;
+			}
+			else if (GetContext(ctxID)->Parent != 0) {
+				return GetConstant(name, GetContext(ctxID)->Parent);
+			}
+
+			return nullptr;
+		}
 
 		void RegisterOperator(Operator op, const OperatorQuery& query, u64 function_id) {
 			m_Operators[op][query] = function_id;
@@ -616,29 +655,7 @@ namespace Glass {
 			m_ExpressionType[m_CurrentFunction][ssa] = type;
 		}
 
-		SymbolType GetSymbolType(const std::string& symbol) const {
-			if (GetFunctionMetadata(symbol) != (u64)-1) {
-				return SymbolType::Function;
-			}
-
-			if (GetGlobalVariable(symbol) != (u64)-1) {
-				return SymbolType::GlobVariable;
-			}
-
-			if (GetVariableMetadata(GetVariableSSA(symbol)) != nullptr) {
-				return SymbolType::Variable;
-			}
-
-			if (GetEnum(symbol) != nullptr) {
-				return SymbolType::Enum;
-			}
-
-			if (GetType(symbol) != (u64)-1) {
-				return SymbolType::Type;
-			}
-
-			return SymbolType::None;
-		}
+		SymbolType GetSymbolType(const std::string& symbol) const;
 
 		void RegisterEnum(u64 ID, u64 TypeID, const EnumMetadata& metadata)
 		{

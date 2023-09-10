@@ -35,6 +35,35 @@ namespace Glass {
 		return -1;
 	}
 
+	SymbolType MetaData::GetSymbolType(const std::string& symbol) const
+	{
+		if (GetFunctionMetadata(symbol) != (u64)-1) {
+			return SymbolType::Function;
+		}
+
+		if (GetGlobalVariable(symbol) != (u64)-1) {
+			return SymbolType::GlobVariable;
+		}
+
+		if (GetVariableMetadata(GetVariableSSA(symbol)) != nullptr) {
+			return SymbolType::Variable;
+		}
+
+		if (GetEnum(symbol) != nullptr) {
+			return SymbolType::Enum;
+		}
+
+		if (GetType(symbol) != (u64)-1) {
+			return SymbolType::Type;
+		}
+
+		if (GetConstant(symbol) != nullptr) {
+			return SymbolType::Constant;
+		}
+
+		return SymbolType::None;
+	}
+
 	bool FunctionMetadata::IsOverloaded() const
 	{
 		return Overloads.size() != 0;
@@ -100,5 +129,4 @@ namespace Glass {
 			return &Arguments[i];
 		}
 	}
-
 }

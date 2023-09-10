@@ -35,6 +35,9 @@ fn GetShaderDataType(Type type) : ShaderDataType {
 	if type == vec4 {
 		t = ShaderDataType.Float4;
 	}
+
+	assert(cast(i32) t, " GetShaderDataType() :: Unknown shader data type");
+
 	return t;
 }
 
@@ -52,6 +55,9 @@ fn GetComponentCount(ShaderDataType shader_data_type) : u32 {
 	if ShaderDataType.Float4 == shader_data_type {
 		component_type = 4;
 	}
+
+	assert(cast(i32) component_type, " GetComponentCount() :: Unknown shader data type");
+
 	return component_type;
 }
 
@@ -64,12 +70,11 @@ fn BufferLayout_Create(Type type, u64 type_size)
 
 	struct_info := cast(TypeInfo_Struct*) type_info(type);
 
-	u64 i = 0;
 	u32 offset = 0;
 
-	while i < struct_info.member_count {
+	for 0..struct_info.member_count {
 
-		current := *struct_info.members;
+		current := struct_info.members[it_index];
 
 		element_type_type_info := type_info(current.type);
 
@@ -85,15 +90,13 @@ fn BufferLayout_Create(Type type, u64 type_size)
 			assert(0," BufferLayout_Create() :: un-supported layout element type");
 		}
 
-		layout.elements[i] = element;
+		layout.elements[it_index] = element;
 
 		element_size := GetComponentCount(element.type) * 4;
 		offset = offset + element_size;
-
-		i = i + 1;
 	}
 
-	layout.elements.count = i;
+	layout.elements.count = struct_info.member_count;
 
 	layout.stride = offset;
 

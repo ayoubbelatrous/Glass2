@@ -249,6 +249,14 @@ fn mul_vec2(vec2 lhs, vec2 rhs) : vec2
 	return result;
 }
 
+fn vec2_scalar(vec2 v, f32 scalar) : vec2
+{
+	vec2 result;
+	result.x = v.x * scalar;
+	result.y = v.y * scalar;
+	return result;
+}
+
 fn div_vec2(vec2 lhs, vec2 rhs) : vec2
 {
 	vec2 result;
@@ -273,6 +281,8 @@ fn div_vec2(vec2 lhs, vec2 rhs) : vec2
 #operator- sub_vec2;
 #operator* mul_vec2;
 #operator/ div_vec2;
+
+#operator* vec2_scalar;
 
 #operator+ add_vec4_f32;
 
