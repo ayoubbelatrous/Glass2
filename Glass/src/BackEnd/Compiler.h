@@ -63,6 +63,7 @@ namespace Glass
 
 		void LoadLoop();
 
+		void LibraryPass();
 		void FirstPass();
 
 		void HandleTopLevelFunction(FunctionNode* fnNode);
@@ -159,6 +160,7 @@ namespace Glass
 		IRData* CreateIRData();
 
 		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
+
 		TypeExpression* TypeGetTypeExpression(TypeStorage* type);
 
 		Glass::Type TSToLegacy(TypeStorage* type);

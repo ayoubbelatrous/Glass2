@@ -227,9 +227,12 @@ namespace Glass
 		case NodeType::Range:
 			return CopyRange((RangeNode*)expr);
 			break;
+		case NodeType::SizeOf:
+			return CopySizeOf((SizeOfNode*)expr);
+			break;
 		}
 
-		GS_CORE_ASSERT(0, "Un-Reachable");
+		GS_CORE_ASSERT(0);
 
 		return nullptr;
 	}
@@ -337,6 +340,13 @@ namespace Glass
 		new_range->Begin = (Expression*)CopyExpression(range->Begin);
 		new_range->End = (Expression*)CopyExpression(range->End);
 		return new_range;
+	}
+
+	Statement* ASTCopier::CopySizeOf(SizeOfNode* size_of)
+	{
+		SizeOfNode* new_size_of = AST(SizeOfNode());
+		new_size_of->Expr = (Expression*)CopyExpression(size_of->Expr);
+		return size_of;
 	}
 
 	Statement* ASTCopier::CopyRef(RefNode* expr)

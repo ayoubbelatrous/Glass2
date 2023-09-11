@@ -660,6 +660,13 @@ namespace Glass
 	{
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
 
+		if (func_metadata->PolyMorphic) {
+			for (auto& [overload, instance] : func_metadata->PolyMorphicInstantiations) {
+				FunctionSignatureCodeGen(instance);
+			}
+			return;
+		}
+
 		GS_CORE_ASSERT(func_metadata, "");
 
 		u64 function_id = GetFunctionHash(func_metadata->Symbol.Symbol, func_metadata->Signature->Hash);
@@ -704,6 +711,13 @@ namespace Glass
 	llvm::Value* LLVMBackend::FunctionCodeGen(const IRFunction* func)
 	{
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
+
+		if (func_metadata->PolyMorphic) {
+			for (auto& [overload, instance] : func_metadata->PolyMorphicInstantiations) {
+				FunctionCodeGen(instance);
+			}
+			return nullptr;
+		}
 
 		GS_CORE_ASSERT(func_metadata, "");
 

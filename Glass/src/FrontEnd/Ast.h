@@ -43,6 +43,7 @@ namespace Glass
 		TypeOf,
 		Operator,
 		Load,
+		Library,
 		Cast,
 		ArrayAccess,
 		SizeOf,
@@ -522,6 +523,7 @@ namespace Glass
 		Token Symbol;
 		TypeExpression* Type = nullptr;
 		bool Variadic = false;
+		bool PolyMorphic = false;
 
 		virtual NodeType GetType() const override
 		{
@@ -905,6 +907,26 @@ namespace Glass
 		}
 	};
 
+	class LibraryNode : public Statement
+	{
+	public:
+
+		Token Name;
+		StringLiteral* FileName = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Library;
+		}
+
+		virtual std::string ToString() const {
+			return "#library " + FileName->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return FileName->GetLocation();
+		}
+	};
 
 	class LoadNode : public Statement
 	{

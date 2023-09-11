@@ -65,27 +65,6 @@ namespace Glass {
 		return GetBasic(type_id);
 	}
 
-	TypeStorage* TypeSystem::GetPoly(const std::string& name) {
-
-		u64 hash = PolyMorphicTypeHash(name);
-
-		auto it = m_Instance->m_Types.find(hash);
-
-		if (it != m_Instance->m_Types.end()) {
-			return it->second;
-		}
-
-		TSPoly* new_type = TYPE(TSPoly());
-		new_type->BaseID = -1;
-		new_type->Kind = TypeStorageKind::Poly;
-		new_type->Hash = hash;
-		new_type->Name = name;
-
-		m_Instance->m_Types.emplace(hash, new_type);
-
-		return new_type;
-	}
-
 	TSPtr* TypeSystem::GetPtr(TypeStorage* pointee, u32 indirection)
 	{
 		GS_CORE_ASSERT(indirection, "Cannot Have 0 Indirection");
@@ -221,4 +200,60 @@ namespace Glass {
 
 		return false;
 	}
+
+	TypeStorage* TypeSystem::TypeExpressionGetType(TypeExpression* type_expr)
+	{
+		u16 indirection = 0;
+		TypeStorage* type = nullptr;
+
+		if (type_expr->GetType() == NodeType::TE_Pointer) {
+			indirection = ((TypeExpressionPointer*)type_expr)->Indirection;
+			type_expr = ((TypeExpressionPointer*)type_expr)->Pointee;
+		}
+
+		if (type_expr->GetType() == NodeType::TE_TypeName) {
+			type = TypeSystem::GetBasic(((TypeExpressionTypeName*)type_expr)->Symbol.Symbol);
+		}
+
+		if (type_expr->GetType() == NodeType::Identifier) {
+			type = TypeSystem::GetBasic(((Identifier*)type_expr)->Symbol.Symbol);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Func) {
+			TypeExpressionFunc* type_func = (TypeExpressionFunc*)type_expr;
+
+			std::vector<TypeStorage*> arguments;
+
+			for (auto arg : type_func->Arguments) {
+				GS_CORE_ASSERT(arg);
+				arguments.push_back(TypeExpressionGetType(arg));
+			}
+
+			TypeStorage* return_type = nullptr;
+			if (type_func->ReturnType) {
+				return_type = TypeExpressionGetType(type_func->ReturnType);
+			}
+			else {
+				return_type = TypeSystem::GetBasic(IR_void);
+			}
+
+			type = TypeSystem::GetFunction(arguments, return_type);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Array) {
+			TypeExpressionArray* type_array = (TypeExpressionArray*)type_expr;
+
+			auto element = TypeExpressionGetType(type_array->ElementType);
+			if (!element) return nullptr;
+
+			type = TypeSystem::GetDynArray(element);
+		}
+
+		if (indirection) {
+			type = TypeSystem::GetPtr(type, indirection);
+		}
+
+		return type;
+	}
+
 }

@@ -62,6 +62,7 @@ namespace Glass {
 		Type,
 		Enum,
 		Constant,
+		Library,
 	};
 
 	enum class MessageType
@@ -131,6 +132,8 @@ namespace Glass {
 
 		bool Foreign = false;
 
+		bool CompleteSize = false;
+
 		u64 TypeID = 0;
 
 		u64 FindMember(const std::string& name) const {
@@ -174,6 +177,12 @@ namespace Glass {
 		u64 ID;
 	};
 
+	struct PolymorphicOverload {
+
+		std::map<std::string, Expression*> Arguments;
+		bool operator<(const PolymorphicOverload& other) const;
+	};
+
 	struct FunctionMetadata
 	{
 		Token Symbol;
@@ -186,9 +195,10 @@ namespace Glass {
 		bool Foreign = false;
 
 		bool PolyMorphic = false;
+		std::vector<ArgumentNode*> ASTArguments;
+		TypeExpression* ASTReturnType = nullptr;
 
-		std::vector<IRFunction*> Instantiations;
-		std::map<u64, IRFunction*> PolyMotphicOverloads;
+		std::map<PolymorphicOverload, IRFunction*> PolyMorphicInstantiations;
 
 		FunctionNode* Ast = nullptr;
 
@@ -206,16 +216,17 @@ namespace Glass {
 		const FunctionMetadata& GetOverload(TSFunc* signature) const;
 		////////////////////////////////////////////////////////////
 		const ArgumentMetadata* GetArgument(u64 i) const;
-		////////////////////////////////////////////////////////////
-		///Poly Morphism/////////////////////////////////
-
-		////////////////////////////////////////////////////////////
 	};
 
 	struct ConstantDecl {
 		Token Name;
 		IRInstruction* Value = nullptr;
 		TypeStorage* Type = nullptr;
+	};
+
+	struct Library {
+		Token Name;
+		StringLiteral* Value = nullptr;
 	};
 
 	struct OperatorQuery
@@ -357,6 +368,10 @@ namespace Glass {
 			m_CurrentCTXScope = ctx_scope.ID;
 		}
 
+		void PushContext(u64 existing) {
+			m_CurrentCTXScope = existing;
+		}
+
 		void PopContext() {
 			GS_CORE_ASSERT(m_CurrentCTXScope != 1, "Cannot Pop Global Context");
 			m_CurrentCTXScope = CurrentContext()->Parent;
@@ -390,7 +405,22 @@ namespace Glass {
 
 		std::unordered_map<Operator, std::unordered_map<OperatorQuery, u64, OperatorQueryHasher>> m_Operators;
 
+
 		std::unordered_map<u64, std::unordered_map<std::string, ConstantDecl>> m_Constants;
+
+		std::unordered_map<std::string, Library> Libraries;
+
+		void InsertLibrary(const Library& library) {
+			Libraries[library.Name.Symbol] = library;
+		}
+
+		const Library* GetLibrary(const std::string& name) const {
+			auto it = Libraries.find(name);
+			if (it != Libraries.end()) {
+				return &it->second;
+			}
+			return nullptr;
+		}
 
 		void InsertConstant(const std::string& name, const ConstantDecl& constant) {
 			m_Constants[CurrentContextID()][name] = constant;

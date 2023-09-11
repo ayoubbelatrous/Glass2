@@ -46,9 +46,6 @@ namespace Glass {
 		std::vector<TypeStorage*> Arguments;
 	};
 
-	struct TSPoly : public TypeStorage {
-		std::string Name;
-	};
 	//////////////////////////////////////////////////////////////////////////
 
 	inline u64 BasicTypeHash(u32 type_id) {
@@ -79,10 +76,6 @@ namespace Glass {
 		}
 	}
 
-	inline u64 PolyMorphicTypeHash(const std::string& name) {
-		return Combine2Hashes(std::hash<std::string>{}(name), std::hash<std::string>{}("$$$"));
-	}
-
 	struct TypeSystem {
 
 		TypeSystem(const MetaData& metadata);
@@ -93,7 +86,6 @@ namespace Glass {
 		static TSPtr* GetPtr(TypeStorage* pointee, u32 indirection);
 		static TSDynArray* GetDynArray(TypeStorage* element);
 		static TypeStorage* GetBasic(u64 type_id);
-		static TypeStorage* GetPoly(const std::string& name);
 		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type);
 		static TypeStorage* GetVoid();
 
@@ -109,6 +101,8 @@ namespace Glass {
 		static u64 GetTypeInfoIndex(TypeStorage* ts);
 
 		static bool StrictPromotion(TypeStorage* A, TypeStorage* B);
+
+		static TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
 
 	private:
 

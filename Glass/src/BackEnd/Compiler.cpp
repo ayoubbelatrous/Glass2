@@ -192,6 +192,7 @@ namespace Glass
 
 		InitTypeSystem();
 
+		LibraryPass();
 		FirstPass();
 
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
@@ -253,6 +254,48 @@ namespace Glass
 			m_CurrentFile++;
 		}
 
+		m_CurrentFile = 0;
+	}
+
+	void Compiler::LibraryPass()
+	{
+		m_CurrentFile = 0;
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
+				{
+				case NodeType::Library: {
+
+					LibraryNode* library_node = (LibraryNode*)stmt;
+
+					const Library* previous_library = m_Metadata.GetLibrary(library_node->Name.Symbol);
+
+					if (previous_library) {
+						MSG_LOC(library_node);
+						FMT_WARN("Library '{}' already declared at '{}'", library_node->Name.Symbol, PrintTokenLocation(previous_library->Name));
+						return;
+					}
+
+					Library library;
+					library.Name = library_node->Name;
+					library.Value = library_node->FileName;
+
+					GS_CORE_ASSERT(library.Value);
+
+					m_Metadata.InsertLibrary(library);
+				}
+									  break;
+				}
+			}
+
+			m_CurrentFile++;
+		}
 		m_CurrentFile = 0;
 	}
 
@@ -352,30 +395,42 @@ namespace Glass
 	{
 		FunctionMetadata* previous = m_Metadata.GetFunctionMetadata(m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol));
 
-		TypeStorage* return_type = nullptr;
-
-		if (fnNode->ReturnType == nullptr) {
-			return_type = TypeSystem::GetVoid();
-		}
-		else {
-			return_type = TypeExpressionGetType(fnNode->ReturnType);
-		}
-
 		std::vector<ArgumentMetadata> arguments;
 
 		bool poly_morphic = false;
 
+		std::vector<ArgumentNode*> ASTArguments;
+
 		for (const Statement* a : fnNode->GetArgList()->GetArguments())
 		{
-			const ArgumentNode* decl_arg = (ArgumentNode*)a;
+			ArgumentNode* parameter = (ArgumentNode*)a;
+			poly_morphic |= parameter->PolyMorphic;
+			poly_morphic |= parameter->Type->GetType() == NodeType::TE_Dollar;
 
-			ArgumentMetadata argument;
-			argument.Name = decl_arg->Symbol.Symbol;
-			argument.Type = TypeExpressionGetType(decl_arg->Type);
+			ASTArguments.push_back(parameter);
+		}
 
-			poly_morphic |= argument.Type->Kind == TypeStorageKind::Poly;
+		TypeStorage* return_type = nullptr;
 
-			arguments.push_back(argument);
+		if (!poly_morphic) {
+
+			if (fnNode->ReturnType == nullptr) {
+				return_type = TypeSystem::GetVoid();
+			}
+			else {
+				return_type = TypeExpressionGetType(fnNode->ReturnType);
+			}
+
+			for (const Statement* a : fnNode->GetArgList()->GetArguments())
+			{
+				const ArgumentNode* parameter = (ArgumentNode*)a;
+
+				ArgumentMetadata argument;
+				argument.Name = parameter->Symbol.Symbol;
+				argument.Type = TypeExpressionGetType(parameter->Type);
+
+				arguments.push_back(argument);
+			}
 		}
 
 		std::vector<TypeStorage*> signature_arguments;
@@ -384,13 +439,21 @@ namespace Glass
 		}
 
 		FunctionMetadata metadata;
-		metadata.Signature = TypeSystem::GetFunction(signature_arguments, return_type);
-		metadata.Arguments = arguments;
-		metadata.HasBody = false;
-		metadata.ReturnType = return_type;
-		metadata.Symbol = fnNode->Symbol;
+
 		metadata.PolyMorphic = poly_morphic;
+
+		if (!poly_morphic) {
+			metadata.Signature = TypeSystem::GetFunction(signature_arguments, return_type);
+			metadata.Arguments = arguments;
+			metadata.ReturnType = return_type;
+		}
+
+		metadata.HasBody = false;
+		metadata.Symbol = fnNode->Symbol;
 		metadata.Ast = fnNode;
+
+		metadata.ASTArguments = ASTArguments;
+		metadata.ASTReturnType = fnNode->ReturnType;
 
 		if (previous == nullptr) {
 			m_Metadata.RegisterFunction(GetFunctionID(), metadata);
@@ -678,7 +741,7 @@ namespace Glass
 		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
 
 		if (metadata->PolyMorphic) {
-			return nullptr;
+			return IRF;
 		}
 
 		TypeStorage* return_type;
@@ -1095,29 +1158,6 @@ namespace Glass
 		m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
 
 		m_Metadata.GetTypeFlags(type_id) |= TypeFlag::FLAG_STRUCT_TYPE;
-
-		IRStruct ir_struct;
-
-		ir_struct.TypeID = type_id;
-		ir_struct.ID = struct_id;
-
-		u64 member_id_counter = 0;
-
-		for (MemberMetadata& member : struct_metadata.Members)
-		{
-			IRStructMember ir_member;
-			// 
-			// 			ir_member.ID = member_id_counter;
-			// 			ir_member.TypeID = member.Tyê.ID;
-			// 			ir_member.Pointer = member.Tipe.Pointer;
-			// 			ir_member.Array = member.Tipe.Array;
-
-			ir_struct.Members.push_back(IR(ir_member));
-
-			member_id_counter++;
-		}
-
-		return IR(ir_struct);
 	}
 
 	IRInstruction* Compiler::EnumCodeGen(const EnumNode* enumNode, u64 type_id /*= (u64)-1*/)
@@ -2155,11 +2195,11 @@ namespace Glass
 			PushMessage(CompilerMessage{ fmt::format("trying to call a undefined function '{}'", call->Function.Symbol), MessageType::Warning });
 			return nullptr;
 		}
-#if 0
+
 		if (metadata->PolyMorphic) {
-			CallPolyMorphicFunction(call);
+			return CallPolyMorphicFunction(call);
 		}
-#endif
+
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
 
@@ -2365,65 +2405,135 @@ namespace Glass
 
 	IRInstruction* Compiler::CallPolyMorphicFunction(const FunctionCall* call)
 	{
-		GS_CORE_ASSERT(0);
-
 		u64 function_id = m_Metadata.GetFunctionMetadata(call->Function.Symbol);
 		FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(function_id);
 
 		GS_CORE_ASSERT(metadata);
 		GS_CORE_ASSERT(metadata->PolyMorphic);
 
-		std::vector<IRSSAValue*> call_values;
+		std::vector<IRInstruction*> call_values;
 		std::vector<TypeStorage*> call_types;
 
-		for (auto arg : call->Arguments) {
-
-			auto argument_value = GetExpressionByValue(arg);
-
-			if (!argument_value)
-				return nullptr;
-
-			auto argument_type = m_Metadata.GetExprType(argument_value->SSA);
-
-			call_values.push_back(argument_value);
-			call_types.push_back(argument_type);
+		if (call->Arguments.size() != metadata->ASTArguments.size()) {
+			GS_CORE_ASSERT("argument count mismatch");
+			return nullptr;
 		}
 
-		std::vector<TypeExpression*> caller_arguments;
+		std::map<std::string, Expression*> replacements;
 
-		for (auto t : call_types) {
-			auto te_result = TypeGetTypeExpression(t);
-			GS_CORE_ASSERT(te_result);
-			caller_arguments.push_back(te_result);
-		}
+		for (size_t i = 0; i < call->Arguments.size(); i++)
+		{
+			ArgumentNode* call_parameter = metadata->ASTArguments[i];
+			Expression* call_argument = call->Arguments[i];
 
-		std::unordered_map<std::string, TypeExpression*> replacements;
+			if (call_parameter->PolyMorphic) //PlaceHolder until we add proper constants system
+			{
+				auto argument_value = GetExpressionByValue(call_argument);
 
-		u32 i = 0;
-		for (ArgumentMetadata& argument : metadata->Arguments) {
-			if (argument.Type->Kind == TypeStorageKind::Poly) {
-				TSPoly* poly_arg = (TSPoly*)argument.Type;
-				replacements[poly_arg->Name] = caller_arguments[i];
+				if (!argument_value)
+					return nullptr;
+
+				auto argument_type = m_Metadata.GetExprType(argument_value->SSA);
+
+				call_values.push_back(argument_value);
+				call_types.push_back(argument_type);
+
+				auto constant_arg_type = TypeExpressionGetType(call_parameter->Type);
+
+				if (TypeSystem::GetBasic(IR_type) != constant_arg_type) {
+					MSG_LOC(call);
+					FMT_WARN("we only support 'Type' as a type for polymorphic parameter values currently");
+					return nullptr;
+				}
+
+				replacements[call_parameter->Symbol.Symbol] = call_argument;
 			}
-			i++;
+			else {
+
+				auto argument_value = GetExpressionByValue(call_argument);
+
+				if (!argument_value)
+					return nullptr;
+
+				auto argument_type = m_Metadata.GetExprType(argument_value->SSA);
+
+				call_values.push_back(argument_value);
+				call_types.push_back(argument_type);
+
+				if (call_parameter->Type->GetType() == NodeType::TE_Dollar) {
+					TypeExpressionTypeName* polymorphic_selector_name = (TypeExpressionTypeName*)((TypeExpressionDollar*)call_parameter->Type)->TypeName;
+					replacements[polymorphic_selector_name->Symbol.Symbol] = TypeGetTypeExpression(argument_type);
+				}
+			}
+		}
+
+		//LookUp
+
+		auto cached = metadata->PolyMorphicInstantiations.find(PolymorphicOverload{ replacements });
+
+		if (cached != metadata->PolyMorphicInstantiations.end()) {
+
+			//Calling
+
+			auto ir_func = cached->second;
+
+			auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
+
+			if (call_return_type != TypeSystem::GetVoid()) {
+				return CreateIRSSA(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+			}
+
+			return IR(IRFunctionCall(call_values, ir_func->ID));
 		}
 
 		ASTCopier copier(metadata->Ast);
-		auto ast_copy = copier.Copy();
+		auto ast_copy_as_function = (FunctionNode*)copier.Copy();
+		GS_CORE_ASSERT(ast_copy_as_function->GetType() == NodeType::Function);
 
-		ASTPolyMorpher poly_morpher(ast_copy, replacements);
+		for (Statement* parameter : ast_copy_as_function->GetArgList()->GetArguments()) {
+			ArgumentNode* call_parameter = (ArgumentNode*)parameter;
+			call_parameter->PolyMorphic = false;
+		}
+
+		ASTPolyMorpher poly_morpher(ast_copy_as_function, replacements);
 		poly_morpher.Poly();
 
-		GS_CORE_ASSERT(ast_copy->GetType() == NodeType::Function);
-		auto ast_as_function = (FunctionNode*)ast_copy;
+		std::string name_mangling = "__";
+		for (auto& [name, expr] : replacements) {
+			auto type = TypeExpressionGetType((TypeExpression*)expr);
+			GS_CORE_ASSERT(type);
+			name_mangling.append(PrintType(type));
+		}
 
-		ast_as_function->Symbol.Symbol = ast_as_function->Symbol.Symbol + "poly";
+		ast_copy_as_function->Symbol.Symbol = ast_copy_as_function->Symbol.Symbol + name_mangling;
 
-		HandleTopLevelFunction(ast_as_function);
-		IRFunction* ir_func = (IRFunction*)FunctionCodeGen(ast_as_function);
+		HandleTopLevelFunction(ast_copy_as_function);
 
-		GS_CORE_ASSERT(0);
-		return nullptr;
+		u64 register_counter = m_SSAIDCounter;
+		u64 calling_function_ctx_id = m_Metadata.CurrentContext()->ID;
+		m_Metadata.PopContext();
+
+		PushScope();
+		IRFunction* ir_func = (IRFunction*)FunctionCodeGen(ast_copy_as_function);
+		PopScope();
+
+		m_SSAIDCounter = register_counter;
+		m_Metadata.m_CurrentFunction--;
+
+		m_Metadata.PushContext(calling_function_ctx_id);
+
+		metadata->PolyMorphicInstantiations.emplace(PolymorphicOverload{ replacements }, ir_func);
+
+
+		//Calling
+
+		auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
+
+		if (call_return_type != TypeSystem::GetVoid()) {
+			return CreateIRSSA(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+		}
+
+		return IR(IRFunctionCall(call_values, ir_func->ID));
 	}
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
@@ -3421,61 +3531,7 @@ namespace Glass
 
 	TypeStorage* Compiler::TypeExpressionGetType(TypeExpression* type_expr)
 	{
-		u16 indirection = 0;
-		TypeStorage* type = nullptr;
-
-		if (type_expr->GetType() == NodeType::TE_Pointer) {
-			indirection = ((TypeExpressionPointer*)type_expr)->Indirection;
-			type_expr = ((TypeExpressionPointer*)type_expr)->Pointee;
-		}
-
-		if (type_expr->GetType() == NodeType::TE_TypeName) {
-			type = TypeSystem::GetBasic(((TypeExpressionTypeName*)type_expr)->Symbol.Symbol);
-		}
-
-		if (type_expr->GetType() == NodeType::TE_Func) {
-			TypeExpressionFunc* type_func = (TypeExpressionFunc*)type_expr;
-
-			std::vector<TypeStorage*> arguments;
-
-			for (auto arg : type_func->Arguments) {
-				GS_CORE_ASSERT(arg);
-				arguments.push_back(TypeExpressionGetType(arg));
-			}
-
-			TypeStorage* return_type = nullptr;
-			if (type_func->ReturnType) {
-				return_type = TypeExpressionGetType(type_func->ReturnType);
-			}
-			else {
-				return_type = TypeSystem::GetBasic(IR_void);
-			}
-
-			type = TypeSystem::GetFunction(arguments, return_type);
-		}
-
-		if (type_expr->GetType() == NodeType::TE_Array) {
-			TypeExpressionArray* type_func = (TypeExpressionArray*)type_expr;
-			type = TypeSystem::GetDynArray(TypeExpressionGetType(type_func->ElementType));
-		}
-
-		if (indirection) {
-			type = TypeSystem::GetPtr(type, indirection);
-		}
-
-		if (type_expr->GetType() == NodeType::TE_Dollar) {
-
-			TypeExpressionDollar* dollar_expression = (TypeExpressionDollar*)type_expr;
-
-			GS_CORE_ASSERT(dollar_expression->TypeName);
-			GS_CORE_ASSERT(dollar_expression->TypeName->GetType() == NodeType::TE_TypeName);
-
-			auto& name = ((TypeExpressionTypeName*)dollar_expression->TypeName)->Symbol.Symbol;
-
-			type = TypeSystem::GetPoly(name);
-		}
-
-		return type;
+		return TypeSystem::TypeExpressionGetType(type_expr);
 	}
 
 	TypeExpression* Compiler::TypeGetTypeExpression(TypeStorage* type)

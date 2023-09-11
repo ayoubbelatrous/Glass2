@@ -182,6 +182,31 @@ namespace Glass
 			return Application::AllocateAstNode(Node);
 		}
 
+		if (At().Symbol == "library") {
+
+			Consume();
+
+			LibraryNode Node;
+
+			if (At().Type != TokenType::Symbol) {
+				Abort("Expected a library name, Instead Got: ");
+			}
+
+			Node.Name = Consume();
+
+			Node.FileName = (StringLiteral*)ParseStatement();
+
+			if (Node.FileName == nullptr) {
+				Abort("Expected A File Name after #library directive, Instead Got: ");
+			}
+
+			if (Node.FileName->GetType() != NodeType::StringLiteral) {
+				Abort("Expected a string after #library directive, Instead Got: ");
+			}
+
+			return Application::AllocateAstNode(Node);
+		}
+
 		Abort(fmt::format("Un-recognized directive: {}", At().Symbol));
 
 		return nullptr;
@@ -270,11 +295,11 @@ namespace Glass
 
 			if (tk_type == TokenType::Dollar) {
 
-				Consume();
-
 				if (current) {
-					Abort("Unexpected $");
+					return current;
 				}
+
+				Consume();
 
 				current = (TypeExpression*)ParseTypeExpr();
 
@@ -548,6 +573,11 @@ namespace Glass
 	{
 		ArgumentNode Node;
 		Node.Type = (TypeExpression*)ParseTypeExpr();
+
+		if (At().Type == TokenType::Dollar) {
+			Consume();
+			Node.PolyMorphic = true;
+		}
 
 		if (At().Type == TokenType::Period) {
 			for (size_t i = 0; i < 3; i++)

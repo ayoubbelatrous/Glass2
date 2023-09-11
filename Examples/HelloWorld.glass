@@ -42,7 +42,6 @@ fn start() {
 	Renderer2D_init(&a.r);
 }
 
-i32 GL_BLABLA :: 30;
 
 fn update() {
 
@@ -92,8 +91,8 @@ fn key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : voi
 	}
 }
 
-i32 GLFW_CONTEXT_VERSION_MAJOR = 139266;
-i32 GLFW_CONTEXT_VERSION_MINOR = 139267;
+i32 GLFW_CONTEXT_VERSION_MAJOR :: 139266;
+i32 GLFW_CONTEXT_VERSION_MINOR :: 139267;
 
 fn main() : i32 {
 

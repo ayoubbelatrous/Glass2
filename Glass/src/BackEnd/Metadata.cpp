@@ -3,6 +3,8 @@
 #include "BackEnd/TypeSystem.h"
 #include "BackEnd/Metadata.h"
 
+#include "BackEnd/TypeSystem.h"
+
 namespace Glass {
 
 	void MetaData::RegisterFunction(u64 ID, const FunctionMetadata& metadata)
@@ -59,6 +61,10 @@ namespace Glass {
 
 		if (GetConstant(symbol) != nullptr) {
 			return SymbolType::Constant;
+		}
+
+		if (GetLibrary(symbol) != nullptr) {
+			return SymbolType::Library;
 		}
 
 		return SymbolType::None;
@@ -128,5 +134,24 @@ namespace Glass {
 		else {
 			return &Arguments[i];
 		}
+	}
+
+	bool PolymorphicOverload::operator<(const PolymorphicOverload& other) const
+	{
+		if (this->Arguments.size() != other.Arguments.size()) {
+			return true;
+		}
+
+		for (auto& [name, value] : this->Arguments)
+		{
+			auto this_type = TypeSystem::TypeExpressionGetType((TypeExpression*)value);
+			auto other_type = TypeSystem::TypeExpressionGetType((TypeExpression*)other.Arguments.at(name));
+
+			if (this_type != other_type) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

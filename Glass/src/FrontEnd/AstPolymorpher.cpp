@@ -4,7 +4,7 @@
 
 namespace Glass
 {
-	ASTPolyMorpher::ASTPolyMorpher(Statement* statement, std::unordered_map <std::string, TypeExpression*> replacements)
+	ASTPolyMorpher::ASTPolyMorpher(Statement* statement, std::map<std::string, Expression*> replacements)
 		:m_Statement(statement), m_Replacements(replacements)
 	{
 		GS_CORE_ASSERT(replacements.size() > 0);
@@ -15,7 +15,7 @@ namespace Glass
 		PolyStatement(m_Statement);
 	}
 
-	void ASTPolyMorpher::ReplaceIfMatch(const std::string& selector, TypeExpression** type)
+	void ASTPolyMorpher::ReplaceIfMatch(const std::string& selector, Expression** type)
 	{
 		auto it = m_Replacements.find(selector);
 
@@ -114,7 +114,7 @@ namespace Glass
 		}
 
 		if (func->ReturnType)
-			PolyStatement(func->ReturnType);
+			PolyTypeExpr(&func->ReturnType);
 	}
 
 	void ASTPolyMorpher::PolyScope(ScopeNode* scope)
@@ -143,7 +143,6 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyReturn(ReturnNode* ret)
 	{
-		GS_CORE_ASSERT(0);
 	}
 
 	void ASTPolyMorpher::PolyIf(IfNode* ifNode)
@@ -178,15 +177,20 @@ namespace Glass
 		{
 		case NodeType::TE_TypeName: {
 			TypeExpressionTypeName** as_type_name = (TypeExpressionTypeName**)expr;
-			ReplaceIfMatch((*as_type_name)->Symbol.Symbol, expr);
+			ReplaceIfMatch((*as_type_name)->Symbol.Symbol, (Expression**)expr);
 		}
 								  return;
 		case NodeType::TE_Dollar: {
 			TypeExpressionDollar** as_dollar = (TypeExpressionDollar**)expr;
 			GS_CORE_ASSERT((*as_dollar)->TypeName->GetType() == NodeType::TE_TypeName);
-			ReplaceIfMatch(((TypeExpressionTypeName*)(*as_dollar)->TypeName)->Symbol.Symbol, expr);
+			ReplaceIfMatch(((TypeExpressionTypeName*)(*as_dollar)->TypeName)->Symbol.Symbol, (Expression**)expr);
 		}
 								return;
+		case NodeType::TE_Array: {
+			TypeExpressionArray** as_array = (TypeExpressionArray**)expr;
+			PolyTypeExpr(&(*as_array)->ElementType);
+		}
+							   return;
 		}
 
 		GS_CORE_ASSERT(0);
@@ -203,7 +207,7 @@ namespace Glass
 		switch (node_type) {
 		case NodeType::TE_TypeName: {
 			TypeExpressionTypeName** as_type_name = (TypeExpressionTypeName**)type;
-			ReplaceIfMatch((*as_type_name)->Symbol.Symbol, type);
+			ReplaceIfMatch((*as_type_name)->Symbol.Symbol, (Expression**)type);
 			return;
 		}
 		case NodeType::TE_Pointer: {

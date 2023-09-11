@@ -1,0 +1,13 @@
+#load "Print.glass"
+#load "C.glass"
+
+fn NewArray(Type $T, int size) : T[..] {
+	T[..] new_array;
+	new_array.data = malloc(size * sizeof(T));
+	new_array.count = size;
+	return new_array;
+}
+
+fn main() {
+	print("%", 10);
+}

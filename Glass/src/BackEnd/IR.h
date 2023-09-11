@@ -565,6 +565,13 @@ namespace Glass
 
 		std::vector<IRInstruction*> Arguments;
 
+		IRFunctionCall() = default;
+
+		IRFunctionCall(std::vector<IRInstruction*> arguments, u64 funcID)
+			:Arguments(arguments), FuncID(funcID)
+		{
+		}
+
 		virtual std::string ToString() const override {
 			return 	"CALL $" + std::to_string(FuncID) + "()";
 		}

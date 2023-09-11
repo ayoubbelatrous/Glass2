@@ -7,7 +7,7 @@ namespace Glass
 	class ASTPolyMorpher
 	{
 	public:
-		ASTPolyMorpher(Statement* statement, std::unordered_map<std::string, TypeExpression*> remplacements);
+		ASTPolyMorpher(Statement* statement, std::map<std::string, Expression*> replacements);
 
 		void Poly();
 
@@ -39,10 +39,10 @@ namespace Glass
 
 	private:
 
-		void ReplaceIfMatch(const std::string& selector, TypeExpression** type);
+		void ReplaceIfMatch(const std::string& selector, Expression** type);
 
 		Statement* m_Statement;
-		std::unordered_map <std::string, TypeExpression*> m_Replacements;
+		std::map <std::string, Expression*> m_Replacements;
 	};
 
 }
