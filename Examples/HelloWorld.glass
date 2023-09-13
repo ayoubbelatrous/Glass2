@@ -1,14 +1,14 @@
-#load "Renderer.glass";
+#load "Shader.glass";
 #load "Texture.glass";
 #load "Buffer.glass";
-#load "Shader.glass";
+#load "Renderer.glass";
 
-#load "Math.glass";
 #load "GL.glass";
+#load "File.glass";
 #load "Print.glass";
+#load "Math.glass";
 #load "Memory.glass";
 #load "C.glass";
-#load "File.glass";
 
 struct GLFWwindow{};
 

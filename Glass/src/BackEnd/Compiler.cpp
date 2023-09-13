@@ -1354,6 +1354,11 @@ namespace Glass
 		IRIf IF;
 		IF.SSA = condition->SSA;
 
+		IRLexBlock lexical_block;
+
+		lexical_block.Begin = ifNode->Scope->OpenCurly;
+		lexical_block.End = ifNode->Scope->CloseCurly;
+
 		PushScope();
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 		for (const Statement* stmt : ifNode->Scope->GetStatements())
@@ -1364,17 +1369,19 @@ namespace Glass
 
 			for (auto inst : ir_ssa_stack)
 			{
-				IF.Instructions.push_back(inst);
+				lexical_block.Instructions.push_back(inst);
 			}
 
 			if (!first_inst) {
 				continue;
 			}
 
-			IF.Instructions.push_back(first_inst);
+			lexical_block.Instructions.push_back(first_inst);
 		}
 		m_Metadata.PopContext();
 		PopScope();
+
+		IF.Instructions.push_back(IR(lexical_block));
 
 		return IR(IF);
 	}
@@ -1394,6 +1401,11 @@ namespace Glass
 
 		WHILE.ConditionBlock = condition_ssas;
 
+		IRLexBlock lexical_block;
+
+		lexical_block.Begin = whileNode->Scope->OpenCurly;
+		lexical_block.End = whileNode->Scope->CloseCurly;
+
 		PushScope();
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 
@@ -1405,17 +1417,19 @@ namespace Glass
 
 			for (auto ssa_inst : ir_ssa_stack)
 			{
-				WHILE.Instructions.push_back(ssa_inst);
+				lexical_block.Instructions.push_back(ssa_inst);
 			}
 
 			if (!inst) {
 				continue;
 			}
 
-			WHILE.Instructions.push_back(inst);
+			lexical_block.Instructions.push_back(inst);
 		}
 		m_Metadata.PopContext();
 		PopScope();
+
+		WHILE.Instructions.push_back(IR(lexical_block));
 
 		return IR(WHILE);
 	}

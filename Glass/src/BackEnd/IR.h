@@ -2,6 +2,7 @@
 
 #include "BackEnd/Type.h"
 #include "Base/Hash.h"
+#include "FrontEnd/Token.h"
 
 namespace Glass
 {
@@ -168,6 +169,8 @@ namespace Glass
 		Label,
 		Iterator,
 
+		LexicalBlock,
+
 		TranslationUnit,
 		File,
 	};
@@ -178,6 +181,22 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const = 0;
+	};
+
+	struct IRLexBlock : public IRInstruction {
+
+		Token Begin;
+		Token End;
+
+		std::vector<IRInstruction*> Instructions;
+
+		virtual std::string ToString() const {
+			return "{}";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::LexicalBlock;
+		}
 	};
 
 	struct IRNullPtr : public IRInstruction {

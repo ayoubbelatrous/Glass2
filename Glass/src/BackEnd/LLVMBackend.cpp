@@ -579,6 +579,22 @@ namespace Glass
 		return m_LLVMBuilder->CreateCall((llvm::FunctionType*)llvm_FuncType->getPointerElementType(), llvm_FuncPtr, llvm_Arguments);
 	}
 
+
+	llvm::Value* LLVMBackend::LexicalBlockCodeGen(const IRLexBlock* lexical_block)
+	{
+		auto llvm_lexical_block = m_DBuilder->createLexicalBlock(m_DLexicalBlocks.back(), (llvm::DIFile*)mDContext, (u32)lexical_block->Begin.Line, (u32)lexical_block->Begin.Begin);
+		m_DLexicalBlocks.push_back(llvm_lexical_block);
+
+		for (auto inst : lexical_block->Instructions) {
+			CodeGen(inst);
+		}
+
+		SetDBGLocation(DBGSourceLoc((u32)lexical_block->End.Line, (u32)lexical_block->End.Begin));
+		PopDBGLexicalBlock();
+
+		return nullptr;
+	}
+
 	llvm::Value* LLVMBackend::CodeGen(const IRInstruction* instruction)
 	{
 		IRNodeType Type = instruction->GetType();
@@ -657,6 +673,8 @@ namespace Glass
 
 		case IRNodeType::FuncRef: return FuncRefCodeGen((IRFuncRef*)instruction);
 		case IRNodeType::CallFuncRef: return CallFuncRefCodeGen((IRCallFuncRef*)instruction);
+
+		case IRNodeType::LexicalBlock: return LexicalBlockCodeGen((IRLexBlock*)instruction);
 
 		default:
 			return 0;

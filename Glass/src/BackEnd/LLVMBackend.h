@@ -67,6 +67,8 @@ namespace Glass {
 
 		llvm::Value* CallFuncRefCodeGen(const IRCallFuncRef* func_ref);
 
+		llvm::Value* LexicalBlockCodeGen(const IRLexBlock* lexical_block);
+
 		llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Constant* arraySize = nullptr);
 
 		std::string MangleName(const std::string& name, TSFunc* signature);
