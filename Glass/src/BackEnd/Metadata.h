@@ -123,6 +123,8 @@ namespace Glass {
 	{
 		Token Name;
 		TypeStorage* Type = nullptr;
+
+		bool SizeComplete = false;
 	};
 
 	struct StructMetadata
@@ -132,7 +134,7 @@ namespace Glass {
 
 		bool Foreign = false;
 
-		bool CompleteSize = false;
+		bool SizeComplete = false;
 
 		u64 TypeID = 0;
 
@@ -654,7 +656,13 @@ namespace Glass {
 			m_StructMetadata[ID] = metadata;
 			m_TypeToStruct[TypeID] = ID;
 
-			RegisterType(TypeID, metadata.Name.Symbol, ComputeStructSize(&metadata));
+			u64 type_size = 0;
+
+			if (metadata.SizeComplete) {
+				type_size = ComputeStructSize(&metadata);
+			}
+
+			RegisterType(TypeID, metadata.Name.Symbol, type_size);
 		}
 
 		const StructMetadata* GetStructMetadata(u64 ID) const

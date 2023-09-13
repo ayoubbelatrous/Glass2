@@ -1,0 +1,11 @@
+fn NewArray(Type $T, u64 size) : T[..] {
+	T[..] array;
+	array.data = malloc(size * sizeof(T));
+	array.count = size;
+	return array;
+}
+
+fn Alloc(Type $T, u64 size) : T* {
+	memory := cast(T*) malloc(size * sizeof(T));
+	return memory;
+}

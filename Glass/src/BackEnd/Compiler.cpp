@@ -389,6 +389,96 @@ namespace Glass
 			m_CurrentFile++;
 		}
 		m_CurrentFile = 0;
+
+		m_CurrentFile = 0;
+		for (CompilerFile* file : m_Files) {
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
+				{
+				case NodeType::StructNode:
+					StructCodeGen((StructNode*)stmt);
+					break;
+				}
+			}
+
+			m_CurrentFile++;
+		}
+		m_CurrentFile = 0;
+
+		SizingLoop();
+	}
+
+	void Compiler::SizingLoop()
+	{
+		auto resolve_depended_types = [this](StructMetadata& structure) {
+
+			bool size_complete = true;
+
+			for (MemberMetadata& member : structure.Members) {
+
+				if (!member.SizeComplete) {
+
+					if (member.Type->Kind != TypeStorageKind::Base) {
+						member.SizeComplete = true;
+					}
+					else {
+
+						u64 struct_id = m_Metadata.GetStructIDFromType(member.Type->BaseID);
+
+						if (struct_id != NULL_ID) {
+
+							auto member_type_struct = m_Metadata.GetStructMetadata(struct_id);
+
+							GS_CORE_ASSERT(member_type_struct);
+
+							if (member_type_struct->SizeComplete) {
+								member.SizeComplete = true;
+							}
+						}
+						else {
+							member.SizeComplete = true;
+						}
+					}
+				}
+
+				size_complete = size_complete && member.SizeComplete;
+			}
+
+			if (size_complete) {
+				m_Metadata.m_TypeSizes[structure.TypeID] = m_Metadata.ComputeStructSize(&structure);
+			}
+
+			structure.SizeComplete = size_complete;
+		};
+
+		//m_Metadata.RegisterStruct(structure.TypeID, m_Metadata.GetStructIDFromType(member.Type->BaseID), struct_metadata);
+
+		u64 number_of_loops = 0;
+
+		while (true) {
+
+			u64 incomplete_count = 0;
+
+			for (auto& [id, structure] : m_Metadata.m_StructMetadata) {
+				if (!structure.SizeComplete) {
+					incomplete_count++;
+					resolve_depended_types(structure);
+				}
+			}
+
+			if (incomplete_count == 0)
+				break;
+
+			number_of_loops++;
+		}
+
+		GS_CORE_WARN("Sizing Pass Took {} Loops", number_of_loops);
 	}
 
 	void Compiler::HandleTopLevelFunction(FunctionNode* fnNode)
@@ -488,8 +578,6 @@ namespace Glass
 		struct_metadata.Name = strct->Name;
 
 		m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
-
-		StructCodeGen(strct);
 	}
 
 	void Compiler::HandleTopLevelEnum(EnumNode* enmNode)
@@ -617,7 +705,23 @@ namespace Glass
 
 			u64 ID = GetFunctionID();
 
-			TypeStorage* return_type = TypeExpressionGetType(fn_decl->ReturnType);
+			TypeStorage* return_type = nullptr;
+
+			if (fn_decl->ReturnType) {
+
+				return_type = TypeExpressionGetType(fn_decl->ReturnType);
+
+				if (!return_type) {
+					MSG_LOC(fn_decl->ReturnType);
+					MSG_LOC(frn);
+					FMT_WARN("unknown return type");
+					return nullptr;
+				}
+			}
+			else {
+				return_type = TypeSystem::GetVoid();
+			}
+
 			std::vector<ArgumentMetadata> args;
 
 			for (const Statement* a : fn_decl->GetArgList()->GetArguments())
@@ -916,6 +1020,11 @@ namespace Glass
 
 		if (variableNode->Type != nullptr) {
 			VariableType = TypeExpressionGetType(variableNode->Type);
+
+			if (!VariableType) {
+				return nullptr;
+			}
+
 			u64 assignment_type_id = VariableType->BaseID;
 			SetLikelyConstantType(assignment_type_id);
 		}
@@ -1499,12 +1608,14 @@ namespace Glass
 		it_index_metadata.Name = forNode->Condition->GetLocation();
 		it_index_metadata.Name.Symbol = "it_index";
 		m_Metadata.RegisterVariableMetadata(iterator->IteratorIndex->SSA, it_index_metadata);
+		((IRAlloca*)m_Metadata.GetSSA(iterator->IteratorIndex->SSA)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIndex->SSA);
 
 		VariableMetadata it_metadata;
 		it_metadata.Tipe = iterator->ItTy;
 		it_metadata.Name = forNode->Condition->GetLocation();
 		it_metadata.Name.Symbol = "it";
 		m_Metadata.RegisterVariableMetadata(iterator->IteratorIt->SSA, it_metadata);
+		((IRAlloca*)m_Metadata.GetSSA(iterator->IteratorIt->SSA)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIt->SSA);
 
 		for (const Statement* stmt : forNode->Scope->GetStatements())
 		{
@@ -2450,7 +2561,16 @@ namespace Glass
 			}
 			else {
 
+				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
+					auto assumed_type = TypeExpressionGetType(call_parameter->Type);
+					SetLikelyConstantType(assumed_type->BaseID);
+				}
+
 				auto argument_value = GetExpressionByValue(call_argument);
+
+				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
+					ResetLikelyConstantType();
+				}
 
 				if (!argument_value)
 					return nullptr;
@@ -2511,11 +2631,14 @@ namespace Glass
 
 		u64 register_counter = m_SSAIDCounter;
 		u64 calling_function_ctx_id = m_Metadata.CurrentContext()->ID;
+		auto calling_function_return_type = GetExpectedReturnType();
 		m_Metadata.PopContext();
 
 		PushScope();
 		IRFunction* ir_func = (IRFunction*)FunctionCodeGen(ast_copy_as_function);
 		PopScope();
+
+		SetExpectedReturnType(calling_function_return_type);
 
 		m_SSAIDCounter = register_counter;
 		m_Metadata.m_CurrentFunction--;

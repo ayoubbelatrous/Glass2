@@ -6,6 +6,7 @@
 #load "Math.glass";
 #load "GL.glass";
 #load "Print.glass";
+#load "Memory.glass";
 #load "C.glass";
 #load "File.glass";
 
@@ -36,12 +37,20 @@ struct Application 	{
 };
 Application a;
 
+struct Editor {
+	u8[..] buffer;
+};
+Editor editor;
+
 //@Life
 fn start() {
 	printf("[INFO] :: Started\n");
 	Renderer2D_init(&a.r);
-}
 
+	file := open_file("Examples/HelloWorld.glass",  File_Open_Mode.Read);
+	editor.buffer = read_entire_file(file);
+	close_file(file);
+}
 
 fn update() {
 
@@ -59,16 +68,6 @@ fn update() {
 
 	f32 posx = 0.1;
 	f32 posy = 0.1;
-
-	//Renderer2D_draw_quad(&a.r, Vec2(10.0, 10.0), Vec2(50.0, 50.0));
-	//Renderer2D_draw_quad(&a.r, Vec2(150.0, 150.0), Vec2(600.0, 600.0));
-
-	u8[..] text;
-
-	text.data = cast(void*) "fn main() : void {print();}";
-	text.count = cast(u64) strlen(cast(u8*) text.data);
-
-	Renderer2D_draw_text(&a.r, text);
 
 	Renderer2D_flush(&a.r);
 }

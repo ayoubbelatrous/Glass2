@@ -22,6 +22,7 @@ enum #flags TypeInfo_Flags {
 struct TypeInfo {
 	u8* name					;
 	TypeInfo_Flags flags		;
+	u64 size					;
 };
 
 struct TypeInfo_Member {

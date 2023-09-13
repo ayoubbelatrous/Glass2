@@ -29,6 +29,11 @@ namespace Glass
 		void PolyBinaryExpression(BinaryExpression* binExpr);
 		void PolyMemberAccess(MemberAccess* expr);
 		void PolyCallExpr(FunctionCall* expr);
+
+		void PolyCastExpr(CastNode* cast);
+
+		void PolySizeOfExpr(SizeOfNode* size_of);
+
 		void PolyTypeExpr(TypeExpression** expr);
 		void PolyArrayAccess(ArrayAccess* expr);
 

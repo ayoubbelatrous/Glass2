@@ -1,0 +1,186 @@
+#load "Print.glass";
+#load "C.glass";
+#load "Memory.glass";
+
+struct MSDF_FreetypeHandle {};
+struct MSDF_FontHandle {};
+struct MSDF_Charset {};
+
+struct MSDF_FontGeometry
+{
+	u64 geometryHandle;
+	u64 glyphs;
+};
+
+struct MSDF_GlyphGeometry{};
+
+struct MSDF_FontMetrics {
+    /// The size of one EM.
+    f64 emSize;
+    /// The vertical position of the ascender and descender relative to the baseline.
+    f64 ascender;f64 descenderY;
+    /// The vertical difference between consecutive baselines.
+    f64 lineHeight;
+    /// The vertical position and thickness of the underline.
+    f64 underlineY;f64 underlineThickness;
+};
+
+struct MSDF_Vec2
+{
+	i32 x;
+	i32 y;
+};
+
+struct MSDF_Glyph
+{
+	i32 CodePoint;
+
+	i32 x;
+	i32 y;
+
+	i32 w;
+	i32 h;
+
+	i32 _;
+
+	MSDF_GlyphBounds PlaneBounds;
+	MSDF_GlyphBounds AtlasBounds;
+
+	f64 Advance;
+};
+
+struct MSDF_GlyphBounds
+{
+	f64 left;
+	f64 right;
+	f64 bottom;
+	f64 top;
+};
+
+enum MDSF_DimensionsConstraint
+{
+	POWER_OF_TWO_SQUARE;
+	POWER_OF_TWO_RECTANGLE;
+	MULTIPLE_OF_FOUR_SQUARE;
+	EVEN_SQUARE;
+	SQUARE;
+};
+
+struct MSDF_TightAtlasPackerSpec
+{
+	f64 minScale;
+	f64 pixelRange;
+	f64 miterLimit;
+	f64 scale;
+	i64 padding;
+
+	MDSF_DimensionsConstraint dimensionConstraint;
+};
+
+struct TightAtlasPacker {};
+
+struct MSDF_4FLOAT_GEN {};
+
+#foreign fn MSDF_InitFreeType() : MSDF_FreetypeHandle* {};
+#foreign fn MSDF_DeInitFreeType(MSDF_FreetypeHandle* ft_handle) : MSDF_FreetypeHandle* {};
+#foreign fn MSDF_loadFont(MSDF_FreetypeHandle* library_handle, u8* file_name) : MSDF_FontHandle* {};
+
+#foreign fn MSDF_Create_FontGeometry(MSDF_FontGeometry* font_geom) : void {};
+#foreign fn MSDF_getASCIICharset() :  MSDF_Charset* {};
+#foreign fn MSDF_CreateASCIICharset() :  MSDF_Charset* {};
+#foreign fn MSDF_FontGeometry_Glyphs_GetDataAndCount(MSDF_FontGeometry* font_geometry, MSDF_GlyphGeometry** glyph_data, u64* glyph_count) : void {};
+
+#foreign fn MSDF_FontGeometry_loadCharset(MSDF_FontGeometry* font_geometry, MSDF_FontHandle* font_handle, MSDF_Charset* charset, f64 font_scale) : int {};
+
+#foreign fn MSDF_Create_FontGeometry_ASCII(MSDF_FontHandle* font_handle) : MSDF_FontGeometry {};
+
+#foreign fn MSDF_FontGeometry_Get_Glyphs(MSDF_FontGeometry* font_geometry, MSDF_Glyph* glyphs_array) : void {};
+
+#foreign fn MSDF_FontGeometry_GetFontMetrics(MSDF_FontGeometry* font_geometry) : MSDF_FontMetrics {};
+
+#foreign fn MSDF_FontGeometry_setGeometryEdgeColoring(MSDF_FontGeometry* font_geometry, f64 angleThreshold, u64 seed) {};
+
+#foreign fn MSDF_create_TightAtlasPacker(MSDF_TightAtlasPackerSpec* spec) : TightAtlasPacker* {};
+#foreign fn MSDF_TightAtlasPacker_Pack(TightAtlasPacker *packer, MSDF_GlyphGeometry *glyph_data, u64 glyph_count) : i64 {};
+
+#foreign fn MSDF_TightAtlasPacker_GetDimensions(TightAtlasPacker* packer, i64* width, i64* height) {};
+
+#foreign fn MSDF_Generate_MTSDF_4_FLOAT(i64 width, i64 height, i64 thread_count, MSDF_GlyphGeometry* glyph_data, u64 glyph_count, MSDF_4FLOAT_GEN** generator) : u8* {};
+#foreign fn MSDF_SaveImage_4_Byte(u8* file_name, MSDF_4FLOAT_GEN* generator) : bool {};
+
+fn main() : i32 {
+	return 0;
+}
+
+fn main2() : i32 {
+
+	printf("Size: %i\n", sizeof(MSDF_Glyph));
+
+	ft_handle := MSDF_InitFreeType();
+
+	font_handle := MSDF_loadFont(ft_handle, "C://Windows/Fonts/arial.ttf");
+
+	if ft_handle == cast(MSDF_FreetypeHandle*) null {
+		print("Failed to init freetype\n");
+	}
+
+	if font_handle == cast(MSDF_FontHandle*) null {
+		print("Failed to open font\n");
+	}
+
+
+	ascii_charset := MSDF_CreateASCIICharset();
+
+	MSDF_FontGeometry font_geom;
+	MSDF_Create_FontGeometry(&font_geom)
+	MSDF_FontGeometry_loadCharset(&font_geom, font_handle, ascii_charset, 1.0);
+
+	MSDF_FontGeometry_setGeometryEdgeColoring(&font_geom, 3.0, 0);
+
+	MSDF_GlyphGeometry* glyphs;
+	u64 glyph_count;
+	MSDF_FontGeometry_Glyphs_GetDataAndCount(&font_geom, &glyphs, &glyph_count);
+
+	MSDF_TightAtlasPackerSpec packer_spec;
+	packer_spec.dimensionConstraint = MDSF_DimensionsConstraint.SQUARE;
+	packer_spec.minScale 	= 24.0;
+	packer_spec.scale 		= 32.0;
+	packer_spec.miterLimit 	= 1.0;
+	packer_spec.pixelRange 	= 5.0;
+	packer_spec.padding 	= 1;
+
+	atlas_packer := MSDF_create_TightAtlasPacker(&packer_spec);
+
+	pack_result := MSDF_TightAtlasPacker_Pack(atlas_packer, glyphs, glyph_count);
+
+	i64 atlas_width;
+	i64 atlas_height;
+
+	MSDF_TightAtlasPacker_GetDimensions(atlas_packer, &atlas_width, &atlas_height);
+
+	print("Atlas Size: %,%,, pack result: %\n", atlas_width, atlas_height, pack_result);
+
+	font_metrics := MSDF_FontGeometry_GetFontMetrics(&font_geom);
+
+	print("Font Metrics: %", font_metrics);
+
+	generator := cast(MSDF_4FLOAT_GEN*) null;
+	generated_atlas := MSDF_Generate_MTSDF_4_FLOAT(atlas_width, atlas_height, 1, glyphs, glyph_count, &generator);
+
+	MSDF_SaveImage_4_Byte("font_atlas.png", generator);
+
+	glyph_metrics := NewArray(MSDF_Glyph, glyph_count);
+	MSDF_FontGeometry_Get_Glyphs(&font_geom, cast(MSDF_Glyph*) glyph_metrics.data);
+
+	for glyph_metrics {
+		print("Glyph: %\n", it);
+	}
+
+	f32[..] pixels;
+	pixels.data = cast(void*) generated_atlas;
+	pixels.count = cast(u64) (atlas_width * atlas_height * 4);
+
+	MSDF_DeInitFreeType(ft_handle);
+
+	return 0;
+}

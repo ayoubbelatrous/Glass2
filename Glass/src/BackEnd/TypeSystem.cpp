@@ -213,6 +213,9 @@ namespace Glass {
 
 		if (type_expr->GetType() == NodeType::TE_TypeName) {
 			type = TypeSystem::GetBasic(((TypeExpressionTypeName*)type_expr)->Symbol.Symbol);
+			if (!type) {
+				return nullptr;
+			}
 		}
 
 		if (type_expr->GetType() == NodeType::Identifier) {

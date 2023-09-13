@@ -39,6 +39,7 @@ namespace Glass
 
 		Statement* CopySizeOf(SizeOfNode* size_of);
 
+		Statement* CopyCast(CastNode* cast);
 		Statement* CopyRef(RefNode* expr);
 		Statement* CopyDeRef(DeRefNode* expr);
 

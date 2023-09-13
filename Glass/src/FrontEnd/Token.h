@@ -80,13 +80,13 @@ namespace Glass
 			:Type(tokenType), Symbol(symbol), Line(line), Begin(begin), End(end)
 		{}
 
-		TokenType Type;
 		std::string Symbol;
 
 		u64 Line;
-
 		u64 Begin;
 		u64 End;
+
+		TokenType Type;
 
 		std::string ToString()
 		{

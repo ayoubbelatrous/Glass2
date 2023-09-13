@@ -1,0 +1,80 @@
+
+struct stbtt__buf
+{
+	void* data;
+	i32 cursor;
+	i32 size;
+};
+
+struct stbtt_fontinfo
+{
+	void* 	userdata;
+	void* 	data;		// pointer to .ttf file
+	i32 	fontstart;	// offset of start of font
+
+	i32 numGlyphs;		// number of glyphs, needed for range checking
+
+	// table locations as offset from start of .ttf
+	i32 loca;
+	i32 head;
+	i32 glyf;
+	i32 hhea;
+	i32 hmtx;
+	i32 kern;
+	i32 gpos;
+	i32 svg;
+	/////////////////////////////
+
+	i32 index_map;			// a cmap mapping for our chosen character encoding
+	i32 indexToLocFormat;	// format needed to map from glyph index to glyph
+
+	stbtt__buf cff;			// cff font data
+	stbtt__buf charstrings; // the charstring index
+	stbtt__buf gsubrs;      // global charstring subroutines index
+	stbtt__buf subrs;		// private charstring subroutines index
+	stbtt__buf fontdicts;	// array of font dicts
+	stbtt__buf fdselect;	// map from glyph to fontdict
+};
+
+#foreign fn stbtt_GetFontOffsetForIndex(u8* data, i32 index): i32 {};
+#foreign fn stbtt_InitFont(stbtt_fontinfo *info, u8* data, i32 offset) : i32 {};
+#foreign fn stbtt_GetCodepointBitmap(stbtt_fontinfo *info, f32 scale_x, f32 scale_y, i32* codepoint, i32* width, i32* height, i32* xoff, i32* yoff) : u8* {};
+#foreign fn stbtt_GetFontVMetrics(stbtt_fontinfo* info, i32* ascent, i32* descent, i32* lineGap) : void {};
+
+struct stbtt_bakedchar
+{
+	// coordinates of bbox in bitmap
+	u16 x0;
+	u16 y0;
+	u16 x1;
+	u16 y1;
+   ////////////////////////////////
+   f32 xoff;
+   f32 yoff;
+   f32 xadvance;
+};
+
+struct stbtt_aligned_quad
+{
+   f32 x0;
+   f32 y0;
+   f32 s0;
+   f32 t0;
+
+   f32 x1;
+   f32 y1;
+   f32 s1;
+   f32 t1;
+};
+
+#foreign fn stbtt_BakeFontBitmap(u8* data, i32 offset,	// font location (use offset=0 for plain .ttf)
+f32 pixel_height,						// height of font in pixels
+u8* pixels, i32 pw, i32 ph,				// bitmap to be filled in
+i32 first_char, i32 num_chars,			// characters to bake
+stbtt_bakedchar* chardata) : i32{};		// you allocate this, it's num_chars long
+
+#foreign fn stbtt_GetBakedQuad(stbtt_bakedchar* chardata, i32 pw, i32 ph, // same data as above
+	i32 char_index,                                  // character to display
+	f32* xpos, f32* ypos,                        // pointers to current position in screen pixel space
+	stbtt_aligned_quad *q,                           // output: quad to draw
+	i32 opengl_fillrule) : void {}                           // true if opengl fill rule; false if DX9 or earlier

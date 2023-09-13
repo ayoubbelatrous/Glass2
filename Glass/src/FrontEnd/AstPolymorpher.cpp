@@ -39,6 +39,8 @@ namespace Glass
 		case NodeType::Reference:
 		case NodeType::DeReference:
 		case NodeType::Call:
+		case NodeType::Cast:
+		case NodeType::SizeOf:
 			PolyExpression((Expression*)stmt);
 			break;
 		case NodeType::TypeOf: {
@@ -87,14 +89,23 @@ namespace Glass
 		{
 		case NodeType::Identifier:
 		{
-			return;
 		}
-		break;
+		return;
+		case NodeType::MemberAccess:
+		{
+		}
+		return;
 		case NodeType::BinaryExpression:
 			PolyBinaryExpression((BinaryExpression*)expr);
 			return;
 		case NodeType::Call:
 			PolyCallExpr((FunctionCall*)expr);
+			return;
+		case NodeType::Cast:
+			PolyCastExpr((CastNode*)expr);
+			return;
+		case NodeType::SizeOf:
+			PolySizeOfExpr((SizeOfNode*)expr);
 			return;
 		}
 
@@ -131,9 +142,13 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyVariable(VariableNode* var)
 	{
-		PolyTypeExpr(&var->Type);
-		if (var->Assignment)
+		if (var->Type) {
+			PolyTypeExpr(&var->Type);
+		}
+
+		if (var->Assignment) {
 			PolyStatement(var->Assignment);
+		}
 	}
 
 	void ASTPolyMorpher::PolyArgument(ArgumentNode* argument)
@@ -143,6 +158,7 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyReturn(ReturnNode* ret)
 	{
+		PolyExpression(ret->Expr);
 	}
 
 	void ASTPolyMorpher::PolyIf(IfNode* ifNode)
@@ -157,6 +173,8 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyBinaryExpression(BinaryExpression* binExpr)
 	{
+		PolyExpression(binExpr->Right);
+		PolyExpression(binExpr->Left);
 	}
 
 	void ASTPolyMorpher::PolyMemberAccess(MemberAccess* expr)
@@ -166,7 +184,20 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyCallExpr(FunctionCall* expr)
 	{
-		GS_CORE_ASSERT(0);
+		for (auto arg : expr->Arguments) {
+			PolyExpression(arg);
+		}
+	}
+
+	void ASTPolyMorpher::PolyCastExpr(CastNode* cast)
+	{
+		PolyTypeExpr(&cast->Type);
+		PolyExpression(cast->Expr);
+	}
+
+	void ASTPolyMorpher::PolySizeOfExpr(SizeOfNode* size_of)
+	{
+		PolyTypeExpr((TypeExpression**)&size_of->Expr);
 	}
 
 	void ASTPolyMorpher::PolyTypeExpr(TypeExpression** expr)
@@ -180,6 +211,11 @@ namespace Glass
 			ReplaceIfMatch((*as_type_name)->Symbol.Symbol, (Expression**)expr);
 		}
 								  return;
+		case NodeType::Identifier: {
+			Identifier** as_identifier = (Identifier**)expr;
+			ReplaceIfMatch((*as_identifier)->Symbol.Symbol, (Expression**)expr);
+		}
+								 return;
 		case NodeType::TE_Dollar: {
 			TypeExpressionDollar** as_dollar = (TypeExpressionDollar**)expr;
 			GS_CORE_ASSERT((*as_dollar)->TypeName->GetType() == NodeType::TE_TypeName);
@@ -191,6 +227,11 @@ namespace Glass
 			PolyTypeExpr(&(*as_array)->ElementType);
 		}
 							   return;
+		case NodeType::TE_Pointer: {
+			TypeExpressionPointer** as_pointer = (TypeExpressionPointer**)expr;
+			PolyTypeExpr(&(*as_pointer)->Pointee);
+		}
+								 return;
 		}
 
 		GS_CORE_ASSERT(0);

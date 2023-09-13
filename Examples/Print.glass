@@ -23,15 +23,47 @@ fn ansi_clear() {
 	printf("\e[0m");
 }
 
-fn print_s_int(i64 signed) {
-	printf("%i", signed);
+fn print_s_int(i64 signed, u64 bit_size) {
+
+	if bit_size == 8 {
+		i8 i_8 = cast(i8) signed;
+		printf("%i", i_8);
+	}
+
+	if bit_size == 16 {
+		i16 i_16 = cast(i16) signed;
+		printf("%i", i_16);
+	}
+
+	if bit_size == 32 {
+		i32 i_32 = cast(i32) signed;
+		printf("%i", i_32);
+	}
+
+	if bit_size == 64 {
+		i64 i_64 = cast(i64) signed;
+		printf("%i", i_64);
+	}
 }
 
-fn print_u_int(u64 unsigned) {
-	printf("%u", unsigned);
+fn print_u_int(u64 unsigned, u64 bit_size) {
+
+	if bit_size < 32 {
+		u32 u_32 = cast(u32) unsigned;
+		printf("%u", u_32);
+	}
+
+	if bit_size > 32 {
+		u64 u_64 = cast(u64) unsigned;
+		printf("%zu", u_64);
+	}
 }
 
 fn print_float(f32 flt) {
+	printf("%f", flt);
+}
+
+fn print_double(f64 flt) {
 	printf("%f", flt);
 }
 
@@ -63,18 +95,25 @@ fn print_any(Any any, i32 indent) : i32 {
 
 			if any.type != u8* {
 				if typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE {
-					f32 flt = *cast(f32*) any.data;
-					print_float(flt);
+					if typeinfo.size == 4 {
+						f32 flt = *cast(f32*) any.data;
+						print_float(flt);
+					}
+
+					if typeinfo.size == 8 {
+						f64 flt = *cast(f64*) any.data;
+						print_double(flt);
+					}
 				}
 
 				if (typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE) == zero {
 
 					if (typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE) == zero {
-						print_s_int(*cast(i64*) any.data);
+						print_s_int(*cast(i64*) any.data, typeinfo.size * 8);
 					}
 
 					if typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE {
-						print_u_int(*cast(u64*) any.data);
+						print_u_int(*cast(u64*) any.data, typeinfo.size * 8);
 					}
 				}
 			}

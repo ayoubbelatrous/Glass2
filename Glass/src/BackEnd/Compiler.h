@@ -4,52 +4,15 @@
 
 namespace Glass
 {
-	enum class DependencyType : uint8_t
-	{
-		Type,
-		TypeSize,
+	struct TypeSizeDependency {
+		u64 TypeID = 0;
+		std::vector<TypeSizeDependency*> dependsOn;
+		std::vector<TypeSizeDependency*> dependedBy;
 	};
 
-	struct TopLevelItemFunction
-	{
-		FunctionNode* AstNode;
-	};
+	static void ResolveDependencies() {
 
-	struct TopLevelItemStruct
-	{
-		StructNode* AstNode;
-	};
-
-	struct TopLevelItemEnum
-	{
-		EnumNode* AstNode;
-	};
-
-	struct TopLevelItemVariable
-	{
-		VariableNode* AstNode;
-	};
-
-	struct TopLevelItem
-	{
-		union
-		{
-			TopLevelItemFunction Function;
-			TopLevelItemStruct Struct;
-			TopLevelItemEnum Enum;
-			TopLevelItemVariable Variable;
-		} As;
-	};
-
-	struct DependencyManager
-	{
-		static void Insert(TopLevelItem tl_item)
-		{
-			Items.push_back(tl_item);
-		}
-
-		static std::vector<TopLevelItem> Items;
-	};
+	}
 
 	class Compiler
 	{
@@ -65,6 +28,8 @@ namespace Glass
 
 		void LibraryPass();
 		void FirstPass();
+
+		void SizingLoop();
 
 		void HandleTopLevelFunction(FunctionNode* fnNode);
 		void HandleTopLevelStruct(StructNode* strct);

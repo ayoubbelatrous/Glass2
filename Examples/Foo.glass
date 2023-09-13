@@ -1,20 +1,10 @@
-#load "Print.glass"
-#load "C.glass"
 
-fn NewArray(Type $T, u64 size) : T[..] {
-	T[..] array;
 
-	array.data = malloc(size * sizeof(T));
-	array.count = size;
 
-	return array;
+fn Allocate($T Elem) {
+
 }
 
 fn main() {
-
-	u64 size = 10;
-
-	float[..] farray = NewArray(float, size);
-
-	print("%", farray.count);
+	Allocate(10.0);
 }

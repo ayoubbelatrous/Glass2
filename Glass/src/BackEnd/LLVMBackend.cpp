@@ -222,7 +222,6 @@ namespace Glass
 
 			InsertLLVMStructType(struct_type.StructID, struct_type);
 		}
-
 		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
 
 			u64 id = func_pair.first;
@@ -240,6 +239,14 @@ namespace Glass
 
 			our_struct_type.LLVMType->setBody(llvm_Members_Types);
 			our_struct_type.LLVMMembers = llvm_Members_Types;
+		}
+
+		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
+
+			u64 id = func_pair.first;
+			const StructMetadata& struct_metadata = func_pair.second;
+
+			LLVMStructType& our_struct_type = GetLLVMStructType(id);
 
 			const llvm::StructLayout* llvm_StructLayout = llvm_DataLayout.getStructLayout(our_struct_type.LLVMType);
 
@@ -274,7 +281,7 @@ namespace Glass
 
 				u64 struct_size = llvm_StructLayout->getSizeInBits();
 
-				llvm::DICompositeType* array_Debug_Type = m_DBuilder->createStructType(
+				llvm::DICompositeType* struct_Debug_Type = m_DBuilder->createStructType(
 					m_DCU,											// Scope
 					struct_metadata.Name.Symbol,					// Name
 					(llvm::DIFile*)mDContext,						// File
@@ -286,7 +293,7 @@ namespace Glass
 					m_DBuilder->getOrCreateArray(llvm_Field_Types)	// Elements
 				);
 
-				InsertLLVMDebugType(our_struct_type.TypeID, array_Debug_Type);
+				InsertLLVMDebugType(our_struct_type.TypeID, struct_Debug_Type);
 			}
 
 			//@Todo add cmd option for this
@@ -461,7 +468,7 @@ namespace Glass
 					, {
 						llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
-						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeSize(typeinfo)),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 					});
 			}
