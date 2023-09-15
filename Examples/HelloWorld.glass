@@ -1,6 +1,3 @@
-#load "Shader.glass";
-#load "Texture.glass";
-#load "Buffer.glass";
 #load "Renderer.glass";
 
 #load "GL.glass";
@@ -8,16 +5,17 @@
 #load "Print.glass";
 #load "Math.glass";
 #load "Memory.glass";
-#load "C.glass";
 
 #load "MSDF.glass";
+
+#load "FileSystem.glass";
 
 struct GLFWwindow{};
 
 #foreign fn glfwInit() : i32 {};
 #foreign fn glfwCreateWindow(i32 w, i32 h, u8* name, void* share, void* monitor) : GLFWwindow* {};
-#foreign fn glfwMakeContextCurrent(GLFWwindow* wnd) : void {};
-#foreign fn glfwWindowShouldClose(GLFWwindow* wnd) : i32 {};
+#foreign fn glfwMakeContextCurrent(GLFWwindow* wnd) : void;
+#foreign fn glfwWindowShouldClose(GLFWwindow* wnd) : i32;
 
 #foreign fn glfwPollEvents() : void {};
 #foreign fn glfwSwapBuffers(GLFWwindow* wnd) : void {};

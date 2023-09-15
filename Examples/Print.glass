@@ -1,4 +1,6 @@
 
+#load "C.glass"
+
 fn ansi_red() {
 	printf("\e[1;31m");
 }

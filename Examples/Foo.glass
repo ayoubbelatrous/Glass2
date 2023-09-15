@@ -1,10 +1,5 @@
-
-
-
-fn Allocate($T Elem) {
-
-}
+#load "Print.glass"
 
 fn main() {
-	Allocate(10.0);
+	print("Hello World");
 }

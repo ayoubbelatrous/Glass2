@@ -1,3 +1,7 @@
+#load "Shader.glass";
+#load "Texture.glass";
+#load "Buffer.glass";
+
 u64 R2D_QUAD_COUNT			= 10000;
 u64 R2D_VERTECIS_PER_QUAD	= 4;
 

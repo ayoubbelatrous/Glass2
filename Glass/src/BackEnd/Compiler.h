@@ -26,8 +26,10 @@ namespace Glass
 
 		void LoadLoop();
 
+		void LoadFileLoads(u64 file_id);
+
 		void LibraryPass();
-		void FirstPass();
+		std::vector<IRInstruction*> FirstPass();
 
 		void SizingLoop();
 
@@ -407,7 +409,29 @@ namespace Glass
 
 		MetaData m_Metadata;
 
-		std::vector<CompilerFile*> m_Files;
+		u64 m_FileIDCounter = 0;
+		u64 m_CurrentFile = 0;
+		std::map<u64, CompilerFile*> m_Files;
+		std::set<std::string> m_LoadedFilesAbsolutePaths;
+
+		u64 InsertFile(const std::string& absolute_path, CompilerFile* file) {
+
+			GS_CORE_ASSERT(m_LoadedFilesAbsolutePaths.find(absolute_path) == m_LoadedFilesAbsolutePaths.end());
+			m_LoadedFilesAbsolutePaths.insert(absolute_path);
+
+			GS_CORE_ASSERT(m_Files.find(m_FileIDCounter) == m_Files.end());
+			m_Files[m_FileIDCounter] = file;
+
+			auto this_file_id = m_FileIDCounter;
+
+			m_FileIDCounter++;
+
+			return this_file_id;
+		}
+
+		bool FileLoaded(const std::string& absolute_path) {
+			return m_LoadedFilesAbsolutePaths.find(absolute_path) != m_LoadedFilesAbsolutePaths.end();
+		}
 
 		u64 m_FunctionIDCounter = 1;
 		u64 m_SSAIDCounter = 1;
@@ -418,7 +442,6 @@ namespace Glass
 		u64 m_GlobalCounter = 512000;
 
 		std::vector<CompilerMessage> m_Messages;
-		u64 m_CurrentFile = 0;
 
 		u64 m_Scope = 0;
 

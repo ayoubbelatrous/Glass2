@@ -1,0 +1,25 @@
+#load "C.glass"
+#load "Print.glass"
+#load "Windows.glass"
+
+enum File_Type {
+	File;
+	Directory;
+};
+
+fn FS_is_directory(u8* file_name) : bool {
+
+	bool is_directory = 0;
+
+	fileAttributes := GetFileAttributesA(file_name);
+
+	if (fileAttributes != INVALID_FILE_ATTRIBUTES) {
+		is_directory = cast(bool) (fileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	}
+
+	return is_directory;
+}
+
+fn FS_file_type(u8* file_name) : File_Type {
+	return cast(File_Type) FS_is_directory(file_name);
+}

@@ -21,8 +21,11 @@ namespace Glass
 {
 	TypeSystem* TypeSystem::m_Instance = nullptr;
 
-	Compiler::Compiler(std::vector<CompilerFile*> files) : m_Files(files)
+	Compiler::Compiler(std::vector<CompilerFile*> files)
 	{
+		for (auto file : files) {
+			InsertFile(std::filesystem::absolute(file->GetPath()).string(), file);
+		}
 	}
 
 	void Compiler::InitTypeSystem()
@@ -195,11 +198,14 @@ namespace Glass
 		InitTypeSystem();
 
 		LibraryPass();
-		FirstPass();
+		auto first_pass_instructions = FirstPass();
 
 		IRTranslationUnit* tu = IR(IRTranslationUnit());
-		for (CompilerFile* file : m_Files)
+
+		for (auto [file_id, file] : m_Files)
 		{
+			m_CurrentFile = file_id;
+
 			ModuleFile* module_file = file->GetAST();
 
 			IRFile* ir_file = IR(IRFile());
@@ -216,13 +222,16 @@ namespace Glass
 			}
 
 			tu->Instructions.push_back(ir_file);
-
-			m_CurrentFile++;
 		}
 
 		auto ir_data = PoPIRData();
 
 		std::vector<IRInstruction*> instructions;
+
+		for (auto entry : first_pass_instructions) {
+			if (entry != nullptr)
+				instructions.push_back(entry);
+		}
 
 		for (auto entry : ir_data)
 		{
@@ -239,12 +248,14 @@ namespace Glass
 		return tu;
 	}
 
-
 	void Compiler::LoadLoop()
 	{
-		IRTranslationUnit* tu = IR(IRTranslationUnit());
-		for (CompilerFile* file : m_Files)
+		auto files_copy = m_Files;
+
+		for (auto [file_id, file] : files_copy)
 		{
+			m_CurrentFile = file_id;
+
 			ModuleFile* module_file = file->GetAST();
 
 			for (Statement* stmt : module_file->GetStatements()) {
@@ -252,17 +263,61 @@ namespace Glass
 					LoadCodeGen((LoadNode*)stmt);
 				}
 			}
+		}
+	}
 
-			m_CurrentFile++;
+	void Compiler::LoadFileLoads(u64 file_id)
+	{
+		m_CurrentFile = file_id;
+		auto file = m_Files.at(m_CurrentFile);
+
+		ModuleFile* module_file = file->GetAST();
+
+		for (Statement* stmt : module_file->GetStatements()) {
+			if (stmt->GetType() == NodeType::Load) {
+				LoadCodeGen((LoadNode*)stmt);
+			}
+		}
+	}
+
+	void Compiler::LoadCodeGen(LoadNode* loadNode)
+	{
+		std::string fileName = ((StringLiteral*)loadNode->FileName)->Symbol.Symbol;
+
+		auto current_file_path = m_Files[m_CurrentFile]->GetPath();
+		current_file_path.remove_filename();
+
+		fs_path relative_path = current_file_path / fileName;
+		fs_path absolute_path = std::filesystem::absolute(relative_path);
+
+		if (FileLoaded(absolute_path.string())) {
+			return;
 		}
 
-		m_CurrentFile = 0;
+		if (!std::filesystem::exists(relative_path)) {
+			MSG_LOC(loadNode);
+			FMT_WARN("Cannot find path specified in #load directive, Path is: \"{}\"", fileName);
+			return;
+		}
+
+		CompilerFile* file = CompilerFile::GenerateCompilerFile(relative_path);
+
+		Lexer lexer = Lexer(file->GetSource(), relative_path);
+		file->SetTokens(lexer.Lex());
+
+		Parser parser = Parser(*file);
+		file->SetAST(parser.CreateAST());
+
+		u64 inserted_file_id = InsertFile(absolute_path.string(), file);
+
+		LoadFileLoads(inserted_file_id);
 	}
 
 	void Compiler::LibraryPass()
 	{
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -295,16 +350,16 @@ namespace Glass
 									  break;
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
 	}
 
-	void Compiler::FirstPass()
+	std::vector<IRInstruction*> Compiler::FirstPass()
 	{
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+		std::vector<IRInstruction*> instructions;
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -320,10 +375,11 @@ namespace Glass
 				}
 			}
 
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -338,11 +394,11 @@ namespace Glass
 					break;
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -357,11 +413,11 @@ namespace Glass
 					break;
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -372,11 +428,11 @@ namespace Glass
 					ForeignCodeGen((ForeignNode*)stmt);
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -387,13 +443,11 @@ namespace Glass
 					OperatorCodeGen((OperatorNode*)stmt);
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
 
-		m_CurrentFile = 0;
-		for (CompilerFile* file : m_Files) {
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
 
 			ModuleFile* module_file = file->GetAST();
 
@@ -408,12 +462,30 @@ namespace Glass
 					break;
 				}
 			}
-
-			m_CurrentFile++;
 		}
-		m_CurrentFile = 0;
+
+		for (auto [file_id, file] : m_Files)
+		{
+			m_CurrentFile = file_id;
+
+			ModuleFile* module_file = file->GetAST();
+
+			for (const Statement* stmt : module_file->GetStatements())
+			{
+				NodeType tl_type = stmt->GetType();
+
+				switch (tl_type)
+				{
+				case NodeType::Variable:
+					instructions.push_back(GlobalVariableCodeGen((VariableNode*)stmt));
+					break;
+				}
+			}
+		}
 
 		SizingLoop();
+
+		return instructions;
 	}
 
 	void Compiler::SizingLoop()
@@ -520,6 +592,7 @@ namespace Glass
 				ArgumentMetadata argument;
 				argument.Name = parameter->Symbol.Symbol;
 				argument.Type = TypeExpressionGetType(parameter->Type);
+				argument.Variadic = parameter->Variadic;
 
 				arguments.push_back(argument);
 			}
@@ -592,39 +665,6 @@ namespace Glass
 
 		m_Metadata.RegisterEnum(enum_id, type_id, metadata);
 		EnumCodeGen(enmNode);
-	}
-
-	void Compiler::LoadCodeGen(LoadNode* loadNode)
-	{
-		std::string fileName = ((StringLiteral*)loadNode->FileName)->Symbol.Symbol;
-
-		auto current_file_path = m_Files[m_CurrentFile]->GetPath();
-		current_file_path.remove_filename();
-
-		fs_path relative_path = current_file_path / fileName;
-
-		if (!std::filesystem::exists(relative_path)) {
-			MSG_LOC(loadNode);
-			FMT_WARN("Cannot find path specified in #load directive, Path is: \"{}\"", fileName);
-			return;
-		}
-
-		CompilerFile* file = CompilerFile::GenerateCompilerFile(relative_path);
-
-		Lexer lexer = Lexer(file->GetSource(), relative_path);
-		file->SetTokens(lexer.Lex());
-
-		Parser parser = Parser(*file);
-		file->SetAST(parser.CreateAST());
-
-		std::vector<CompilerFile*> files_copy;
-		files_copy.push_back(file);
-
-		for (auto f : m_Files) {
-			files_copy.push_back(f);
-		}
-
-		m_Files = files_copy;
 	}
 
 	IRInstruction* Compiler::StatementCodeGen(const Statement* statement)
@@ -980,12 +1020,15 @@ namespace Glass
 
 	IRInstruction* Compiler::VariableCodeGen(const VariableNode* variableNode)
 	{
-		if (variableNode->Constant) {
-			return ConstantCodeGen(variableNode);
-		}
 
 		if (ContextGlobal()) {
-			return GlobalVariableCodeGen(variableNode);
+			//return GlobalVariableCodeGen(variableNode);
+			return nullptr;
+		}
+		else {
+			if (variableNode->Constant) {
+				return ConstantCodeGen(variableNode);
+			}
 		}
 
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
@@ -1140,6 +1183,9 @@ namespace Glass
 
 	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode, bool foreign /*= false*/)
 	{
+		if (variableNode->Constant) {
+			return ConstantCodeGen(variableNode);
+		}
 
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
 

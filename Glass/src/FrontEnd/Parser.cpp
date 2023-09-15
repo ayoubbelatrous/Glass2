@@ -623,6 +623,11 @@ namespace Glass
 					Abort("Expected argument after, Instead Got: ");
 				}
 			}
+			else {
+				if (At().Type != TokenType::CloseParen) {
+					Abort("Expected ',' or ')' after argument, Instead Got: ");
+				}
+			}
 		}
 
 		Node.CloseParen = Consume();
@@ -662,11 +667,14 @@ namespace Glass
 			}
 		}
 
-		if (ExpectedToken(TokenType::OpenCurly)) {
-			Abort("Expected A '{' During Function Parsing Instead Got");
-		}
+		if (At().Type != TokenType::SemiColon) {
 
-		Node.SetScope((ScopeNode*)ParseScope());
+			if (ExpectedToken(TokenType::OpenCurly)) {
+				Abort("Expected A '{' During Function Parsing Instead Got");
+			}
+
+			Node.SetScope((ScopeNode*)ParseScope());
+		}
 
 		return Application::AllocateAstNode(Node);
 	}
