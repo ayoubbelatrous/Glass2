@@ -350,7 +350,7 @@ namespace Glass
 	{
 		SizeOfNode* new_size_of = AST(SizeOfNode());
 		new_size_of->Expr = (Expression*)CopyExpression(size_of->Expr);
-		return size_of;
+		return new_size_of;
 	}
 
 	Statement* ASTCopier::CopyCast(CastNode* cast)

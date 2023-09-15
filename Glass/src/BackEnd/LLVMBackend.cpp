@@ -25,7 +25,8 @@ namespace Glass
 		DumpDebugInfo();
 
 		auto TargetTriple = llvm::sys::getDefaultTargetTriple();
-		m_LLVMModule->setTargetTriple(TargetTriple);
+
+		//m_LLVMModule->setTargetTriple(TargetTriple);
 
 		std::string Error;
 		auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
@@ -79,6 +80,13 @@ namespace Glass
 		:m_Metadata(metadata), m_Program(program)
 	{
 		m_LLVMModule = new llvm::Module("Glass", *m_LLVMContext);
+
+		const char* dataLayoutStr = "e-m:e-i64:64-f80:128-n8:16:32:64-S128";
+		llvm::DataLayout dataLayout(dataLayoutStr);
+
+		m_LLVMModule->setDataLayout(dataLayout);
+		m_LLVMModule->setTargetTriple(llvm::sys::getDefaultTargetTriple());
+
 		m_LLVMBuilder = std::make_unique<llvm::IRBuilder<>>(*m_LLVMContext);
 
 		InitDebug();
@@ -222,6 +230,8 @@ namespace Glass
 
 			InsertLLVMStructType(struct_type.StructID, struct_type);
 		}
+
+		//Members
 		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
 
 			u64 id = func_pair.first;
@@ -241,6 +251,7 @@ namespace Glass
 			our_struct_type.LLVMMembers = llvm_Members_Types;
 		}
 
+		//@Debugging
 		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
 
 			u64 id = func_pair.first;
@@ -250,7 +261,6 @@ namespace Glass
 
 			const llvm::StructLayout* llvm_StructLayout = llvm_DataLayout.getStructLayout(our_struct_type.LLVMType);
 
-			//@Debugging
 			{
 				std::vector<llvm::Metadata*> llvm_Field_Types;
 				u32 elem = 0;
@@ -312,6 +322,26 @@ namespace Glass
 			}
 		}
 
+		int alignment_of_enum = llvm_DataLayout.getABITypeAlignment(GetLLVMType(TypeSystem::GetPtr(TypeSystem::GetBasic(IR_u64), 1)));
+
+		for (const auto& func_pair : m_Metadata->m_StructMetadata) {
+
+			u64 id = func_pair.first;
+			const StructMetadata& struct_metadata = func_pair.second;
+
+			LLVMStructType& our_struct_type = GetLLVMStructType(id);
+
+			const llvm::StructLayout* llvm_StructLayout = llvm_DataLayout.getStructLayout(our_struct_type.LLVMType);
+
+			u64 alignment = m_Metadata->GetTypeAlignment(struct_metadata.TypeID);
+			u64 llvm_Alignment = llvm_StructLayout->getAlignment().value();
+
+			u64 struct_size = m_Metadata->GetTypeSize(struct_metadata.TypeID);
+			u64 llvm_Size = llvm_StructLayout->getSizeInBytes();
+
+			GS_CORE_ASSERT(alignment == llvm_Alignment);
+			GS_CORE_ASSERT(struct_size == llvm_Size);
+		}
 	}
 
 	void LLVMBackend::ForeignCodeGen()
@@ -1216,6 +1246,14 @@ namespace Glass
 				if (data->Data[i + 1] == 'n') {
 
 					string_data.push_back('\x0A');
+
+					i += 2;
+					continue;
+				}
+
+				if (data->Data[i + 1] == 't') {
+
+					string_data.push_back('\t');
 
 					i += 2;
 					continue;

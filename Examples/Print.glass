@@ -208,15 +208,9 @@ fn print(Any... args) {
 	}
 }
 
-// This is very very buggy
-//fn print(Any... args) : i32 {
-//	print_any_array(args);
-//	return 0;
-//}
-
-fn assert(i32 condition, u8* message) {
-    if condition == 0 {
-        print("[ASSERT] Failed :: %\n", message);
-        abort();
-    }
+fn assert($T cond, u8* message) {
+	if cond == cast(T) null {
+		print("Assertion Failed % :: %\n", cond, message);
+		abort();
+	}
 }

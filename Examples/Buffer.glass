@@ -22,7 +22,9 @@ struct VertexArray {
 };
 
 fn GetShaderDataType(Type type) : ShaderDataType {
+
 	t := ShaderDataType.Invalid;
+
 	if type == f32 {
 		t = ShaderDataType.Float;
 	}

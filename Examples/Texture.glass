@@ -11,8 +11,8 @@ struct Texture {
 
 	u32 width;
 	u32 height;
-
 	TextureFormat format;
+
 };
 
 fn TextureFormat_ToGLFormat(TextureFormat f) : i32 {
@@ -59,8 +59,6 @@ fn Texture_Create(u32 width, u32 height, u8[..] data, TextureFormat format) : Te
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	glTextureSubImage2D(t.renderer_id, 0, 0, 0, width, height, TextureFormat_ToGLFormat(format), GL_UNSIGNED_BYTE, data.data);
-
-	//glGenerateMipmap(GL_TEXTURE_2D);
 
 	return t;
 }

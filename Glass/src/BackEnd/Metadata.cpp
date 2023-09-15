@@ -37,6 +37,82 @@ namespace Glass {
 		return -1;
 	}
 
+	const u64 MetaData::GetTypeAlignment(TypeStorage* type) const
+	{
+		if (type->Kind == TypeStorageKind::Pointer) {
+			return 8;
+		}
+
+		if (type->Kind == TypeStorageKind::DynArray) {
+			return 8;
+		}
+
+		if (type->Kind == TypeStorageKind::Function) {
+			return 8;
+		}
+
+		if (type->Kind == TypeStorageKind::Base) {
+			return GetTypeAlignment(type->BaseID);
+		}
+
+		GS_CORE_ASSERT(0);
+		return -1;
+	}
+
+	u64 MetaData::ComputeStructSize(const StructMetadata* metadata)
+	{
+		u64 size = 0;
+		u64 alignment = 0;
+
+		if (metadata->Name.Symbol == "MSDF_Glyph") {
+			//__debugbreak();
+		}
+
+		for (const MemberMetadata& member : metadata->Members) {
+
+			auto member_alignment = GetTypeAlignment(member.Type);
+
+			GS_CORE_ASSERT(member_alignment);
+			GS_CORE_ASSERT(member_alignment != -1);
+
+			if (member_alignment > alignment) {
+				alignment = member_alignment;
+			}
+		}
+
+		i64 remainder = 0;
+
+		for (const MemberMetadata& member : metadata->Members) {
+			auto member_size = (i64)GetTypeSize(member.Type);
+
+			if (member_size >= alignment) {
+				remainder = member_size % alignment;
+				size += member_size;
+			}
+			else {
+				if (remainder - member_size >= 0) {
+					size += remainder = remainder - member_size;
+				}
+				else {
+					remainder = member_size % alignment;
+					size += (member_size % alignment) + remainder;
+				}
+			}
+		}
+
+		if (size == 0) {
+			return 0;
+		}
+
+		size_t finalPadding = (alignment - (size % alignment)) % alignment;
+		size += finalPadding;
+
+		//GS_CORE_WARN("struct {} size:{}, aligned:{}", metadata->Name.Symbol, size, alignment);
+		GS_CORE_ASSERT(size % alignment == 0);
+
+		return size;
+	}
+
 	SymbolType MetaData::GetSymbolType(const std::string& symbol) const
 	{
 		if (GetFunctionMetadata(symbol) != (u64)-1) {

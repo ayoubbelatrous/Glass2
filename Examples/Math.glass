@@ -291,6 +291,11 @@ fn Vec2(f32 x, f32 y) : vec2 {
 	return res;
 }
 
+fn Vec2(f32 scalar) : vec2 {
+	vec2 res; res.x = scalar; res.y = scalar;
+	return res;
+}
+
 fn Vec3(f32 scalar) : vec3 {
 	v := Vec3(scalar, scalar, scalar);
 	return v;
@@ -298,6 +303,16 @@ fn Vec3(f32 scalar) : vec3 {
 
 fn Vec3(f32 x, f32 y, f32 z) : vec3 {
 	vec3 res; res.x = x; res.y = y; res.z = z;
+	return res;
+}
+
+fn Vec3(f32 x, f32 y) : vec3 {
+	vec3 res; res.x = x; res.y = y; res.z = 0.0;
+	return res;
+}
+
+fn Vec3(vec2 v) : vec3 {
+	vec3 res; res.x = v.x; res.y = v.y; res.z = 0.0;
 	return res;
 }
 

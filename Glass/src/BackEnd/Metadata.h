@@ -393,7 +393,9 @@ namespace Glass {
 		std::unordered_map<u64, std::string> m_Types;
 		std::unordered_map<u64, TypeFlags> m_TypeFlags;
 		std::unordered_map<std::string, u64> m_TypeNames;
+
 		std::unordered_map<u64, u64> m_TypeSizes;
+		std::unordered_map<u64, u64> m_TypeAlignments;
 
 		std::unordered_map<u64, u64> m_TypeToStruct;
 		std::unordered_map<std::string, u64> m_StructNames;
@@ -527,6 +529,15 @@ namespace Glass {
 			}
 		}
 
+		const u64 GetTypeAlignment(u64 id) const {
+			if (m_TypeAlignments.find(id) != m_TypeAlignments.end()) {
+				return m_TypeAlignments.at(id);
+			}
+			else {
+				return (u64)-1;
+			}
+		}
+
 		u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
 			m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
 			return m_VariableSSAs[CurrentContextID()][name] = ssa->ID;
@@ -628,24 +639,31 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		void RegisterType(u64 ID, const std::string& name, u64 size) {
+		void RegisterType(u64 ID, const std::string& name, u64 size, u64 alignment) {
 			m_Types[ID] = name;
 			m_TypeNames[name] = ID;
 			m_TypeSizes[ID] = size;
 			m_TypeFlags[ID] = 0;
+			m_TypeAlignments[ID] = alignment;
 		}
 
 		const u64 GetTypeSize(TypeStorage* type) const;
+		const u64 GetTypeAlignment(TypeStorage* type) const;
 
-		u64 ComputeStructSize(const StructMetadata* metadata) {
+		u64 ComputeStructSize(const StructMetadata* metadata);
 
-			u64 size = 0;
+		u64 ComputeStructAlignment(const StructMetadata* metadata) {
+
+			u64 alignment = 1;
 
 			for (const MemberMetadata& member : metadata->Members) {
-				size += GetTypeSize(member.Type);
+				auto member_alignment = GetTypeAlignment(member.Type);
+				if (member_alignment > alignment) {
+					alignment = member_alignment;
+				}
 			}
 
-			return size;
+			return alignment;
 		}
 
 		void RegisterStruct(u64 ID, u64 TypeID, StructMetadata metadata)
@@ -657,12 +675,14 @@ namespace Glass {
 			m_TypeToStruct[TypeID] = ID;
 
 			u64 type_size = 0;
+			u64 type_alignment = 0;
 
 			if (metadata.SizeComplete) {
 				type_size = ComputeStructSize(&metadata);
+				type_alignment = ComputeStructAlignment(&metadata);
 			}
 
-			RegisterType(TypeID, metadata.Name.Symbol, type_size);
+			RegisterType(TypeID, metadata.Name.Symbol, type_size, type_alignment);
 		}
 
 		const StructMetadata* GetStructMetadata(u64 ID) const
@@ -702,7 +722,7 @@ namespace Glass {
 			m_TypeToEnum[TypeID] = ID;
 
 			//@TODO: Set correct enum size
-			RegisterType(TypeID, metadata.Name.Symbol, 8);
+			RegisterType(TypeID, metadata.Name.Symbol, 8, 8);
 			m_TypeFlags[TypeID] |= FLAG_NUMERIC_TYPE;
 			m_TypeFlags[TypeID] |= FLAG_ENUM_TYPE;
 		}

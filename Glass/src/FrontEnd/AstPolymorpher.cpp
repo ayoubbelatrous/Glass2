@@ -107,6 +107,9 @@ namespace Glass
 		case NodeType::SizeOf:
 			PolySizeOfExpr((SizeOfNode*)expr);
 			return;
+		case NodeType::NumericLiteral:
+		case NodeType::StringLiteral:
+			return;
 		}
 
 		GS_CORE_ASSERT(0);
@@ -163,7 +166,11 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyIf(IfNode* ifNode)
 	{
-		GS_CORE_ASSERT(0);
+		PolyExpression(ifNode->Condition);
+
+		for (auto stmt : ifNode->Scope->GetStatements()) {
+			PolyStatement(stmt);
+		}
 	}
 
 	void ASTPolyMorpher::PolyWhile(WhileNode* whil)

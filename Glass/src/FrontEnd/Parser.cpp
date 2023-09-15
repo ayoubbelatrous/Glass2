@@ -1281,7 +1281,7 @@ namespace Glass
 			auto stmt = ParseStatement();
 
 			if (stmt == nullptr) {
-				return nullptr;
+				return module_file;
 			}
 
 			module_file->PushStatement(stmt);

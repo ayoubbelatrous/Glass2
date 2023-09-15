@@ -27,27 +27,27 @@ namespace Glass
 
 	void Compiler::InitTypeSystem()
 	{
-		m_Metadata.RegisterType(IR_void, "void", 0);
+		m_Metadata.RegisterType(IR_void, "void", 0, 0);
 
-		m_Metadata.RegisterType(IR_float, "float", 4);
-		m_Metadata.RegisterType(IR_int, "int", 4);
+		m_Metadata.RegisterType(IR_float, "float", 4, 4);
+		m_Metadata.RegisterType(IR_int, "int", 4, 4);
 
-		m_Metadata.RegisterType(IR_i8, "i8", 1);
-		m_Metadata.RegisterType(IR_i16, "i16", 2);
-		m_Metadata.RegisterType(IR_i32, "i32", 4);
-		m_Metadata.RegisterType(IR_i64, "i64", 8);
+		m_Metadata.RegisterType(IR_i8, "i8", 1, 4);
+		m_Metadata.RegisterType(IR_i16, "i16", 2, 4);
+		m_Metadata.RegisterType(IR_i32, "i32", 4, 4);
+		m_Metadata.RegisterType(IR_i64, "i64", 8, 8);
 
-		m_Metadata.RegisterType(IR_u8, "u8", 1);
-		m_Metadata.RegisterType(IR_u16, "u16", 2);
-		m_Metadata.RegisterType(IR_u32, "u32", 4);
-		m_Metadata.RegisterType(IR_u64, "u64", 8);
+		m_Metadata.RegisterType(IR_u8, "u8", 1, 4);
+		m_Metadata.RegisterType(IR_u16, "u16", 2, 4);
+		m_Metadata.RegisterType(IR_u32, "u32", 4, 4);
+		m_Metadata.RegisterType(IR_u64, "u64", 8, 8);
 
-		m_Metadata.RegisterType(IR_f32, "f32", 4);
-		m_Metadata.RegisterType(IR_f64, "f64", 8);
+		m_Metadata.RegisterType(IR_f32, "f32", 4, 4);
+		m_Metadata.RegisterType(IR_f64, "f64", 8, 8);
 
-		m_Metadata.RegisterType(IR_bool, "bool", 1);
+		m_Metadata.RegisterType(IR_bool, "bool", 1, 4);
 
-		m_Metadata.RegisterType(IR_type, "Type", 8);
+		m_Metadata.RegisterType(IR_type, "Type", 8, 8);
 
 
 		{
@@ -141,6 +141,8 @@ namespace Glass
 
 				struct_metadata.Members.push_back(member_metadata);
 			}
+
+			struct_metadata.SizeComplete = true;
 
 			m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
 		};
@@ -451,10 +453,10 @@ namespace Glass
 			}
 
 			if (size_complete) {
+				structure.SizeComplete = true;
 				m_Metadata.m_TypeSizes[structure.TypeID] = m_Metadata.ComputeStructSize(&structure);
+				m_Metadata.m_TypeAlignments[structure.TypeID] = m_Metadata.ComputeStructAlignment(&structure);
 			}
-
-			structure.SizeComplete = size_complete;
 		};
 
 		//m_Metadata.RegisterStruct(structure.TypeID, m_Metadata.GetStructIDFromType(member.Type->BaseID), struct_metadata);
@@ -572,7 +574,7 @@ namespace Glass
 		u64 type_id = GetTypeID();
 		u64 struct_id = GetStructID();
 
-		m_Metadata.RegisterType(type_id, strct->Name.Symbol, 0);
+		m_Metadata.RegisterType(type_id, strct->Name.Symbol, 0, 0);
 
 		StructMetadata struct_metadata;
 		struct_metadata.Name = strct->Name;
@@ -752,23 +754,6 @@ namespace Glass
 
 			m_Metadata.RegisterFunction(ID, metadata);
 
-			return nullptr;
-		}
-		else if (tipe == NodeType::StructNode)
-		{
-			u64 type_id = GetTypeID();
-			u64 struct_id = GetStructID();
-
-			StructNode* strct_decl = (StructNode*)frn->statement;
-
-			m_Metadata.RegisterType(type_id, strct_decl->Name.Symbol, 0);
-
-			StructMetadata struct_metadata;
-
-			struct_metadata.Name = strct_decl->Name;
-			struct_metadata.Foreign = true;
-
-			m_Metadata.RegisterStruct(struct_id, type_id, struct_metadata);
 			return nullptr;
 		}
 		else if (tipe == NodeType::Variable) {
@@ -2831,35 +2816,15 @@ namespace Glass
 			}
 			else {
 				IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
-
 				TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->SSA);
-
-				if (expr_type->Kind == TypeStorageKind::Pointer) {
-					size = 8;
-				}
-				else if (expr_type->Kind == TypeStorageKind::DynArray) {
-					size = 16;
-				}
-				else {
-					size = m_Metadata.GetTypeSize(expr_type->BaseID);
-				}
+				size = m_Metadata.GetTypeSize(expr_type);
 			}
 		}
 		else {
 
 			IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
-
 			TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->SSA);
-
-			if (expr_type->Kind == TypeStorageKind::Pointer) {
-				size = 8;
-			}
-			else if (expr_type->Kind == TypeStorageKind::DynArray) {
-				size = 16;
-			}
-			else {
-				size = m_Metadata.GetTypeSize(expr_type->BaseID);
-			}
+			size = m_Metadata.GetTypeSize(expr_type);
 		}
 
 		//@Gross
