@@ -78,8 +78,7 @@ MSDF_FreetypeHandle* msdf_ft_handle;
 
 fn init_font() {
 
-	//font_handle := MSDF_loadFont(msdf_ft_handle, "JetBrainsMono-SemiBold.ttf");
-	font_handle := MSDF_loadFont(msdf_ft_handle, "JetBrainsMono-SemiBold.ttf");
+	font_handle := MSDF_loadFont(msdf_ft_handle, "JetBrainsMono-Bold.ttf");
 	assert(font_handle, "Failed to open font");
 
 	ascii_charset := MSDF_CreateASCIICharset();

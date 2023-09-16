@@ -616,6 +616,9 @@ namespace Glass
 		m_DLexicalBlocks.push_back(llvm_lexical_block);
 
 		for (auto inst : lexical_block->Instructions) {
+			if (break_encountered) {
+				break; // LOL
+			}
 			CodeGen(inst);
 		}
 
@@ -642,6 +645,7 @@ namespace Glass
 		case IRNodeType::DataValue: return DataValueCodeGen((IRDataValue*)instruction);
 
 		case IRNodeType::Return: return ReturnCodeGen((IRReturn*)instruction);
+		case IRNodeType::Break: return BreakCodeGen((IRBreak*)instruction);
 		case IRNodeType::SSA: return SSACodeGen((IRSSA*)instruction);
 		case IRNodeType::SSAValue: return SSAValueCodeGen((IRSSAValue*)instruction);
 		case IRNodeType::Alloca: return AllocaCodeGen((IRAlloca*)instruction);
@@ -1350,11 +1354,19 @@ namespace Glass
 		m_LLVMBuilder->SetInsertPoint(thenBlock);
 
 		for (auto inst : _if->Instructions) {
+			if (break_encountered) {
+				break; // LOL
+			}
 			CodeGen(inst);
 		}
 
-		m_LLVMBuilder->CreateBr(contBlock);
+		if (!break_encountered) {
+			m_LLVMBuilder->CreateBr(contBlock);
+		}
+
 		m_LLVMBuilder->SetInsertPoint(contBlock);
+
+		break_encountered = false;
 
 		return nullptr;
 	}
@@ -1366,6 +1378,8 @@ namespace Glass
 		llvm::BasicBlock* loopCondBlock = llvm::BasicBlock::Create(*m_LLVMContext, "loop.cond", function);
 		llvm::BasicBlock* loopBodyBlock = llvm::BasicBlock::Create(*m_LLVMContext, "loop.body", function);
 		llvm::BasicBlock* afterLoopBlock = llvm::BasicBlock::Create(*m_LLVMContext, "after.loop", function);
+
+		m_BreakTargets.push_back(afterLoopBlock);
 
 		m_LLVMBuilder->CreateBr(loopCondBlock);
 		m_LLVMBuilder->SetInsertPoint(loopCondBlock);
@@ -1391,6 +1405,8 @@ namespace Glass
 		m_LLVMBuilder->CreateBr(loopCondBlock);
 
 		m_LLVMBuilder->SetInsertPoint(afterLoopBlock);
+
+		m_BreakTargets.pop_back();
 
 		return nullptr;
 	}
@@ -1508,5 +1524,13 @@ namespace Glass
 		CodeGen(ret->Value);
 
 		return m_LLVMBuilder->CreateRet(GetName(((IRSSAValue*)ret->Value)->SSA));
+	}
+
+	llvm::Value* LLVMBackend::BreakCodeGen(const IRBreak* brk)
+	{
+		GS_CORE_ASSERT(m_BreakTargets.size() > 0, "break outside a conditional block");
+		m_LLVMBuilder->CreateBr(m_BreakTargets.back());
+		break_encountered = true;
+		return nullptr;
 	}
 }

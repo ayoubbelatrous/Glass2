@@ -21,6 +21,7 @@ namespace Glass {
 		llvm::Value* FunctionCodeGen(const IRFunction* func);
 
 		llvm::Value* ReturnCodeGen(const IRReturn* ret);
+		llvm::Value* BreakCodeGen(const IRBreak* brk);
 
 		llvm::Value* SSACodeGen(const IRSSA* ssa);
 		llvm::Value* SSAValueCodeGen(const IRSSAValue* ssa_value);
@@ -86,6 +87,8 @@ namespace Glass {
 		llvm::Value* m_GlobalTypeInfoArray = nullptr;
 		llvm::StructType* m_TypeInfoElemTy = nullptr;
 		/////////////////////
+		bool break_encountered = false;
+		std::vector<llvm::BasicBlock*> m_BreakTargets;
 
 		void GenerateObjFile();
 

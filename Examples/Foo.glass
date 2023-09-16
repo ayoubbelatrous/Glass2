@@ -1,6 +1,19 @@
 
-#load "Print.glass";
+#load "Print.glass"
 
 fn main() {
-	print("Hell World Cast: %");
+
+	i32 i = 30;
+
+	while 1
+	{
+		print("I: %", i);
+		if i < 5 {
+			break;
+			break;
+			break;
+		}
+
+		i = i - 1;
+	}
 }
