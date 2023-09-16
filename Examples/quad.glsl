@@ -36,7 +36,7 @@ void main() {
 }
 */
 
-const float pxRange = 2.0f;
+const float pxRange = 5.0f;
 
 float median(float r, float g, float b) {
 	return max(min(r, g), min(max(r, g), b));

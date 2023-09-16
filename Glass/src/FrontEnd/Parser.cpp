@@ -1127,6 +1127,9 @@ namespace Glass
 			else if (At().Symbol == "sizeof") {
 				return ParseSizeOfExpr();
 			}
+			else if (At().Symbol == AutoCastName) {
+				return ParseAutoCastExpr();
+			}
 			else {
 
 				auto third_type = At(2).Type;
@@ -1252,6 +1255,21 @@ namespace Glass
 		Node.Expr = ParseExpression();
 
 		return AST(Node);
+	}
+
+	Expression* Parser::ParseAutoCastExpr()
+	{
+		AutoCastNode auto_cast_node;
+
+		Consume(); // AutoCastName
+
+		auto_cast_node.Expr = ParseExpression();
+
+		if (!auto_cast_node.Expr) {
+			Abort("Expected something after auto cast, Instead got: ");
+		}
+
+		return AST(auto_cast_node);
 	}
 
 	Expression* Parser::ParseSizeOfExpr()

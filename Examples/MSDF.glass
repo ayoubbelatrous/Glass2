@@ -97,7 +97,7 @@ struct MSDF_4FLOAT_GEN {};
 
 #foreign fn MSDF_create_TightAtlasPacker(MSDF_TightAtlasPackerSpec* spec) : TightAtlasPacker* {};
 #foreign fn MSDF_TightAtlasPacker_Pack(TightAtlasPacker *packer, MSDF_GlyphGeometry *glyph_data, u64 glyph_count) : i64 {};
-#foreign fn MSDF_TightAtlasPacker_GetDimensions(TightAtlasPacker* packer, i64* width, i64* height) {};
+#foreign fn MSDF_TightAtlasPacker_GetDimensions(TightAtlasPacker* packer, i32* width, i32* height) {};
 
 #foreign fn MSDF_Generate_MTSDF_4_FLOAT(i64 width, i64 height, i64 thread_count, MSDF_GlyphGeometry* glyph_data, u64 glyph_count, MSDF_4FLOAT_GEN** generator) : u8* {};
 #foreign fn MSDF_SaveImage_4_Byte(u8* file_name, MSDF_4FLOAT_GEN* generator) : bool {};

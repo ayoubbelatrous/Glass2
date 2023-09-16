@@ -138,7 +138,7 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 	Renderer2D_draw_quad(r, position, size, r.texture_coords);
 }
 
-fn Renderer2D_draw_text(Renderer2D* r, u8[..] text, f32 pixel_size) {
+fn Renderer2D_draw_text(Renderer2D* r, vec2 position, u8[..] text, f32 pixel_size) {
 
 	Vertex* qvp = cast(Vertex*) r.text.vertex_pointer;
 
@@ -149,8 +149,14 @@ fn Renderer2D_draw_text(Renderer2D* r, u8[..] text, f32 pixel_size) {
 	space_glyph := Atlas_Font_GetGlyph(&r.default_font, cast(u32) " "[0]);
 	spaceGlyphAdvance := cast(f32) space_glyph.Advance;
 
-	vec2 pos 	= Vec2(50.0, -250.0);
-	vec2 cursor = pos;
+	f32 line_height = cast(f32) metrics.lineHeight;
+
+	vec2 cursor;
+
+	cursor.y = -position.y;
+	cursor.x = position.x;
+
+	cursor.y = cursor.y - line_height * fsScale;
 
 	f32 width	= cast(f32) r.default_font.atlas_texture.width;
 	f32 height 	= cast(f32) r.default_font.atlas_texture.height;
@@ -161,10 +167,9 @@ fn Renderer2D_draw_text(Renderer2D* r, u8[..] text, f32 pixel_size) {
 
 		if it == "\n"[0] {
 
-			f32 line_height = cast(f32) metrics.lineHeight;
 
 			cursor.y = cursor.y - line_height * fsScale;
-			cursor.x = pos.x;
+			cursor.x = position.x;
 
 			visual_char = 0;
 		}

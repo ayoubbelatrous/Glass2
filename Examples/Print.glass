@@ -77,6 +77,16 @@ fn print_address(void* addr) {
 	printf("%x", addr);
 }
 
+fn print_bool(bool boolean) {
+	if boolean {
+		printf("true");
+	}
+
+	if boolean == 0 {
+		printf("false");
+	}
+}
+
 fn print_any(Any any, i32 indent) : i32 {
 
 	TypeInfo* typeinfo = type_info(any.type);
@@ -96,6 +106,7 @@ fn print_any(Any any, i32 indent) : i32 {
 			//Numbers
 
 			if any.type != u8* {
+
 				if typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE {
 					if typeinfo.size == 4 {
 						f32 flt = *cast(f32*) any.data;
@@ -115,7 +126,14 @@ fn print_any(Any any, i32 indent) : i32 {
 					}
 
 					if typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE {
-						print_u_int(*cast(u64*) any.data, typeinfo.size * 8);
+
+						if any.type == bool {
+							print_bool(*cast(bool*) any.data);
+						}
+
+						if any.type != bool {
+							print_u_int(*cast(u64*) any.data, typeinfo.size * 8);
+						}
 					}
 				}
 			}

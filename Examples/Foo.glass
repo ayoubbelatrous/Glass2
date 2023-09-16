@@ -1,5 +1,6 @@
-#load "Print.glass"
+
+#load "Print.glass";
 
 fn main() {
-	print("Hello World");
+	print("Hell World Cast: %");
 }

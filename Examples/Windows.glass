@@ -4,3 +4,6 @@ u32 FILE_ATTRIBUTE_DIRECTORY 	:: 16;
 
 #foreign fn GetFileAttributesW(u16* path) : u32;
 #foreign fn GetFileAttributesA(u8* path) : u32;
+#foreign fn WriteFile(u64* handle, void* data, u64 size, u64* written, void* overlapped) : u32;
+
+#foreign fn GetLastError() : u32;

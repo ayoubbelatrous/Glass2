@@ -10,6 +10,8 @@
 
 #load "FileSystem.glass";
 
+#load "GLFW.glass";
+
 struct GLFWwindow{};
 
 #foreign fn glfwInit() : i32 {};
@@ -25,7 +27,11 @@ struct GLFWwindow{};
 
 #foreign fn glfwSetKeyCallback(GLFWwindow* window, (GLFWwindow*,i32,i32,i32,i32) callback) : void* {};
 
+#foreign fn glfwSetScrollCallback(GLFWwindow* window, (GLFWwindow*,f64,f64) callback) : void* {};
+
 #foreign fn glfwWindowHint(i32 hint, i32 value) : void {};
+
+#foreign fn glfwGetKey(GLFWwindow* window, i32 key) : i32;
 
 struct Application 	{
 	Renderer2D 		r;
@@ -39,6 +45,8 @@ Application a;
 
 struct Editor {
 	u8[..] buffer;
+	f32 scrollX;
+	f32 scrollY;
 };
 Editor editor;
 
@@ -89,33 +97,45 @@ fn init_font() {
 
 	MSDF_TightAtlasPackerSpec packer_spec;
 	packer_spec.dimensionConstraint = MDSF_DimensionsConstraint.SQUARE;
-	packer_spec.minScale 	= 32.0;
-	packer_spec.scale 		= 40.0;
-	packer_spec.pixelRange 	= 2.0;
+	packer_spec.minScale 	= 64.0;
+	packer_spec.scale 		= 64.0;
+	packer_spec.pixelRange 	= 5.0;
 	packer_spec.padding 	= 1;
 
 	atlas_packer := MSDF_create_TightAtlasPacker(&packer_spec);
 	pack_result := MSDF_TightAtlasPacker_Pack(atlas_packer, glyphs, glyph_count);
 
-	i64 atlas_width;
-	i64 atlas_height;
+	i32 atlas_width;
+	i32 atlas_height;
 	MSDF_TightAtlasPacker_GetDimensions(atlas_packer, &atlas_width, &atlas_height);
 
 	print("Atlas Size: %,%\n", atlas_width, atlas_height);
 
 	font_metrics := MSDF_FontGeometry_GetFontMetrics(&font_geom);
 
-	generator := cast(MSDF_4FLOAT_GEN*) null;
-	generated_atlas := MSDF_Generate_MTSDF_4_FLOAT(atlas_width, atlas_height, 1, glyphs, glyph_count, &generator);
-
-	MSDF_SaveImage_4_Byte("atlas.png", generator);
-
 	glyph_metrics := NewArray(MSDF_Glyph, glyph_count * 2);
 	MSDF_FontGeometry_Get_Glyphs(&font_geom, cast(MSDF_Glyph*) glyph_metrics.data);
 
 	u8[..] pixels;
-	pixels.data = cast(void*) generated_atlas;
-	pixels.count = cast(u64) (atlas_width * atlas_height * 4 * 4);
+
+	if file_exists("./atlas.bin") {
+		file := open_file("./atlas.bin", File_Open_Mode.Read |File_Open_Mode.Write | File_Open_Mode.Binary);
+		pixels = read_entire_file(file);
+	}
+
+	if file_exists("./atlas.bin") == 0 {
+
+		generator := cast(MSDF_4FLOAT_GEN*) null;
+		generated_atlas := MSDF_Generate_MTSDF_4_FLOAT(cast(i64) atlas_width, cast(i64) atlas_height, 1, glyphs, glyph_count, &generator);
+		MSDF_SaveImage_4_Byte("atlas.png", generator);
+
+		pixels.data = cast(void*) generated_atlas;
+		pixels.count = cast(u64) (atlas_width * atlas_height * 4);
+
+		file := open_file("./atlas.bin", File_Open_Mode.Write | File_Open_Mode.Binary);
+		write_file(file, pixels);
+		close_file(file);
+	}
 
 	atlas_texture := Texture_Create(cast(u32) atlas_width, cast(u32) atlas_height, pixels, TextureFormat.RGBA8);
 
@@ -167,7 +187,9 @@ fn update() {
 
 	//Renderer2D_draw_quad(&a.r,Vec2(256.0,256.0), texture_size);
 
-	Renderer2D_draw_text(&a.r, editor.buffer, pixel_size);
+	vec2 padding = Vec2(20.0);
+
+	Renderer2D_draw_text(&a.r, Vec2(padding.x + editor.scrollX, padding.y + editor.scrollY * pixel_size), editor.buffer, pixel_size);
 
 	Renderer2D_flush(&a.r);
 }
@@ -184,8 +206,25 @@ fn resize_cb(GLFWwindow* w, i32 width, i32 height) {
 	glViewport(0, 0, width, height);
 }
 
-i32 GLFW_KEY_DOWN :: 264;
-i32 GLFW_KEY_UP   :: 265;
+f32 ScrollFactor 	:: 16.0;
+f32 ZoomFactor 		:: 2.0;
+
+fn scroll_cb(GLFWwindow* w, f64 xo, f64 yo) {
+
+	yoffset := cast(f32) yo;
+	xoffset := cast(f32) xo;
+
+	i32 control = glfwGetKey(w, GLFW_KEY_LEFT_CONTROL);
+	i32 shift = glfwGetKey(w, GLFW_KEY_LEFT_SHIFT);
+
+	if control == 0 {
+		editor.scrollY = editor.scrollY + yoffset * ScrollFactor;
+	}
+
+	if control {
+		pixel_size = pixel_size + yoffset * ZoomFactor;
+	}
+}
 
 fn key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) : void {
 	if key == 256 {
@@ -225,7 +264,6 @@ fn main() : i32 {
 	}
 
 	a.WindowWidth 	= 800;
-
 	a.WindowHeight	= 1000;
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -235,6 +273,7 @@ fn main() : i32 {
 
 	glfwSetKeyCallback(window, key_cb);
 	glfwSetFramebufferSizeCallback(window, resize_cb);
+	glfwSetScrollCallback(window, scroll_cb);
 
 	glfwMakeContextCurrent(window);
 	InitGL();

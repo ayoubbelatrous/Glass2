@@ -45,6 +45,7 @@ namespace Glass
 		Load,
 		Library,
 		Cast,
+		AutoCast,
 		ArrayAccess,
 		SizeOf,
 
@@ -966,6 +967,26 @@ namespace Glass
 
 		virtual const Token& GetLocation() const override {
 			return Type->GetLocation();
+		}
+	};
+
+	class AutoCastNode : public Expression
+	{
+	public:
+
+		Expression* Expr = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::AutoCast;
+		}
+
+		virtual std::string ToString() const {
+			return "AutoCast " + Expr->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Expr->GetLocation();
 		}
 	};
 

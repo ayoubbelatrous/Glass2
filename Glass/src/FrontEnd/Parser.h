@@ -3,6 +3,8 @@
 #include "FrontEnd/CompilerFile.h"
 #include "FrontEnd/Ast.h"
 
+#define AutoCastName "xx"
+
 namespace Glass
 {
 	inline const std::string FN_KWRD = "fn";
@@ -57,6 +59,7 @@ namespace Glass
 		Expression* ParseRangeExpr();
 		Expression* ParseTypeOfExpr();
 		Expression* ParseCastExpr();
+		Expression* ParseAutoCastExpr();
 		Expression* ParseSizeOfExpr();
 
 		Operator GetOperator(const Token& token) {

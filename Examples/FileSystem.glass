@@ -7,19 +7,32 @@ enum File_Type {
 	Directory;
 };
 
-fn FS_is_directory(u8* file_name) : bool {
+fn file_exists(u8* file_name) : bool {
 
-	bool is_directory = 0;
+	bool exists = 0;
 
 	fileAttributes := GetFileAttributesA(file_name);
 
 	if (fileAttributes != INVALID_FILE_ATTRIBUTES) {
-		is_directory = cast(bool) (fileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		exists = 1;
 	}
 
-	return is_directory;
+	return exists;
 }
 
-fn FS_file_type(u8* file_name) : File_Type {
-	return cast(File_Type) FS_is_directory(file_name);
+fn is_directory(u8* file_name) : bool {
+
+	bool is_dir = 0;
+
+	fileAttributes := GetFileAttributesA(file_name);
+
+	if (fileAttributes != INVALID_FILE_ATTRIBUTES) {
+		is_dir = cast(bool) (fileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	}
+
+	return is_dir;
+}
+
+fn get_file_type(u8* file_name) : File_Type {
+	return cast(File_Type) is_directory(file_name);
 }

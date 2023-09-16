@@ -93,7 +93,10 @@ namespace Glass
 
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);
-		IRInstruction* CastCodeGen(const CastNode* typeof);
+
+		IRInstruction* AutoCastCodeGen(const AutoCastNode* autoCastNode);
+		IRInstruction* CastNodeCodeGen(const CastNode* castNode);
+		IRInstruction* CastCodeGen(TypeStorage* cast_type, IRSSAValue* code, const Expression* ast_node);
 
 		IRInstruction* NullCodeGen();
 
@@ -397,6 +400,8 @@ namespace Glass
 		TypeStorage* GetExpectedReturnType() {
 			return m_ExpectedReturnType;
 		}
+
+		TypeStorage* m_AutoCastTargetType = nullptr;
 
 		TypeStorage* m_ExpectedReturnType = nullptr;
 

@@ -1,6 +1,7 @@
 enum #flags File_Open_Mode {
 	Read ;
 	Write;
+	Binary;
 };
 
 enum File_Seek_Mode
@@ -16,13 +17,19 @@ fn open_file(u8* path, File_Open_Mode mode) : u64* {
 	u8* open_mode = cast(u8*) &mode_buffer;
 
 	u8 i = 0;
-	if mode | File_Open_Mode.Read {
+
+	if mode & File_Open_Mode.Read {
 		open_mode[i] = "r"[0];
 		i = i + 1;
 	}
 
-	if mode | File_Open_Mode.Write {
+	if mode & File_Open_Mode.Write {
 		open_mode[i] = "w"[0];
+		i = i + 1;
+	}
+
+	if mode & File_Open_Mode.Binary {
+		open_mode[i] = "b"[0];
 		i = i + 1;
 	}
 
@@ -66,7 +73,14 @@ fn read_entire_file(u64* file, u64* size) : u8[..] {
 	return array;
 }
 
+fn write_file(u64* file, u8[..] data) : u64 {
+	assert(file," :: write_file() :: file is null");
+	written := fwrite(data.data, 1, data.count, file);
+	fflush(file);
+	return written;
+}
+
 fn read_entire_file(u64* file) : u8[..] {
-	u64 discard;
-	return read_entire_file(file, &discard);
+	u64 _;
+	return read_entire_file(file, &_);
 }

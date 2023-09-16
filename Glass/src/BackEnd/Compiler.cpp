@@ -694,6 +694,7 @@ namespace Glass
 		case NodeType::DeReference:
 		case NodeType::Range:
 		case NodeType::NegateExpression:
+		case NodeType::AutoCast:
 			return ExpressionCodeGen((Expression*)statement);
 			break;
 		case NodeType::Function:
@@ -1031,6 +1032,14 @@ namespace Glass
 			}
 		}
 
+		SymbolType symbol_type = m_Metadata.GetSymbolType(variableNode->Symbol.Symbol);
+
+		if (symbol_type != SymbolType::None) {
+			MSG_LOC(variableNode);
+			FMT_WARN("variable '{}' name already taken, pick another one!", variableNode->Symbol.Symbol);
+			return nullptr;
+		}
+
 		const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(variableNode->Symbol.Symbol));
 
 		if (metadata != nullptr)
@@ -1047,7 +1056,9 @@ namespace Glass
 		TypeStorage* VariableType = nullptr;
 
 		if (variableNode->Type != nullptr) {
+
 			VariableType = TypeExpressionGetType(variableNode->Type);
+
 
 			if (!VariableType) {
 				return nullptr;
@@ -1055,6 +1066,8 @@ namespace Glass
 
 			u64 assignment_type_id = VariableType->BaseID;
 			SetLikelyConstantType(assignment_type_id);
+
+			m_AutoCastTargetType = VariableType;
 		}
 
 		if (variableNode->Assignment != nullptr)
@@ -1066,6 +1079,7 @@ namespace Glass
 		}
 
 		ResetLikelyConstantType();
+		m_AutoCastTargetType = nullptr;
 
 		TypeStorage* assignment_type = nullptr;
 
@@ -1722,7 +1736,10 @@ namespace Glass
 			return TypeofCodeGen((TypeOfNode*)expression);
 			break;
 		case NodeType::Cast:
-			return CastCodeGen((CastNode*)expression);
+			return CastNodeCodeGen((CastNode*)expression);
+			break;
+		case NodeType::AutoCast:
+			return AutoCastCodeGen((AutoCastNode*)expression);
 			break;
 		case NodeType::SizeOf:
 			return SizeOfCodeGen((SizeOfNode*)expression);
@@ -2183,20 +2200,19 @@ namespace Glass
 
 			if (symbol_type == SymbolType::GlobVariable)
 			{
-				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+				u64 glob_id = m_Metadata.GetGlobalVariable(identifier_left->Symbol.Symbol);
 
+				left_type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
+				m_AutoCastTargetType = left_type;
+				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+				m_AutoCastTargetType = nullptr;
 				if (!right_val) {
 					return nullptr;
 				}
-
-
-				u64 glob_id = m_Metadata.GetGlobalVariable(identifier_left->Symbol.Symbol);
-
 				auto ssa = CreateIRSSA();
 				ssa->Value = IR(IRGlobalAddress(glob_id));
 
 				right_type = m_Metadata.GetExprType(right_val->SSA);
-				left_type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
 
 				IRStore* store = IR(IRStore());
 				{
@@ -2207,8 +2223,7 @@ namespace Glass
 
 				result = store;
 			}
-
-			if (symbol_type == SymbolType::Variable) {
+			else if (symbol_type == SymbolType::Variable) {
 
 				u64 var_ssa_id = GetVariableSSA(identifier_left->Symbol.Symbol);
 				IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
@@ -2217,7 +2232,9 @@ namespace Glass
 
 				SetLikelyConstantType(metadata->Tipe->BaseID);
 
+				m_AutoCastTargetType = metadata->Tipe;
 				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+				m_AutoCastTargetType = nullptr;
 
 				if (!right_val) {
 					return nullptr;
@@ -2237,6 +2254,11 @@ namespace Glass
 
 				result = store;
 			}
+			else {
+				MSG_LOC(identifier_left);
+				FMT_WARN("left side: '{}' is un-assignable", identifier_left->Symbol.Symbol);
+				return nullptr;
+			}
 		}
 		if (left->GetType() == NodeType::MemberAccess)
 		{
@@ -2248,8 +2270,10 @@ namespace Glass
 			left_type = m_Metadata.GetExprType(member_access->SSA);
 
 			SetLikelyConstantType(left_type->BaseID);
+			m_AutoCastTargetType = left_type;
 
 			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+			m_AutoCastTargetType = nullptr;
 
 			if (!right_ssa) {
 				return nullptr;
@@ -2373,6 +2397,7 @@ namespace Glass
 			if (!metadata->IsOverloaded()) {
 				if (i < metadata->Arguments.size()) {
 					SetLikelyConstantType(metadata->Arguments[i].Type->BaseID);
+					m_AutoCastTargetType = metadata->Arguments[i].Type;
 				}
 			}
 
@@ -2380,6 +2405,7 @@ namespace Glass
 
 			if (!metadata->IsOverloaded()) {
 				ResetLikelyConstantType();
+				m_AutoCastTargetType = nullptr;
 			}
 
 			if (!argument_as_value_ref)
@@ -2608,7 +2634,10 @@ namespace Glass
 
 				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
 					auto assumed_type = TypeExpressionGetType(call_parameter->Type);
-					SetLikelyConstantType(assumed_type->BaseID);
+
+					if (assumed_type) {
+						SetLikelyConstantType(assumed_type->BaseID);
+					}
 				}
 
 				auto argument_value = GetExpressionByValue(call_argument);
@@ -3108,16 +3137,46 @@ namespace Glass
 		return IR(IRSSAValue(ssa->ID));
 	}
 
-	IRInstruction* Compiler::CastCodeGen(const CastNode* cast)
+	IRInstruction* Compiler::AutoCastCodeGen(const AutoCastNode* autoCastNode)
 	{
-		auto expr_value = (IRSSAValue*)GetExpressionByValue(cast->Expr);
+		auto auto_cast_type = m_AutoCastTargetType;
+
+		auto cast_expr_code = GetExpressionByValue(autoCastNode->Expr);
+
+		if (!cast_expr_code) {
+			return nullptr;
+		}
+
+		if (!auto_cast_type) {
+			MSG_LOC(autoCastNode);
+			FMT_WARN("cannot infer auto cast type!");
+			return nullptr;
+		}
+
+		return CastCodeGen(auto_cast_type, cast_expr_code, autoCastNode);
+	}
+
+	IRInstruction* Compiler::CastNodeCodeGen(const CastNode* castNode)
+	{
+		auto cast_expr_code = GetExpressionByValue(castNode->Expr);
+		auto cast_type = TypeExpressionGetType(castNode->Type);
+
+		return CastCodeGen(cast_type, cast_expr_code, castNode);
+	}
+
+	IRInstruction* Compiler::CastCodeGen(TypeStorage* cast_type, IRSSAValue* code, const Expression* ast_node)
+	{
+		GS_CORE_ASSERT(cast_type);
+		GS_CORE_ASSERT(code);
+		GS_CORE_ASSERT(ast_node);
+
+		auto expr_value = code;
 
 		if (!expr_value)
 			return nullptr;
 
 		auto new_ssa = CreateIRSSA();
 
-		auto cast_type = TypeExpressionGetType(cast->Type);
 		auto castee_type = m_Metadata.GetExprType(expr_value->SSA);
 
 		auto castee_size = m_Metadata.GetTypeSize(castee_type->BaseID);
@@ -3184,7 +3243,7 @@ namespace Glass
 				}
 			}
 			else {
-				MSG_LOC(cast);
+				MSG_LOC(ast_node);
 				FMT_WARN("Invalid cast from type '{}' to type '{}'", PrintType(castee_type), PrintType(cast_type));
 				return nullptr;
 			}
