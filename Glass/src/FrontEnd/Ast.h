@@ -35,6 +35,7 @@ namespace Glass
 		Foreign,
 		MemberAccess,
 		If,
+		Else,
 		While,
 		For,
 		Break,
@@ -48,6 +49,7 @@ namespace Glass
 		AutoCast,
 		ArrayAccess,
 		SizeOf,
+
 
 		Range,
 
@@ -744,12 +746,33 @@ namespace Glass
 		}
 	};
 
+	class ElseNode : public Statement
+	{
+	public:
+
+		ScopeNode* Scope = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::Else;
+		}
+
+		virtual std::string ToString() const {
+			return "else" + Scope->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return Scope->GetLocation();
+		}
+	};
+
 	class IfNode : public Statement
 	{
 	public:
 
 		Expression* Condition = nullptr;
 		ScopeNode* Scope = nullptr;
+		ElseNode* Else;
 
 		virtual NodeType GetType() const override
 		{

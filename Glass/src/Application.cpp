@@ -11,12 +11,13 @@
 
 #include "BackEnd/LLVMBackend.h"
 
+#include "BackEnd/LLR_X86.h"
+
 namespace Glass
 {
 	Application::Application(const CommandLineArgs& CmdLineArgs)
 		: m_Arguments(CmdLineArgs), m_Options(ParseOptions(CmdLineArgs))
 	{
-
 		GS_CORE_WARN("C Includes");
 
 		for (const auto& include : m_Options.CIncludes) {
@@ -136,6 +137,9 @@ namespace Glass
 
 		std::chrono::steady_clock::time_point m_LinkerStart;
 		std::chrono::steady_clock::time_point m_LinkerEnd;
+
+		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
+		x86_backend.Assemble();
 
 		if (llvm && compilation_successful)
 		{
@@ -359,4 +363,5 @@ namespace Glass
 	LinearAllocator Application::m_AstAllocator = LinearAllocator(allocator_buffer_size);
 	LinearAllocator Application::m_IRAllocator = LinearAllocator(allocator_buffer_size);
 	LinearAllocator Application::m_TypeAllocator = LinearAllocator(allocator_buffer_size);
+	LinearAllocator Application::m_ASMAllocator = LinearAllocator(allocator_buffer_size);
 }

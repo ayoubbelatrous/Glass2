@@ -225,6 +225,15 @@ namespace Glass
 
 		Node.Scope = (ScopeNode*)ParseScope();
 
+		if (At().Type == TokenType::Symbol) {
+			if (At().Symbol == "else") {
+				Consume();
+				ElseNode els;
+				els.Scope = (ScopeNode*)ParseScope();
+				Node.Else = AST(els);
+			}
+		}
+
 		return Application::AllocateAstNode(Node);
 	}
 

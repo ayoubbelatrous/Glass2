@@ -1385,6 +1385,9 @@ namespace Glass
 		m_LLVMBuilder->SetInsertPoint(loopCondBlock);
 
 		for (auto inst : _while->ConditionBlock) {
+			if (break_encountered) {
+				break; // LOL
+			}
 			CodeGen(inst);
 		}
 
@@ -1402,11 +1405,15 @@ namespace Glass
 			CodeGen(inst);
 		}
 
-		m_LLVMBuilder->CreateBr(loopCondBlock);
+		if (!break_encountered) {
+			m_LLVMBuilder->CreateBr(loopCondBlock);
+		}
 
 		m_LLVMBuilder->SetInsertPoint(afterLoopBlock);
 
 		m_BreakTargets.pop_back();
+
+		break_encountered = false;
 
 		return nullptr;
 	}
@@ -1529,6 +1536,7 @@ namespace Glass
 	llvm::Value* LLVMBackend::BreakCodeGen(const IRBreak* brk)
 	{
 		GS_CORE_ASSERT(m_BreakTargets.size() > 0, "break outside a conditional block");
+		GS_CORE_ASSERT(!break_encountered, "un handled previous break");
 		m_LLVMBuilder->CreateBr(m_BreakTargets.back());
 		break_encountered = true;
 		return nullptr;

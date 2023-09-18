@@ -119,6 +119,11 @@ namespace Glass
 			return m_TypeAllocator.Allocate<T>(d);
 		}
 
+		template<typename T>
+		static T* AllocateAsmNode(const T& d) {
+			return m_ASMAllocator.Allocate<T>(d);
+		}
+
 		static bool UseAlloca;
 
 	private:
@@ -141,6 +146,7 @@ namespace Glass
 		static LinearAllocator m_AstAllocator;
 		static LinearAllocator m_IRAllocator;
 		static LinearAllocator m_TypeAllocator;
+		static LinearAllocator m_ASMAllocator;
 
 		std::map<u64, CompilerFile> m_Sources;
 	};
@@ -148,4 +154,5 @@ namespace Glass
 #define IR(x) Application::AllocateIRNode(x)
 #define AST(x) Application::AllocateAstNode(x)
 #define TYPE(x) Application::AllocateTypeNode(x)
+#define ASMA(x) Application::AllocateAsmNode(x)
 }

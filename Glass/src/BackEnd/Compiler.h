@@ -177,6 +177,10 @@ namespace Glass
 			return m_Metadata;
 		}
 
+		MetaData& GetMetadataNonConst() {
+			return m_Metadata;
+		}
+
 		void PushIRData(IRData* data) {
 			m_DataStack.push_back(data);
 		}
