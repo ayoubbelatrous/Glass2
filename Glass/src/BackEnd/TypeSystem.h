@@ -104,6 +104,8 @@ namespace Glass {
 
 		static TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
 
+		static u64 GetTypeSize(TypeStorage* type);
+
 	private:
 
 		const MetaData& m_Metadata;

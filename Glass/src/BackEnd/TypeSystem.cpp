@@ -259,4 +259,25 @@ namespace Glass {
 		return type;
 	}
 
+	u64 TypeSystem::GetTypeSize(TypeStorage* type)
+	{
+		if (type->Kind == TypeStorageKind::Pointer) {
+			return 8;
+		}
+
+		if (type->Kind == TypeStorageKind::DynArray) {
+			return 16;
+		}
+
+		if (type->Kind == TypeStorageKind::Function) {
+			return 8;
+		}
+
+		if (type->Kind == TypeStorageKind::Base) {
+			return m_Instance->m_Metadata.GetTypeSize(type->BaseID);
+		}
+
+		GS_CORE_ASSERT(0);
+		return -1;
+	}
 }

@@ -24,3 +24,5 @@ generated.c
 generated.exe
 generated.obj
 GSodium.log
+**.s
+.asm
