@@ -1247,6 +1247,7 @@ namespace Glass
 			char c = data->Data[i];
 
 			if (c == '\\') {
+
 				if (data->Data[i + 1] == 'n') {
 
 					string_data.push_back('\x0A');
