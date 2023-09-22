@@ -13,6 +13,8 @@ namespace Glass
 
 		X86_CALL,
 
+		X86_JMP,
+
 		X86_MOV,
 		X86_MOVQ,
 		X86_LEA,
@@ -63,9 +65,15 @@ namespace Glass
 
 	enum X86_Word
 	{
-		word,
-		dword,
-		qword,
+		X86_byte = 1,	//	8 bit
+
+		X86_word,	//	16 bit
+		X86_dword,	//	32 bit
+		X86_qword,	//	64 bit
+
+		X86_xword,	//	128 bit
+		X86_yword,	//	256 bit
+		X86_zword,	//	512 bit
 	};
 
 	enum RegisterUsage
@@ -84,6 +92,11 @@ namespace Glass
 	struct X86_Call_Inst
 	{
 		X86_Inst* What;
+	};
+
+	struct X86_Jmp_Inst
+	{
+		X86_Inst* Where;
 	};
 
 	struct X86_Reg_Name_Inst
@@ -154,6 +167,7 @@ namespace Glass
 			X86_Reg_Name_Inst			reg_name;
 			X86_Reg_Allocation_Inst		reg_alloc;
 			X86_Call_Inst				call;
+			X86_Jmp_Inst				jmp;
 
 			X86_Constant_Inst			constant;
 			X86_Constant_Offset			constant_offset;
@@ -203,7 +217,10 @@ namespace Glass
 		void AssembleStore(IRStore* inst, std::vector<X86_Inst*>& stream);
 		void AssembleLoad(IRLoad* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleArgument(IRArgumentAllocation* inst, std::vector<X86_Inst*>& stream);
+
 		void AssembleCall(IRFunctionCall* inst, std::vector<X86_Inst*>& stream);
+		void AssembleReturn(IRReturn* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleBinOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
@@ -218,25 +235,48 @@ namespace Glass
 
 		std::string RegisterToString(X86_Register reg);
 
+		void Make_MemCpy(u64 source_register_id, u64 destination_register_id, std::vector<X86_Inst*>& stream, TypeStorage* type);
+		void Make_LocalStack_MemCpy(X86_Inst* source_stack_offset, X86_Inst* destination_stack_offset, std::vector<X86_Inst*>& stream, TypeStorage* type);
+
+		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, TypeStorage* type);
+		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, u64 size);
+
+		void Make_LEA(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& stream);
+
 		X86_Inst* Make_Register(X86_Register register_type);
 		X86_Inst* Make_Constant(i64 integer);
 
 		X86_Inst* GetIRRegister(u64 id);
 		TypeStorage* GetIRRegisterType(u64 id);
 
+		RegisterUsage RegisterUsageBySize(TypeStorage* type);
+		RegisterUsage RegisterUsageBySize(u64 type_size);
+
+		X86_Word InWords(TypeStorage* type);
+		X86_Word InWords(u64 type_size);
+
+		u64 RegiserSize(X86_Register reg);
+
 		std::map<u32, X86_Inst*> RegisterAllocationIDs;
+		std::map<X86_REG_Overlap, X86_Inst*> RegisterAllocations;
+		std::map<X86_REG_Overlap, TypeStorage*> RegisterAllocationTypes;
 		std::map<X86_REG_Overlap, bool> RegisterOccupations;
 
 		void Free_Register(u32 id);
-		X86_Inst* Allocate_Register(RegisterUsage usage, u32 id);
-		X86_Inst* Allocate_Specific_Register(X86_Register reg, u32 id);
+		void Free_All_Register();
+
+		X86_Inst* Allocate_Register(RegisterUsage usage, u32 id, std::vector<X86_Inst*>& spillage_stream);
+		X86_Inst* Allocate_Specific_Register(X86_Register reg, u32 id, std::vector<X86_Inst*>& spillage_stream);
 
 		bool AreEqual(X86_Inst* a, X86_Inst* b);
 
+		X86_Inst* AllocateStack(TypeStorage* type);
+		X86_Inst* AllocateStack(u64 allocation_size);
+
 		u32 GetRegisterID();
 
-		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index);
-		X86_Inst* GetReturnLocation(TypeStorage* type);
+		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream);
+		X86_Inst* GetReturnLocation(TypeStorage* type, std::vector<X86_Inst*>& spillage_stream);
 
 		u32 RegisterIDCounter = 0;
 
@@ -246,10 +286,27 @@ namespace Glass
 		IRTranslationUnit* m_TranslationUnit;
 		MetaData* m_Metadata;
 
+		FunctionMetadata* m_CurrentFunction;
+
 		bool VariableRegisterPromotion = false;
 		bool UselessMoveElimination = true;
 
 		bool CalledVariadicFunction = false;
+
+		bool IsRegisterValue = false;
+		X86_Inst* RegisterValue = nullptr;
+
+		void SetRegisterValue(X86_Inst* register_value) {
+			GS_CORE_ASSERT(!RegisterValue);
+			RegisterValue = register_value;
+		}
+
+		X86_Inst* CurrentReturnTarget = nullptr;
+		X86_Inst* ReturnJmpTarget = nullptr;
+
+		X86_Inst* MemCpy = nullptr;
+
+		std::vector<X86_Inst*> CurrentFunctionArgumentAllocations;
 
 		X86_BackEnd_Data m_Data;
 	};

@@ -115,16 +115,14 @@ namespace Glass
 		Return,
 		Break,
 
+		Argument,
+
 		Function,
 		ForeignFunction,
 		FuncRef,
 		CallFuncRef,
 
-		ARGValue,
 		Call,
-		AsAddress,
-		AddressAsValue,
-		AddressOf,
 		Store,
 		Load,
 		Data,
@@ -133,7 +131,6 @@ namespace Glass
 		StructMember,
 		MemberAccess,
 		ArrayAccess,
-
 
 		Ref,
 		DeRef,
@@ -181,6 +178,26 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const = 0;
+	};
+
+	struct IRArgumentAllocation : public IRInstruction {
+
+		u64 ArgumentIndex = 0;
+		TypeStorage* AllocationType = nullptr;
+
+		IRArgumentAllocation() = default;
+		IRArgumentAllocation(u64 argumentIndex, TypeStorage* allocation_type)
+			:ArgumentIndex(argumentIndex), AllocationType(allocation_type)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			return "ARG $";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Argument;
+		}
 	};
 
 	struct IRLexBlock : public IRInstruction {
@@ -269,24 +286,6 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::SSAValue;
-		}
-	};
-	struct IRARGValue : public IRInstruction {
-		u64 ID = 0;
-		u64 SSA = 0;
-
-		IRARGValue() = default;
-		IRARGValue(u64 ssa)
-			:SSA(ssa)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			return 	"%%" + std::to_string(SSA);
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::ARGValue;
 		}
 	};
 
@@ -597,25 +596,6 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::Call;
-		}
-	};
-
-	struct IRAddressOf : public IRInstruction {
-		u64 ID = 0;
-		IRInstruction* SSA = 0;
-
-		IRAddressOf() = default;
-		IRAddressOf(IRInstruction* ssa)
-			:SSA(ssa)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			return 	"&$" + SSA->ToString();
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::AddressOf;
 		}
 	};
 

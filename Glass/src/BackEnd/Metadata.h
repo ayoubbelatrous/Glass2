@@ -161,7 +161,7 @@ namespace Glass {
 			bool variadic = false,
 			bool polyMorphic = false,
 			u64 PolyMorhID = 0)
-			:Name(name), SSAID(ssa_id), Variadic(variadic), PolyMorphic(polyMorphic), PolyMorhID(PolyMorhID)
+			:Name(name), Variadic(variadic), PolyMorphic(polyMorphic), PolyMorhID(PolyMorhID)
 		{}
 
 		std::string Name;
@@ -171,7 +171,7 @@ namespace Glass {
 		bool PolyMorphic = false;
 		u64 PolyMorhID = 0;
 
-		u64 SSAID = 0; // where this value ptr to stack is located could be a double pointer or more its always a pointer
+		IRSSAValue* AllocationLocation = nullptr;
 	};
 
 	struct PolyMorphicType

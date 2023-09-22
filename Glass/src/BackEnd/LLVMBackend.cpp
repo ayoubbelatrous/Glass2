@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "BackEnd/LLVMBackend.h"
+#include "llvm/DebugInfo/CodeView/CodeView.h"
 
 namespace Glass
 {
@@ -710,7 +711,18 @@ namespace Glass
 
 		case IRNodeType::LexicalBlock: return LexicalBlockCodeGen((IRLexBlock*)instruction);
 
+		case IRNodeType::Argument: {
+
+			IRArgumentAllocation* as_argument = (IRArgumentAllocation*)instruction;
+
+			llvm::AllocaInst* llvm_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(as_argument->AllocationType));
+			m_LLVMBuilder->CreateStore(GetFunctionArgumentName(m_CurrentFunctionID, as_argument->ArgumentIndex), llvm_Alloca);
+
+			return llvm_Alloca;
+
+		}
 		default:
+			GS_CORE_ASSERT(0 && "Unknown IR Instruction");
 			return 0;
 		}
 	}
@@ -824,44 +836,28 @@ namespace Glass
 		}
 
 		InsertFunctionArgNames(m_CurrentFunctionID, argument_names);
-		//InsertLLVMFunction(m_CurrentFunctionID, llvm_Func);
 
 		//Argument Stack Storage
 		u64 argument_id = 0;
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
 
-			llvm::AllocaInst* argument_Alloca = nullptr;
+			//InsertName(arg_metadata.SSAID, argument_Alloca);
 
-			if (!arg_metadata.Variadic) {
-				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(arg_metadata.Type));
-			}
-			else {
-				argument_Alloca = m_LLVMBuilder->CreateAlloca(GetLLVMType(IR_array));
-			}
+				/*
+			llvm::DILocalVariable* D = m_DBuilder->createParameterVariable(
+				m_DLexicalBlocks.back(),
+				arg_metadata.Name,
+				(u32)argument_id,
+				(llvm::DIFile*)mDContext,
+				line_number,
+				GetLLVMDebugType(arg_metadata.Type),
+				true);
 
-			InsertName(arg_metadata.SSAID, argument_Alloca);
+			m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
+				llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
+				m_LLVMBuilder->GetInsertBlock());
+				*/
 
-			//@Debugging
-			{
-				u32 line_number = (u32)func_metadata->Symbol.Line;
-
-				llvm::DIType* llvm_DType = nullptr;
-
-				llvm::DILocalVariable* D = m_DBuilder->createParameterVariable(
-					m_DLexicalBlocks.back(),
-					arg_metadata.Name,
-					(u32)argument_id,
-					(llvm::DIFile*)mDContext,
-					line_number,
-					GetLLVMDebugType(arg_metadata.Type),
-					true);
-
-				m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
-					llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
-					m_LLVMBuilder->GetInsertBlock());
-			}
-
-			m_LLVMBuilder->CreateStore(GetFunctionArgumentName(m_CurrentFunctionID, argument_id), GetName(arg_metadata.SSAID));
 			argument_id++;
 		}
 
@@ -884,17 +880,6 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::SSACodeGen(const IRSSA* ssa) {
 		if (ssa->Value) {
-
-			if (ssa->Value->GetType() == IRNodeType::AddressOf) {
-
-				IRAddressOf* address_of = (IRAddressOf*)ssa->Value;
-
-				if (address_of->SSA->GetType() == IRNodeType::ARGValue) {
-					IRARGValue* arg_value = (IRARGValue*)address_of->SSA;
-
-					return 0;
-				}
-			}
 
 			auto value = CodeGen(ssa->Value);
 

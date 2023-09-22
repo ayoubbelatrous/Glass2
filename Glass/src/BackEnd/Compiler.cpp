@@ -899,36 +899,12 @@ namespace Glass
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 		//////////////////////////////////////////////////////////////////////////
 
+		u64 argument_index = 0;
 		for (auto a : fnNode->GetArgList()->GetArguments())
 		{
-			IRSSA* arg_ssa = IR(IRSSA());
-			arg_ssa->ID = m_SSAIDCounter;
-
-			IRSSA* arg_address_ssa = CreateIRSSA();
-
 			ArgumentNode* arg = (ArgumentNode*)a;
-
-			RegisterVariable(arg_address_ssa, arg->Symbol.Symbol);
-
-			IRAddressOf address_of;
-
-			{
-				address_of.SSA = IR(IRARGValue(arg_address_ssa->ID));
-			}
-
-			arg_address_ssa->Value = IR(address_of);
-
 			TypeStorage* argument_type = TypeExpressionGetType(arg->Type);
-
 			TypeStorage* argument_variable_type = nullptr;
-
-			if (!arg->Variadic) {
-
-				argument_variable_type = argument_type;
-			}
-			else {
-				argument_variable_type = TypeSystem::GetBasic(IR_array);
-			}
 
 			if (!argument_type)
 			{
@@ -939,25 +915,32 @@ namespace Glass
 				return nullptr;
 			}
 
+			if (!arg->Variadic) {
+				argument_variable_type = argument_type;
+			}
+			else {
+				argument_variable_type = TypeSystem::GetBasic(IR_array);
+			}
+
 			VariableMetadata var_metadata = {
 				arg->Symbol,
 				argument_variable_type,
 			};
 
-			m_Metadata.RegisterVariableMetadata(arg_address_ssa->ID, var_metadata);
+			IRSSA* arg_register = CreateIRSSA();
+			arg_register->Value = IR(IRArgumentAllocation(argument_index, argument_variable_type));
 
-			IRF->Arguments.push_back(arg_ssa);
+			RegisterVariable(arg_register, arg->Symbol.Symbol);
+			m_Metadata.RegisterVariableMetadata(arg_register->ID, var_metadata);
 
 			ArgumentMetadata arg_metadata;
-
 			arg_metadata.Name = arg->Symbol.Symbol;
-
 			arg_metadata.Type = argument_type;
-
 			arg_metadata.Variadic = arg->Variadic;
-			arg_metadata.SSAID = arg_address_ssa->ID;
-
+			arg_metadata.AllocationLocation = IR(IRSSAValue(arg_register->ID));
 			args_metadata.push_back(arg_metadata);
+
+			argument_index++;
 		}
 
 		std::vector<TypeStorage*> signature_arguments;
@@ -1275,7 +1258,17 @@ namespace Glass
 
 		SetLikelyConstantType(GetExpectedReturnType()->BaseID);
 		auto expr = (IRSSAValue*)GetExpressionByValue(returnNode->Expr);
+		UN_WRAP(expr);
 		ResetLikelyConstantType();
+
+		auto expr_type = m_Metadata.GetExprType(expr->SSA);
+
+		GS_CORE_ASSERT(m_ExpectedReturnType);
+
+		if (!TypeSystem::StrictPromotion(expr_type, m_ExpectedReturnType)) {
+			MSG_LOC(returnNode->Expr);
+			FMT_WARN("return type doesn't match function type: {} => {}", PrintType(expr_type), PrintType(m_ExpectedReturnType));
+		}
 
 		ret.Value = expr;
 
@@ -2773,7 +2766,7 @@ namespace Glass
 				if (obj_expr_type.Pointer == 0) {
 
 					auto temporary_reference = CreateIRSSA();
-					temporary_reference->Value = IR(IRAddressOf(obj_ssa_value));
+					//temporary_reference->Value = IR(IRAddressOf(obj_ssa_value));
 
 					object_ssa_id = temporary_reference->ID;
 				}
