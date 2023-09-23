@@ -125,6 +125,8 @@ namespace Glass {
 		TypeStorage* Type = nullptr;
 
 		bool SizeComplete = false;
+
+		u64 Offset;
 	};
 
 	struct StructMetadata
@@ -135,6 +137,8 @@ namespace Glass {
 		bool Foreign = false;
 
 		bool SizeComplete = false;
+		u64 Size;
+		u64 Alignment;
 
 		u64 TypeID = 0;
 
@@ -649,6 +653,8 @@ namespace Glass {
 
 		const u64 GetTypeSize(TypeStorage* type) const;
 		const u64 GetTypeAlignment(TypeStorage* type) const;
+
+		void ComputeStructSizeAlignOffsets(StructMetadata* metadata);
 
 		u64 ComputeStructSize(const StructMetadata* metadata);
 

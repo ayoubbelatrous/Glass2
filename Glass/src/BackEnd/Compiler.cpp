@@ -526,8 +526,11 @@ namespace Glass
 
 			if (size_complete) {
 				structure.SizeComplete = true;
-				m_Metadata.m_TypeSizes[structure.TypeID] = m_Metadata.ComputeStructSize(&structure);
-				m_Metadata.m_TypeAlignments[structure.TypeID] = m_Metadata.ComputeStructAlignment(&structure);
+
+				m_Metadata.ComputeStructSizeAlignOffsets(&structure);
+
+				m_Metadata.m_TypeSizes[structure.TypeID] = structure.Size;
+				m_Metadata.m_TypeAlignments[structure.TypeID] = structure.Alignment;
 			}
 		};
 
@@ -870,6 +873,8 @@ namespace Glass
 		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
 		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
 
+		m_Metadata.m_CurrentFunction = IRF->ID;
+
 		if (metadata->PolyMorphic) {
 			return IRF;
 		}
@@ -961,6 +966,13 @@ namespace Glass
 		metadata->Arguments = args_metadata;
 		metadata->HasBody = true;
 
+		auto SSAs = PoPIRSSA();
+
+		for (auto ssa : SSAs)
+		{
+			IRF->Instructions.push_back(ssa);
+		}
+
 		for (const Statement* stmt : fnNode->GetStatements())
 		{
 			IRInstruction* code = StatementCodeGen(stmt);
@@ -996,8 +1008,6 @@ namespace Glass
 		//		@POP_SCOPE
 		m_Metadata.PopContext();
 		//////////////////////////////////////////////////////////////////////////
-
-		m_Metadata.m_CurrentFunction++;
 
 		return (IRInstruction*)IRF;
 	}
@@ -1784,7 +1794,6 @@ namespace Glass
 			}
 
 			u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
-
 			IRSSA* ssa = GetSSA(ID);
 
 			IRSSAValue ssa_val;
@@ -2699,6 +2708,9 @@ namespace Glass
 		u64 register_counter = m_SSAIDCounter;
 		u64 calling_function_ctx_id = m_Metadata.CurrentContext()->ID;
 		auto calling_function_return_type = GetExpectedReturnType();
+
+		auto current_function_id = m_Metadata.m_CurrentFunction;
+
 		m_Metadata.PopContext();
 
 		PushScope();
@@ -2708,7 +2720,7 @@ namespace Glass
 		SetExpectedReturnType(calling_function_return_type);
 
 		m_SSAIDCounter = register_counter;
-		m_Metadata.m_CurrentFunction--;
+		m_Metadata.m_CurrentFunction = current_function_id;
 
 		m_Metadata.PushContext(calling_function_ctx_id);
 

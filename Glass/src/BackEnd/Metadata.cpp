@@ -59,14 +59,61 @@ namespace Glass {
 		return -1;
 	}
 
-	u64 MetaData::ComputeStructSize(const StructMetadata* metadata)
+	void MetaData::ComputeStructSizeAlignOffsets(StructMetadata* metadata)
 	{
 		u64 size = 0;
 		u64 alignment = 0;
 
-		if (metadata->Name.Symbol == "MSDF_Glyph") {
-			//__debugbreak();
+		for (const MemberMetadata& member : metadata->Members) {
+
+			auto member_alignment = GetTypeAlignment(member.Type);
+
+			GS_CORE_ASSERT(member_alignment);
+			GS_CORE_ASSERT(member_alignment != -1);
+
+			if (member_alignment > alignment) {
+				alignment = member_alignment;
+			}
 		}
+
+		i64 remainder = 0;
+
+		for (MemberMetadata& member : metadata->Members) {
+			auto member_size = (i64)GetTypeSize(member.Type);
+
+			member.Offset = size;
+
+			if (member_size >= alignment) {
+				remainder = member_size % alignment;
+				size += member_size;
+			}
+			else {
+				if (remainder - member_size >= 0) {
+					size += remainder = remainder - member_size;
+				}
+				else {
+					remainder = member_size % alignment;
+					size += (member_size % alignment) + remainder;
+				}
+			}
+		}
+
+		if (size != 0 && alignment != 0) {
+			size_t finalPadding = (alignment - (size % alignment)) % alignment;
+			size += finalPadding;
+
+			GS_CORE_ASSERT(size % alignment == 0);
+
+		}
+
+		metadata->Size = size;
+		metadata->Alignment = alignment;
+	}
+
+	u64 MetaData::ComputeStructSize(const StructMetadata* metadata)
+	{
+		u64 size = 0;
+		u64 alignment = 0;
 
 		for (const MemberMetadata& member : metadata->Members) {
 

@@ -181,6 +181,8 @@ namespace Glass
 
 			X86_BinOp_Inst				bin_op;
 		} as;
+
+		const char* comment = nullptr;
 	};
 
 	struct X86_BackEnd_Data
@@ -217,6 +219,8 @@ namespace Glass
 		void AssembleStore(IRStore* inst, std::vector<X86_Inst*>& stream);
 		void AssembleLoad(IRLoad* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleMemberAccess(IRMemberAccess* inst, std::vector<X86_Inst*>& stream);
+
 		void AssembleArgument(IRArgumentAllocation* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleCall(IRFunctionCall* inst, std::vector<X86_Inst*>& stream);
@@ -225,11 +229,12 @@ namespace Glass
 		void AssembleBinOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleIRRegister(IRSSA* inst, std::vector<X86_Inst*>& stream);
+		void AssembleIRRegisterValue(IRSSAValue* register_value, std::vector<X86_Inst*>& stream);
 
 		TypeStorage* GetIRNodeType(IRInstruction* inst);
 
 		std::string Print(const std::vector<X86_Inst*>& assm);
-		void Print(X86_Inst inst, std::string& stream);
+		void Print(X86_Inst inst, std::string& stream, std::string& comments);
 
 		std::string MangleName(const std::string& name, TSFunc* signature);
 
@@ -238,8 +243,8 @@ namespace Glass
 		void Make_MemCpy(u64 source_register_id, u64 destination_register_id, std::vector<X86_Inst*>& stream, TypeStorage* type);
 		void Make_LocalStack_MemCpy(X86_Inst* source_stack_offset, X86_Inst* destination_stack_offset, std::vector<X86_Inst*>& stream, TypeStorage* type);
 
-		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, TypeStorage* type);
-		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, u64 size);
+		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, TypeStorage* type, const char* comment = nullptr);
+		X86_Inst* Make_Move(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& intermediate_stream, u64 size, const char* comment = nullptr);
 
 		void Make_LEA(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& stream);
 
