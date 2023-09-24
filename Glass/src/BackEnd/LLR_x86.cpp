@@ -194,7 +194,7 @@ namespace Glass
 		asm_out << "section '.data' data readable align 16\n";
 		asm_out << data_section;
 
-		GS_CORE_TRACE("ASM:\n{}", assem);
+		//GS_CORE_TRACE("ASM:\n{}", assem);
 
 		return build_stream;
 	}
@@ -270,6 +270,15 @@ namespace Glass
 		case IRNodeType::Equal:
 		case IRNodeType::NotEqual:
 			AssembleLogicalOp((IRBinOp*)inst, stream);
+			break;
+		case IRNodeType::If:
+			AssembleIf((IRIf*)inst, stream);
+			break;
+		case IRNodeType::While:
+			AssembleWhile((IRWhile*)inst, stream);
+			break;
+		case IRNodeType::LexicalBlock:
+			AssembleLexicalBlock((IRLexBlock*)inst, stream);
 			break;
 		case IRNodeType::PointerCast: {
 			SetRegisterValue(GetIRRegister(((IRPointerCast*)inst)->PointerRegister));
@@ -353,8 +362,10 @@ namespace Glass
 			argument_index++;
 		}
 
+		u64 index = 0;
 		for (auto i : func->Instructions) {
 			Assemble(i, body_stream);
+			index++;
 		}
 
 		CurrentFunctionArgumentAllocations.clear();
@@ -428,6 +439,8 @@ namespace Glass
 		Free_All_Register();
 		CurrentReturnTarget = nullptr;
 		ReturnJmpTarget = nullptr;
+		FunctionCounter++;
+		LabelCounter++;
 	}
 
 	void X86_BackEnd::AssembleConstValue(IRCONSTValue* inst, std::vector<X86_Inst*>& stream)
@@ -748,6 +761,9 @@ namespace Glass
 		if (IsRegisterValue) {
 			SetRegisterValue(return_location);
 		}
+		else {
+			Free_Register(return_location->as.reg_alloc.register_allocation_id);
+		}
 
 		// 
 		// 		X86_Inst* return_spill = ASMA(X86_Inst());
@@ -790,9 +806,8 @@ namespace Glass
 			{IRNodeType::DIV,X86_IDIV},
 		};
 
-
 		auto temprary_move_a = GetIRRegister(inst->RegisterA->RegisterID);
-		auto dest_inst = Allocate_Register(RegisterUsage::REG_I32, GetRegisterID(), stream);
+		auto dest_inst = Allocate_Register(RegisterUsageBySize(TypeSystem::GetBasic(inst->Type)), GetRegisterID(), stream);
 
 		SetRegisterValue(dest_inst);
 
@@ -845,9 +860,110 @@ namespace Glass
 		SetRegisterValue(b8_register);
 	}
 
+	void X86_BackEnd::AssembleIf(IRIf* ir_if, std::vector<X86_Inst*>& stream)
+	{
+		auto condition_register = GetIRRegister(ir_if->ConditionRegister);
+
+		auto cont_label_name = GetContLabelName();
+
+		X86_Inst* continue_label_ref = ASMA(X86_Inst());
+		continue_label_ref->type = X86_LABEL_REF;
+		continue_label_ref->as.label.name = cont_label_name;
+
+		X86_Inst* compare = ASMA(X86_Inst());
+		compare->type = X86_CMP;
+		compare->as.cmp.a = condition_register;
+		compare->as.cmp.b = Make_Constant(0);
+		stream.push_back(compare);
+
+		X86_Inst* cond_jump = ASMA(X86_Inst());
+		cond_jump->type = X86_JMPLE;
+		cond_jump->as.jmp.Where = continue_label_ref;
+		stream.push_back(cond_jump);
+
+		for (auto inst : ir_if->Instructions) {
+			Assemble(inst, stream);
+		}
+
+		X86_Inst* continue_label = ASMA(X86_Inst());
+		continue_label->type = X86_LABEL;
+		continue_label->as.label.name = cont_label_name;
+		stream.push_back(continue_label);
+	}
+
+	void X86_BackEnd::AssembleWhile(IRWhile* ir_while, std::vector<X86_Inst*>& stream)
+	{
+		auto condition_label_name = GetLoopLabelName();
+		auto cont_label_name = GetContLabelName();
+
+		//after loop
+		X86_Inst* continue_label_ref = ASMA(X86_Inst());
+		continue_label_ref->type = X86_LABEL_REF;
+		continue_label_ref->as.label.name = cont_label_name;
+
+		//loop start
+		X86_Inst* condition_label = ASMA(X86_Inst());
+		condition_label->type = X86_LABEL;
+		condition_label->as.label.name = condition_label_name;
+		stream.push_back(condition_label);
+
+		X86_Inst* condition_label_ref = ASMA(X86_Inst());
+		condition_label_ref->type = X86_LABEL_REF;
+		condition_label_ref->as.label.name = condition_label_name;
+
+		for (auto inst : ir_while->ConditionBlock) {
+			Assemble(inst, stream);
+		}
+
+		auto condition_register = GetIRRegister(ir_while->ConditionRegisterID);
+
+		if (condition_register->type != X86_REG_ALLOC || condition_register->type != X86_REG_NAME) {
+			auto intermeddiate_temporary_reg_id = GetRegisterID();
+			auto intermeddiate_temporary_reg = Allocate_Register(REG_I8, intermeddiate_temporary_reg_id, stream);
+
+			Make_Move(condition_register, intermeddiate_temporary_reg, stream, TypeSystem::GetBasic(IR_u8));
+			Free_Register(intermeddiate_temporary_reg_id);
+			condition_register = intermeddiate_temporary_reg;
+		}
+
+		X86_Inst* compare = ASMA(X86_Inst());
+		compare->type = X86_CMP;
+		compare->as.cmp.a = condition_register;
+		compare->as.cmp.b = Make_Constant(0);
+		stream.push_back(compare);
+
+		X86_Inst* cond_jump = ASMA(X86_Inst());
+		cond_jump->type = X86_JMPLE;
+		cond_jump->as.jmp.Where = continue_label_ref;
+		stream.push_back(cond_jump);
+
+		for (auto inst : ir_while->Instructions) {
+			Assemble(inst, stream);
+		}
+
+		X86_Inst* jump = ASMA(X86_Inst());
+		jump->type = X86_JMP;
+		jump->as.jmp.Where = condition_label_ref;
+		stream.push_back(jump);
+
+		X86_Inst* continue_label = ASMA(X86_Inst());
+		continue_label->type = X86_LABEL;
+		continue_label->as.label.name = cont_label_name;
+		stream.push_back(continue_label);
+	}
+
+	void X86_BackEnd::AssembleLexicalBlock(IRLexBlock* lexical_block, std::vector<X86_Inst*>& stream)
+	{
+		for (auto inst : lexical_block->Instructions) {
+			Assemble(inst, stream);
+		}
+	}
+
 	void X86_BackEnd::AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream)
 	{
 		IsRegisterValue = true;
+
+		GS_CORE_ASSERT(!RegisterValue);
 
 		std::vector<X86_Inst*> register_stream;
 		Assemble(inst->Value, register_stream);
@@ -880,7 +996,8 @@ namespace Glass
 			Free_Register(address_register->as.reg_alloc.register_allocation_id);
 		}
 		else {
-			SetRegisterValue(GetIRRegister(register_value->RegisterID));
+			if (IsRegisterValue)
+				SetRegisterValue(GetIRRegister(register_value->RegisterID));
 		}
 	}
 
@@ -1146,6 +1263,29 @@ namespace Glass
 			stream += "\t";
 
 			Print(*inst.as.cond_set.destination, stream, comments);
+
+		}
+					  break;
+		case X86_JMPG:
+		case X86_JMPGE:
+		case X86_JMPL:
+		case X86_JMPLE:
+		case X86_JMPE:
+		case X86_JMPNE: {
+
+			static const std::map<X86_ASM, const char*> cjmp_inst_names = {
+				{X86_JMPG,	"jg"},
+				{X86_JMPGE, "je"},
+				{X86_JMPL,	"jl"},
+				{X86_JMPLE, "jle"},
+				{X86_JMPE,	"je"},
+				{X86_JMPNE, "jne"},
+			};
+
+			stream += cjmp_inst_names.at(inst.type);
+			stream += "\t";
+
+			Print(*inst.as.jmp.Where, stream, comments);
 
 		}
 					  break;

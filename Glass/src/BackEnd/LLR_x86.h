@@ -14,6 +14,12 @@ namespace Glass
 		X86_CALL,
 
 		X86_JMP,
+		X86_JMPG,
+		X86_JMPGE,
+		X86_JMPL,
+		X86_JMPLE,
+		X86_JMPE,
+		X86_JMPNE,
 
 		X86_MOV,
 		X86_MOVQ,
@@ -266,6 +272,11 @@ namespace Glass
 
 		void AssembleLogicalOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleIf(IRIf* ir_if, std::vector<X86_Inst*>& stream);
+		void AssembleWhile(IRWhile* ir_while, std::vector<X86_Inst*>& stream);
+
+		void AssembleLexicalBlock(IRLexBlock* lexical_block, std::vector<X86_Inst*>& stream);
+
 		void AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream);
 		void AssembleIRRegisterValue(IRRegisterValue* register_value, std::vector<X86_Inst*>& stream);
 
@@ -358,6 +369,21 @@ namespace Glass
 		X86_Inst* ReturnJmpTarget = nullptr;
 
 		X86_Inst* MemCpy = nullptr;
+
+		u64 FunctionCounter = 0;
+		u64 LabelCounter = 0;
+
+		const char* GetContLabelName() {
+			auto label_name = ASMA(fmt::format("cont_{}_{}", FunctionCounter, LabelCounter))->c_str();
+			LabelCounter++;
+			return label_name;
+		}
+
+		const char* GetLoopLabelName() {
+			auto label_name = ASMA(fmt::format("loop_{}_{}", FunctionCounter, LabelCounter))->c_str();
+			LabelCounter++;
+			return label_name;
+		}
 
 		std::vector<X86_Inst*> CurrentFunctionArgumentAllocations;
 

@@ -1525,7 +1525,7 @@ namespace Glass
 		//Cond:
 		{
 			PushScope();
-			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end)));
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end, type->BaseID)));
 			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
 			auto register_stack = PoPIRRegisters();

@@ -135,11 +135,17 @@ namespace Glass
 		std::chrono::steady_clock::time_point m_LLVMStart;
 		std::chrono::steady_clock::time_point m_LLVMEnd;
 
+		std::chrono::steady_clock::time_point m_X86Start;
+		std::chrono::steady_clock::time_point m_X86End;
+
 		std::chrono::steady_clock::time_point m_LinkerStart;
 		std::chrono::steady_clock::time_point m_LinkerEnd;
 
 		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
+
+		m_X86Start = std::chrono::high_resolution_clock::now();
 		x86_backend.Assemble();
+		m_X86End = std::chrono::high_resolution_clock::now();
 
 		if (llvm && compilation_successful)
 		{
@@ -202,6 +208,7 @@ namespace Glass
 			GS_CORE_WARN("LLVM Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LLVMEnd - m_LLVMStart).count());
 			GS_CORE_WARN("Linker Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LinkerEnd - m_LinkerStart).count());
 			GS_CORE_WARN("IR Generation Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_CompilerEnd - m_CompilerStart).count());
+			GS_CORE_WARN("X86_64 Backend Took: {} micro s", std::chrono::duration_cast<std::chrono::microseconds>(m_X86End - m_X86Start).count());
 		}
 	}
 
