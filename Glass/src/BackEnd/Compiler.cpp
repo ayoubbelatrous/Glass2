@@ -1389,6 +1389,35 @@ namespace Glass
 	{
 		auto condition = GetExpressionByValue(ifNode->Condition);
 
+		auto condition_ir_register = m_Metadata.GetRegister(condition->RegisterID);
+		auto condition_ir_node_type = condition_ir_register->Value->GetType();
+
+		//optimization to eliminate extra instruction on x86_64 backend llvm might be smart enough to detect that with no op enabled
+
+		//without
+		//	mov		al, 1
+		//	cmp		al, 0
+		//	setl	ah, 1
+		//	cmp		ah,	0
+		//	jge		false_case
+		//	... inside if struff
+
+		//with
+		//	mov		al, 1
+		//	cmp		al, 0
+		//	jge		false_case
+		//	... inside if struff
+
+		switch (condition_ir_node_type) {
+		case IRNodeType::GreaterThan:
+		case IRNodeType::LesserThan:
+		case IRNodeType::Equal:
+		case IRNodeType::NotEqual: {
+			condition_ir_register->IsCondition = true;
+		}
+								 break;
+		}
+
 		if (!condition)
 			return nullptr;
 
@@ -1440,6 +1469,19 @@ namespace Glass
 		IRRegisterValue* condition = GetExpressionByValue(whileNode->Condition);
 		std::vector<IRRegister*> condition_registers = PoPIRRegisters();
 		PopScope();
+
+		auto condition_ir_register = m_Metadata.GetRegister(condition->RegisterID);
+		auto condition_ir_node_type = condition_ir_register->Value->GetType();
+
+		switch (condition_ir_node_type) {
+		case IRNodeType::GreaterThan:
+		case IRNodeType::LesserThan:
+		case IRNodeType::Equal:
+		case IRNodeType::NotEqual: {
+			condition_ir_register->IsCondition = true;
+		}
+								 break;
+		}
 
 		if (!condition)
 			return nullptr;
@@ -1525,7 +1567,12 @@ namespace Glass
 		//Cond:
 		{
 			PushScope();
+
 			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end, type->BaseID)));
+
+			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
+			cmp_register->IsCondition = true;
+
 			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
 			auto register_stack = PoPIRRegisters();

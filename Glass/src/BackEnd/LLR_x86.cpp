@@ -7,6 +7,14 @@
 
 namespace Glass
 {
+
+	static const std::map<IRNodeType, X86_ASM> elbat_cigol_detrevni = { // inverted because we skip the true case if condition is false not otherway around
+		{IRNodeType::LesserThan,	X86_JMPGE },
+		{IRNodeType::GreaterThan,	X86_JMPLE },
+		{IRNodeType::NotEqual,		X86_JMPE },
+		{IRNodeType::Equal,			X86_JMPNE },
+	};
+
 	static const std::map<IRNodeType, X86_ASM> op_to_set_inst = {
 		{IRNodeType::GreaterThan,	X86_SETG},
 		{IRNodeType::LesserThan,	X86_SETL},
@@ -833,6 +841,12 @@ namespace Glass
 
 	void X86_BackEnd::AssembleLogicalOp(IRBinOp* inst, std::vector<X86_Inst*>& stream)
 	{
+		bool is_condition = false;
+
+		if (IsRegisterValue) {
+			is_condition = CurrentRegister->IsCondition;
+		}
+
 		auto compare_type = TypeSystem::GetBasic(inst->Type);
 		GS_CORE_ASSERT(compare_type);
 		auto compare_size = TypeSystem::GetTypeSize(compare_type);
@@ -850,36 +864,54 @@ namespace Glass
 		Free_Register(destination_register->as.reg_alloc.register_allocation_id);
 		stream.push_back(compare);
 
-		auto b8_register = Allocate_Register(REG_I8, GetRegisterID(), stream);
+		if (is_condition) {
+			SetRegisterValue(ASMA(X86_Inst()));
+			// this means that this a if or while condition no need to store anything setl will become jl
+		}
+		else {
 
-		X86_Inst* conditional_set = ASMA(X86_Inst());
-		conditional_set->type = op_to_set_inst.at(inst->GetType());
-		conditional_set->as.cond_set.destination = b8_register;
-		stream.push_back(conditional_set);
+			auto b8_register = Allocate_Register(REG_I8, GetRegisterID(), stream);
 
-		SetRegisterValue(b8_register);
+			X86_Inst* conditional_set = ASMA(X86_Inst());
+			conditional_set->type = op_to_set_inst.at(inst->GetType());
+			conditional_set->as.cond_set.destination = b8_register;
+			stream.push_back(conditional_set);
+
+			SetRegisterValue(b8_register);
+		}
 	}
 
 	void X86_BackEnd::AssembleIf(IRIf* ir_if, std::vector<X86_Inst*>& stream)
 	{
-		auto condition_register = GetIRRegister(ir_if->ConditionRegister);
-
 		auto cont_label_name = GetContLabelName();
 
 		X86_Inst* continue_label_ref = ASMA(X86_Inst());
 		continue_label_ref->type = X86_LABEL_REF;
 		continue_label_ref->as.label.name = cont_label_name;
 
-		X86_Inst* compare = ASMA(X86_Inst());
-		compare->type = X86_CMP;
-		compare->as.cmp.a = condition_register;
-		compare->as.cmp.b = Make_Constant(0);
-		stream.push_back(compare);
+		auto condition_register = GetIRRegister(ir_if->ConditionRegister);
+		auto condition_ir_register = m_Metadata->GetRegister(ir_if->ConditionRegister);
 
-		X86_Inst* cond_jump = ASMA(X86_Inst());
-		cond_jump->type = X86_JMPLE;
-		cond_jump->as.jmp.Where = continue_label_ref;
-		stream.push_back(cond_jump);
+		auto condition_register_value_ir_type = condition_ir_register->Value->GetType();
+
+		if (!condition_ir_register->IsCondition) {
+			X86_Inst* compare = ASMA(X86_Inst());
+			compare->type = X86_CMP;
+			compare->as.cmp.a = condition_register;
+			compare->as.cmp.b = Make_Constant(0);
+			stream.push_back(compare);
+
+			X86_Inst* cond_jump = ASMA(X86_Inst());
+			cond_jump->type = X86_JMPLE;
+			cond_jump->as.jmp.Where = continue_label_ref;
+			stream.push_back(cond_jump);
+		}
+		else {
+			X86_Inst* cond_jump = ASMA(X86_Inst());
+			cond_jump->type = elbat_cigol_detrevni.at(condition_register_value_ir_type);
+			cond_jump->as.jmp.Where = continue_label_ref;
+			stream.push_back(cond_jump);
+		}
 
 		for (auto inst : ir_if->Instructions) {
 			Assemble(inst, stream);
@@ -915,27 +947,40 @@ namespace Glass
 			Assemble(inst, stream);
 		}
 
-		auto condition_register = GetIRRegister(ir_while->ConditionRegisterID);
+		auto condition_ir_register = m_Metadata->GetRegister(ir_while->ConditionRegisterID);
+		auto condition_register_value_ir_type = condition_ir_register->Value->GetType();
 
-		if (condition_register->type != X86_REG_ALLOC || condition_register->type != X86_REG_NAME) {
-			auto intermeddiate_temporary_reg_id = GetRegisterID();
-			auto intermeddiate_temporary_reg = Allocate_Register(REG_I8, intermeddiate_temporary_reg_id, stream);
+		if (!condition_ir_register->IsCondition) {
 
-			Make_Move(condition_register, intermeddiate_temporary_reg, stream, TypeSystem::GetBasic(IR_u8));
-			Free_Register(intermeddiate_temporary_reg_id);
-			condition_register = intermeddiate_temporary_reg;
+			auto condition_register = GetIRRegister(ir_while->ConditionRegisterID);
+
+			if (condition_register->type != X86_REG_ALLOC || condition_register->type != X86_REG_NAME) {
+				auto intermeddiate_temporary_reg_id = GetRegisterID();
+				auto intermeddiate_temporary_reg = Allocate_Register(REG_I8, intermeddiate_temporary_reg_id, stream);
+
+				Make_Move(condition_register, intermeddiate_temporary_reg, stream, TypeSystem::GetBasic(IR_u8));
+				Free_Register(intermeddiate_temporary_reg_id);
+				condition_register = intermeddiate_temporary_reg;
+			}
+
+			X86_Inst* compare = ASMA(X86_Inst());
+			compare->type = X86_CMP;
+			compare->as.cmp.a = condition_register;
+			compare->as.cmp.b = Make_Constant(0);
+			stream.push_back(compare);
+
+			X86_Inst* cond_jump = ASMA(X86_Inst());
+			cond_jump->type = X86_JMPLE;
+			cond_jump->as.jmp.Where = continue_label_ref;
+			stream.push_back(cond_jump);
+
 		}
-
-		X86_Inst* compare = ASMA(X86_Inst());
-		compare->type = X86_CMP;
-		compare->as.cmp.a = condition_register;
-		compare->as.cmp.b = Make_Constant(0);
-		stream.push_back(compare);
-
-		X86_Inst* cond_jump = ASMA(X86_Inst());
-		cond_jump->type = X86_JMPLE;
-		cond_jump->as.jmp.Where = continue_label_ref;
-		stream.push_back(cond_jump);
+		else {
+			X86_Inst* cond_jump = ASMA(X86_Inst());
+			cond_jump->type = elbat_cigol_detrevni.at(condition_register_value_ir_type);
+			cond_jump->as.jmp.Where = continue_label_ref;
+			stream.push_back(cond_jump);
+		}
 
 		for (auto inst : ir_while->Instructions) {
 			Assemble(inst, stream);
@@ -962,6 +1007,7 @@ namespace Glass
 	void X86_BackEnd::AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream)
 	{
 		IsRegisterValue = true;
+		CurrentRegister = inst;
 
 		GS_CORE_ASSERT(!RegisterValue);
 
@@ -1275,9 +1321,11 @@ namespace Glass
 
 			static const std::map<X86_ASM, const char*> cjmp_inst_names = {
 				{X86_JMPG,	"jg"},
-				{X86_JMPGE, "je"},
+				{X86_JMPGE, "jge"},
+
 				{X86_JMPL,	"jl"},
 				{X86_JMPLE, "jle"},
+
 				{X86_JMPE,	"je"},
 				{X86_JMPNE, "jne"},
 			};

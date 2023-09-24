@@ -373,6 +373,8 @@ namespace Glass
 		u64 FunctionCounter = 0;
 		u64 LabelCounter = 0;
 
+		IRRegister* CurrentRegister = nullptr;
+
 		const char* GetContLabelName() {
 			auto label_name = ASMA(fmt::format("cont_{}_{}", FunctionCounter, LabelCounter))->c_str();
 			LabelCounter++;

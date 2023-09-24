@@ -443,6 +443,7 @@ namespace Glass
 	struct IRRegister : public IRInstruction {
 		u64 ID = 0;
 		IRInstruction* Value = nullptr;
+		bool IsCondition = false;	// optimization parameter to tell if a value is a comparison binop used by for or while
 
 		virtual std::string ToString() const override {
 			std::string str = "$ ";
@@ -970,8 +971,8 @@ namespace Glass
 		u64 Type = -1;
 
 		IRLesser() = default;
-		IRLesser(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
+		IRLesser(IRRegisterValue* A, IRRegisterValue* B, u64 type_id = -1)
+			:RegisterA(A), RegisterB(B), Type(type_id)
 		{
 		}
 
