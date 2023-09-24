@@ -236,6 +236,10 @@ namespace Glass
 		{
 			AssembleMemberAccess((IRMemberAccess*)inst, stream);
 		}break;
+		case IRNodeType::ArrayAccess:
+		{
+			AssembleArrayAccess((IRArrayAccess*)inst, stream);
+		}break;
 		case IRNodeType::Call:
 		{
 			AssembleCall((IRFunctionCall*)inst, stream);
@@ -289,7 +293,7 @@ namespace Glass
 			AssembleLexicalBlock((IRLexBlock*)inst, stream);
 			break;
 		case IRNodeType::PointerCast: {
-			SetRegisterValue(GetIRRegister(((IRPointerCast*)inst)->PointerRegister));
+			SetRegisterValue(m_Data.IR_RegisterValues.at((((IRPointerCast*)inst)->PointerRegister)));
 		}
 									break;
 
@@ -461,6 +465,10 @@ namespace Glass
 	void X86_BackEnd::AssembleAlloca(IRAlloca* inst, std::vector<X86_Inst*>& stream)
 	{
 		u64 allocation_size = TypeSystem::GetTypeSize(inst->Type);
+
+		if (allocation_size < 4) {
+			allocation_size = 4;
+		}
 
 		m_Data.CurrentFunction_StackFrameSize += allocation_size;
 
@@ -642,6 +650,7 @@ namespace Glass
 		X86_Inst* member_location = ASMA(X86_Inst(*struct_location));
 		member_location->as.constant_offset.offset = ASMA(*member_location->as.constant_offset.offset);
 		member_location->as.constant_offset.from = ASMA(*member_location->as.constant_offset.from);
+		member_location->as.constant_offset.size = InWords(member.Type);
 
 		i64& offset = *(i64*)(&member_location->as.constant_offset.offset->as.constant.bytes);
 		offset -= member.Offset;
@@ -649,6 +658,55 @@ namespace Glass
 		member_location->comment = ASMA("." + member.Name.Symbol)->c_str();
 
 		SetRegisterValue(member_location);
+	}
+
+	void X86_BackEnd::AssembleArrayAccess(IRArrayAccess* array_access, std::vector<X86_Inst*>& stream)
+	{
+		u64 element_size = TypeSystem::GetTypeSize(array_access->Type);
+		auto element_size_constant = Make_Constant((i64)element_size);
+
+		if (element_size <= 8)
+		{
+			auto address_rgister = GetIRRegister(array_access->ArrayAddress);
+			auto index_rgister = GetIRRegister(array_access->ElementIndexRegister);
+
+			X86_Inst* constant_mul = ASMA(X86_Inst());
+			constant_mul->type = X86_ADDR_MUL;
+			constant_mul->as.const_binop.a = element_size_constant;
+			constant_mul->as.const_binop.b = index_rgister;
+
+			X86_Inst* constant_offset = ASMA(X86_Inst());
+			constant_offset->type = X86_CONSTANT_OFFSET;
+			constant_offset->as.constant_offset.offset_type = X86_CONSTANT_ADD;
+			constant_offset->as.constant_offset.from = address_rgister;
+			constant_offset->as.constant_offset.offset = constant_mul;
+			constant_offset->as.constant_offset.size = InWords(element_size);
+
+			SetRegisterValue(constant_offset);
+		}
+		else {
+
+			auto element_adress_register = Allocate_Register(REG_I64, GetRegisterID(), stream);
+
+			auto index_rgister = GetIRRegister(array_access->ElementIndexRegister);
+			Make_Move(index_rgister, element_adress_register, stream, array_access->Type);
+
+			X86_Inst* multiply = ASMA(X86_Inst());
+			multiply->type = X86_IMUL;
+			multiply->as.bin_op.destination = element_adress_register;
+			multiply->as.bin_op.value = element_size_constant;
+			stream.push_back(multiply);
+
+			auto address_register = GetIRRegister(array_access->ArrayAddress);
+
+			X86_Inst* add = ASMA(X86_Inst());
+			add->type = X86_IADD;
+			add->as.bin_op.destination = element_adress_register;
+			add->as.bin_op.value = address_register;
+			stream.push_back(add);
+
+			SetRegisterValue(element_adress_register);
+		}
 	}
 
 	void X86_BackEnd::AssembleArgument(IRArgumentAllocation* inst, std::vector<X86_Inst*>& stream)
@@ -736,7 +794,7 @@ namespace Glass
 			auto arg_move_source = GetIRRegister(arg->RegisterID);
 			GS_CORE_ASSERT(arg_move_source);
 
-			if (TypeSystem::GetTypeSize(arg_type) > 8) {
+			if (TypeSystem::GetTypeSize(arg_type) > 8 && arg_move_source->type == X86_CONSTANT_OFFSET) {
 
 				X86_Inst lea = {};
 				lea.type = X86_LEA;
@@ -747,12 +805,6 @@ namespace Glass
 				Free_Register(arg_move_destination->as.reg_alloc.register_allocation_id);
 			}
 			else {
-				// 
-				// 				X86_Inst move = {};
-				// 				move.type = X86_MOV;
-				// 				move.as.move.source = arg_move_source;
-				// 				move.as.move.destination = arg_move_destination;
-				// 				stream.push_back(ASMA(move));
 
 				Make_Move(arg_move_source, arg_move_destination, stream, arg_type, "argument move");
 
@@ -847,6 +899,7 @@ namespace Glass
 			is_condition = CurrentRegister->IsCondition;
 		}
 
+		GS_CORE_ASSERT(inst->Type != -1);
 		auto compare_type = TypeSystem::GetBasic(inst->Type);
 		GS_CORE_ASSERT(compare_type);
 		auto compare_size = TypeSystem::GetTypeSize(compare_type);
@@ -1084,6 +1137,11 @@ namespace Glass
 			const MemberMetadata& member = struct_metadata->Members[member_access->MemberID];
 			type = TypeSystem::GetPtr(member.Type, 1);
 		}break;
+		case IRNodeType::ArrayAccess:
+		{
+			auto array_access = (IRArrayAccess*)inst;
+			type = TypeSystem::GetPtr(array_access->Type, 1);
+		}break;
 		case IRNodeType::Store:
 		{
 			IRStore* as_store = (IRStore*)inst;
@@ -1258,6 +1316,12 @@ namespace Glass
 
 		case X86_CONSTANT:
 			stream += std::to_string(*(i64*)&inst.as.constant.bytes);
+			break;
+
+		case X86_ADDR_MUL:
+			Print(*inst.as.const_binop.a, stream, comments);
+			stream += "*";
+			Print(*inst.as.const_binop.b, stream, comments);
 			break;
 
 		case X86_CONSTANT_OFFSET: {
@@ -1706,6 +1770,10 @@ namespace Glass
 
 	X86_Inst* X86_BackEnd::AllocateStack(u64 allocation_size)
 	{
+		if (allocation_size < 4) {
+			allocation_size = 4;
+		}
+
 		m_Data.CurrentFunction_StackFrameSize += allocation_size;
 
 		X86_Inst stack_frame_offset = {};

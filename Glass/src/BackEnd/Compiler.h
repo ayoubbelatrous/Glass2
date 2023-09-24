@@ -136,7 +136,7 @@ namespace Glass
 		Glass::Type TSToLegacy(TypeStorage* type);
 		TypeStorage* LegacyToTS(const Glass::Type& type);
 
-		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B);
+		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B, std::vector<IRRegister*>* a_code = nullptr, std::vector<IRRegister*>* b_code = nullptr);
 
 		bool CheckTypeConversion(u64 a, u64 b)
 		{

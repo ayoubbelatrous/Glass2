@@ -45,6 +45,8 @@ namespace Glass
 
 		X86_CONSTANT_OFFSET, // [rsp + 16] for example
 
+		X86_ADDR_MUL, // '4 * edi' [rax + 4*edi] for example
+
 		X86_DATA_STR_REF, // [hello_world_str]
 
 		X86_CMP,
@@ -151,6 +153,12 @@ namespace Glass
 		X86_Word	size;
 	};
 
+	struct X86_Constant_Binop
+	{
+		X86_Inst* a;
+		X86_Inst* b;
+	};
+
 	struct X86_Mov_Inst
 	{
 		X86_Inst* destination;
@@ -216,6 +224,8 @@ namespace Glass
 			X86_BinOp_Inst				bin_op;
 			X86_Cmp_Inst				cmp;
 			X86_Cond_Set_Inst			cond_set;
+
+			X86_Constant_Binop			const_binop;
 		} as;
 
 		const char* comment = nullptr;
@@ -262,6 +272,7 @@ namespace Glass
 		void AssembleLoad(IRLoad* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleMemberAccess(IRMemberAccess* inst, std::vector<X86_Inst*>& stream);
+		void AssembleArrayAccess(IRArrayAccess* array_access, std::vector<X86_Inst*>& stream);
 
 		void AssembleArgument(IRArgumentAllocation* inst, std::vector<X86_Inst*>& stream);
 

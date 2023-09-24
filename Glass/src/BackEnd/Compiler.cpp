@@ -1532,7 +1532,11 @@ namespace Glass
 		TypeStorage* begin_type = nullptr;
 		TypeStorage* end_type = nullptr;
 
-		BinaryDispatch(rangeNode->Begin, rangeNode->End, &begin_type, &end_type, &begin, &end);
+		IRIterator* iterator = IR(IRIterator());
+
+		std::vector<IRRegister*> end_code;
+
+		BinaryDispatch(rangeNode->Begin, rangeNode->End, &begin_type, &end_type, &begin, &end, nullptr, &end_code);
 
 		if (!begin || !end)
 			return nullptr;
@@ -1555,8 +1559,6 @@ namespace Glass
 			type = begin_type;
 		}
 
-		IRIterator* iterator = IR(IRIterator());
-
 		//:
 		iterator->IteratorIndex = CreateIRRegister(IR(IRAlloca(type)));
 		CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, begin));
@@ -1568,6 +1570,10 @@ namespace Glass
 		{
 			PushScope();
 
+			for (auto end_inst : end_code) {
+				iterator->ConditionBlock.push_back(end_inst);
+			}
+
 			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end, type->BaseID)));
 
 			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
@@ -1576,9 +1582,11 @@ namespace Glass
 			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
 			auto register_stack = PoPIRRegisters();
+
 			for (auto inst : register_stack) {
 				iterator->ConditionBlock.push_back(inst);
 			}
+
 			PopScope();
 		}
 
@@ -1634,7 +1642,6 @@ namespace Glass
 
 			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
 
-
 			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
 
 			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type)));
@@ -1642,7 +1649,12 @@ namespace Glass
 			CreateIRRegister(CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID)));
 
 			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->RegisterID)->RegisterID);
-			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end)));
+
+			index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end, index_type->BaseID)));
+
+			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
+			cmp_register->IsCondition = true;
 
 			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
@@ -3873,10 +3885,28 @@ namespace Glass
 		return new_ts_type;
 	}
 
-	void Compiler::BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B)
+	void Compiler::BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B, std::vector<IRRegister*>* a_code /*= nullptr*/, std::vector<IRRegister*>* b_code /*= nullptr*/)
 	{
+		auto previous_register = PoPIRRegisters();
+		GS_CORE_ASSERT(previous_register.size() == 0);
+
 		if (left->GetType() != NodeType::NumericLiteral) {
-			*A = GetExpressionByValue(left);
+			if (a_code) {
+				PushScope();
+
+				*A = GetExpressionByValue(left);
+
+				auto a_register_stack = PoPIRRegisters();
+
+				for (auto a_register : a_register_stack) {
+					a_code->push_back(a_register);
+				}
+
+				PopScope();
+			}
+			else {
+				*A = GetExpressionByValue(left);
+			}
 
 			if (!*A) {
 				return;
@@ -3888,7 +3918,23 @@ namespace Glass
 		}
 
 		if (right->GetType() != NodeType::NumericLiteral) {
-			*B = GetExpressionByValue(right);
+
+			if (b_code) {
+				PushScope();
+
+				*B = GetExpressionByValue(right);
+
+				auto b_register_stack = PoPIRRegisters();
+
+				for (auto b_register : b_register_stack) {
+					b_code->push_back(b_register);
+				}
+
+				PopScope();
+			}
+			else {
+				*B = GetExpressionByValue(right);
+			}
 
 			if (!*B) {
 				return;
@@ -3900,13 +3946,43 @@ namespace Glass
 		}
 
 		if (*left_type == nullptr) {
-			*A = GetExpressionByValue(left);
+			if (a_code) {
+				PushScope();
+
+				*A = GetExpressionByValue(left);
+
+				auto a_register_stack = PoPIRRegisters();
+
+				for (auto a_register : a_register_stack) {
+					a_code->push_back(a_register);
+				}
+
+				PopScope();
+			}
+			else {
+				*A = GetExpressionByValue(left);
+			}
 			if (!*A) {
 				return;
 			}
 		}
 		if (*right_type == nullptr) {
-			*B = GetExpressionByValue(right);
+			if (b_code) {
+				PushScope();
+
+				*B = GetExpressionByValue(right);
+
+				auto b_register_stack = PoPIRRegisters();
+
+				for (auto b_register : b_register_stack) {
+					b_code->push_back(b_register);
+				}
+
+				PopScope();
+			}
+			else {
+				*B = GetExpressionByValue(right);
+			}
 			if (!*B) {
 				return;
 			}
