@@ -868,7 +868,7 @@ namespace Glass
 
 	IRInstruction* Compiler::FunctionCodeGen(FunctionNode* fnNode)
 	{
-		ResetSSAIDCounter();
+		ResetRegisterIDCounter();
 
 		IRFunction* IRF = IR(IRFunction());
 
@@ -899,7 +899,7 @@ namespace Glass
 
 		std::vector<ArgumentMetadata> args_metadata;
 
-		PoPIRSSA();
+		PoPIRRegisters();
 
 		//////////////////////////////////////////////////////////////////////////
 		//		@PUSH_SCOPE
@@ -934,7 +934,7 @@ namespace Glass
 				argument_variable_type,
 			};
 
-			IRSSA* arg_register = CreateIRSSA();
+			IRRegister* arg_register = CreateIRRegister();
 			arg_register->Value = IR(IRArgumentAllocation(argument_index, argument_variable_type));
 
 			RegisterVariable(arg_register, arg->Symbol.Symbol);
@@ -944,7 +944,7 @@ namespace Glass
 			arg_metadata.Name = arg->Symbol.Symbol;
 			arg_metadata.Type = argument_type;
 			arg_metadata.Variadic = arg->Variadic;
-			arg_metadata.AllocationLocation = IR(IRSSAValue(arg_register->ID));
+			arg_metadata.AllocationLocation = IR(IRRegisterValue(arg_register->ID));
 			args_metadata.push_back(arg_metadata);
 
 			argument_index++;
@@ -968,28 +968,28 @@ namespace Glass
 		metadata->Arguments = args_metadata;
 		metadata->HasBody = true;
 
-		auto SSAs = PoPIRSSA();
+		auto ir_registers = PoPIRRegisters();
 
-		for (auto ssa : SSAs)
+		for (auto ir_register : ir_registers)
 		{
-			IRF->Instructions.push_back(ssa);
+			IRF->Instructions.push_back(ir_register);
 		}
 
 		for (const Statement* stmt : fnNode->GetStatements())
 		{
 			IRInstruction* code = StatementCodeGen(stmt);
 
-			auto SSAs = PoPIRSSA();
+			auto ir_registers = PoPIRRegisters();
 
-			for (auto ssa : SSAs)
+			for (auto ir_register : ir_registers)
 			{
-				IRF->Instructions.push_back(ssa);
+				IRF->Instructions.push_back(ir_register);
 			}
 
 			if (!code)
 				continue;
 
-			if (code->GetType() != IRNodeType::SSAValue) {
+			if (code->GetType() != IRNodeType::RegisterValue) {
 				//We Discard function scope level r values
 
 				if (code != nullptr) {
@@ -1046,7 +1046,7 @@ namespace Glass
 			return nullptr;
 		}
 
-		IRSSAValue* value = nullptr;
+		IRRegisterValue* value = nullptr;
 
 		TypeStorage* VariableType = nullptr;
 
@@ -1103,30 +1103,29 @@ namespace Glass
 
 		auto alloca = IR(IRAlloca(VariableType));
 
-		IRSSA* variable_address_ssa = CreateIRSSA();
-		variable_address_ssa->Value = alloca;
+		IRRegister* variable_address_register = CreateIRRegister();
+		variable_address_register->Value = alloca;
 
-		RegisterVariable(variable_address_ssa, variableNode->Symbol.Symbol);
+		RegisterVariable(variable_address_register, variableNode->Symbol.Symbol);
 
 		VariableMetadata var_metadata = {
 			variableNode->Symbol,
 			VariableType,
 			false,
 			false,
-			nullptr,
-			variable_address_ssa };
+			variable_address_register };
 
-		m_Metadata.RegisterVariableMetadata(variable_address_ssa->ID, var_metadata);
-		m_Metadata.RegExprType(variable_address_ssa->ID, VariableType);
+		m_Metadata.RegisterVariableMetadata(variable_address_register->ID, var_metadata);
+		m_Metadata.RegExprType(variable_address_register->ID, VariableType);
 
 		//@Debugging
-		alloca->VarMetadata = m_Metadata.GetVariableMetadata(variable_address_ssa->ID);
+		alloca->VarMetadata = m_Metadata.GetVariableMetadata(variable_address_register->ID);
 
 		if (value)
 		{
 			IRStore* assignment_store = IR(IRStore());
 
-			assignment_store->AddressSSA = variable_address_ssa->ID;
+			assignment_store->AddressRegister = variable_address_register->ID;
 			assignment_store->Data = value;
 			assignment_store->Type = VariableType;
 
@@ -1154,8 +1153,8 @@ namespace Glass
 		UN_WRAP(assignment);
 
 		{
-			GS_CORE_ASSERT(assignment->GetType() == IRNodeType::SSAValue);
-			IRSSA* assignment_register = GetSSA(((IRSSAValue*)assignment)->RegisterID);
+			GS_CORE_ASSERT(assignment->GetType() == IRNodeType::RegisterValue);
+			IRRegister* assignment_register = GetRegister(((IRRegisterValue*)assignment)->RegisterID);
 
 			if (assignment_register->Value->GetType() != IRNodeType::ConstValue) {
 				MSG_LOC(variableNode->Assignment);
@@ -1187,7 +1186,7 @@ namespace Glass
 	{
 		GS_CORE_ASSERT(constant);
 		GS_CORE_ASSERT(constant->Value);
-		return CreateIRSSA(constant->Value, constant->Type);
+		return CreateIRRegister(constant->Value, constant->Type);
 	}
 
 	IRInstruction* Compiler::GlobalVariableCodeGen(const VariableNode* variableNode, bool foreign /*= false*/)
@@ -1223,7 +1222,6 @@ namespace Glass
 			false,
 			true,
 			foreign,
-			nullptr,
 			nullptr };
 
 		m_Metadata.RegisterGlobalVariable(glob_id, variableNode->Symbol.Symbol);
@@ -1269,7 +1267,7 @@ namespace Glass
 		IRReturn ret;
 
 		SetLikelyConstantType(GetExpectedReturnType()->BaseID);
-		auto expr = (IRSSAValue*)GetExpressionByValue(returnNode->Expr);
+		auto expr = (IRRegisterValue*)GetExpressionByValue(returnNode->Expr);
 		UN_WRAP(expr);
 		ResetLikelyConstantType();
 
@@ -1402,7 +1400,7 @@ namespace Glass
 		// 		}
 
 		IRIf IF;
-		IF.SSA = condition->RegisterID;
+		IF.ConditionRegister = condition->RegisterID;
 
 		IRLexBlock lexical_block;
 
@@ -1415,9 +1413,9 @@ namespace Glass
 		{
 			auto first_inst = StatementCodeGen(stmt);
 
-			auto ir_ssa_stack = PoPIRSSA();
+			auto register_stack = PoPIRRegisters();
 
-			for (auto inst : ir_ssa_stack)
+			for (auto inst : register_stack)
 			{
 				lexical_block.Instructions.push_back(inst);
 			}
@@ -1439,17 +1437,17 @@ namespace Glass
 	IRInstruction* Compiler::WhileCodeGen(const WhileNode* whileNode)
 	{
 		PushScope();
-		IRSSAValue* condition = GetExpressionByValue(whileNode->Condition);
-		std::vector<IRSSA*> condition_ssas = PoPIRSSA();
+		IRRegisterValue* condition = GetExpressionByValue(whileNode->Condition);
+		std::vector<IRRegister*> condition_registers = PoPIRRegisters();
 		PopScope();
 
 		if (!condition)
 			return nullptr;
 
 		IRWhile WHILE;
-		WHILE.SSA = condition->RegisterID;
+		WHILE.ConditionRegisterID = condition->RegisterID;
 
-		WHILE.ConditionBlock = condition_ssas;
+		WHILE.ConditionBlock = condition_registers;
 
 		IRLexBlock lexical_block;
 
@@ -1463,11 +1461,11 @@ namespace Glass
 		{
 			auto inst = StatementCodeGen(stmt);
 
-			auto ir_ssa_stack = PoPIRSSA();
+			auto register_stack = PoPIRRegisters();
 
-			for (auto ssa_inst : ir_ssa_stack)
+			for (auto ir_register : register_stack)
 			{
-				lexical_block.Instructions.push_back(ssa_inst);
+				lexical_block.Instructions.push_back(ir_register);
 			}
 
 			if (!inst) {
@@ -1486,11 +1484,8 @@ namespace Glass
 
 	IRInstruction* Compiler::RangeCodeGen(const RangeNode* rangeNode)
 	{
-		//IRSSAValue * begin = GetExpressionByValue(rangeNode->Begin);
-		//IRSSAValue * end = GetExpressionByValue(rangeNode->End);
-
-		IRSSAValue* begin = nullptr;
-		IRSSAValue* end = nullptr;
+		IRRegisterValue* begin = nullptr;
+		IRRegisterValue* end = nullptr;
 
 		TypeStorage* begin_type = nullptr;
 		TypeStorage* end_type = nullptr;
@@ -1521,20 +1516,20 @@ namespace Glass
 		IRIterator* iterator = IR(IRIterator());
 
 		//:
-		iterator->IteratorIndex = CreateIRSSA(IR(IRAlloca(type)));
-		CreateIRSSA(CreateStore(type, iterator->IteratorIndex->RegisterID, begin));
+		iterator->IteratorIndex = CreateIRRegister(IR(IRAlloca(type)));
+		CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, begin));
 
-		iterator->IteratorIt = CreateIRSSA(IR(IRAlloca(type)));
-		CreateIRSSA(CreateStore(type, iterator->IteratorIt->RegisterID, begin));
+		iterator->IteratorIt = CreateIRRegister(IR(IRAlloca(type)));
+		CreateIRRegister(CreateStore(type, iterator->IteratorIt->RegisterID, begin));
 
 		//Cond:
 		{
 			PushScope();
-			IRSSAValue* cmp_inst = CreateIRSSA(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end)));
-			iterator->ConditionSSA = cmp_inst->RegisterID;
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end)));
+			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
-			auto ssa_stack = PoPIRSSA();
-			for (auto inst : ssa_stack) {
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack) {
 				iterator->ConditionBlock.push_back(inst);
 			}
 			PopScope();
@@ -1544,13 +1539,13 @@ namespace Glass
 		{
 			PushScope();
 
-			auto index_load = CreateIRSSA(CreateLoad(type, iterator->IteratorIndex->RegisterID));
-			auto index_addition = CreateIRSSA(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type->BaseID)));
-			CreateIRSSA(CreateStore(type, iterator->IteratorIndex->RegisterID, index_addition));
-			CreateIRSSA(CreateStore(type, iterator->IteratorIt->RegisterID, index_addition));
+			auto index_load = CreateIRRegister(CreateLoad(type, iterator->IteratorIndex->RegisterID));
+			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type->BaseID)));
+			CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, index_addition));
+			CreateIRRegister(CreateStore(type, iterator->IteratorIt->RegisterID, index_addition));
 
-			auto ssa_stack = PoPIRSSA();
-			for (auto inst : ssa_stack) {
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack) {
 				iterator->IncrementorBlock.push_back(inst);
 			}
 
@@ -1564,7 +1559,7 @@ namespace Glass
 	}
 
 
-	IRIterator* Compiler::DynArrayIteratorCodeGen(const Expression* expression, IRSSAValue* generated)
+	IRIterator* Compiler::DynArrayIteratorCodeGen(const Expression* expression, IRRegisterValue* generated)
 	{
 		TSDynArray* dynamic_array_type = (TSDynArray*)m_Metadata.GetExprType(generated->RegisterID);
 		TypeStorage* dynmaic_array_element_type = dynamic_array_type->ElementType;
@@ -1575,37 +1570,37 @@ namespace Glass
 		auto element_type = dynmaic_array_element_type;
 
 		//:
-		iterator->IteratorIndex = CreateIRSSA(IR(IRAlloca(index_type)));
-		CreateIRSSA(CreateStore(
+		iterator->IteratorIndex = CreateIRRegister(IR(IRAlloca(index_type)));
+		CreateIRRegister(CreateStore(
 			index_type,
 			iterator->IteratorIndex->RegisterID,
 			CreateConstantInteger(index_type->BaseID, 0)));
 
-		iterator->IteratorIt = CreateIRSSA(IR(IRAlloca(dynmaic_array_element_type)));
+		iterator->IteratorIt = CreateIRRegister(IR(IRAlloca(dynmaic_array_element_type)));
 
 		//Cond:
 		{
 			PushScope();
 
 			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
-			IRSSAValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
+			IRRegisterValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
 
-			auto index_load = CreateIRSSA(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
 
 
 			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
 
-			auto data_pointer = CreateIRSSA(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type)));
+			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type)));
 
-			CreateIRSSA(CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID)));
+			CreateIRRegister(CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID)));
 
 			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->RegisterID)->RegisterID);
-			IRSSAValue* cmp_inst = CreateIRSSA(IR(IRLesser(index_load, end)));
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end)));
 
-			iterator->ConditionSSA = cmp_inst->RegisterID;
+			iterator->ConditionRegisterID = cmp_inst->RegisterID;
 
-			auto ssa_stack = PoPIRSSA();
-			for (auto inst : ssa_stack) {
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack) {
 				iterator->ConditionBlock.push_back(inst);
 			}
 			PopScope();
@@ -1615,12 +1610,12 @@ namespace Glass
 		{
 			PushScope();
 
-			auto index_load = CreateIRSSA(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
-			auto index_addition = CreateIRSSA(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type->BaseID)));
-			CreateIRSSA(CreateStore(index_type, iterator->IteratorIndex->RegisterID, index_addition));
+			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type->BaseID)));
+			CreateIRRegister(CreateStore(index_type, iterator->IteratorIndex->RegisterID, index_addition));
 
-			auto ssa_stack = PoPIRSSA();
-			for (auto inst : ssa_stack) {
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack) {
 				iterator->IncrementorBlock.push_back(inst);
 			}
 
@@ -1638,7 +1633,7 @@ namespace Glass
 		if (expr->GetType() == NodeType::Range)
 			return (IRIterator*)RangeCodeGen((RangeNode*)expr);
 
-		IRSSAValue* expr_result = (IRSSAValue*)ExpressionCodeGen(expr);
+		IRRegisterValue* expr_result = (IRRegisterValue*)ExpressionCodeGen(expr);
 
 		if (!expr_result) {
 			return nullptr;
@@ -1659,33 +1654,33 @@ namespace Glass
 		IRWhile* while_inst = IR(IRWhile());
 
 		while_inst->ConditionBlock = iterator->ConditionBlock;
-		while_inst->SSA = iterator->ConditionSSA;
+		while_inst->ConditionRegisterID = iterator->ConditionRegisterID;
 
 		PushScope();
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 
-		m_Metadata.RegisterVariable(m_Metadata.GetSSA(iterator->IteratorIndex->RegisterID), "it_index");
-		m_Metadata.RegisterVariable(m_Metadata.GetSSA(iterator->IteratorIt->RegisterID), "it");
+		m_Metadata.RegisterVariable(m_Metadata.GetRegister(iterator->IteratorIndex->RegisterID), "it_index");
+		m_Metadata.RegisterVariable(m_Metadata.GetRegister(iterator->IteratorIt->RegisterID), "it");
 
 		VariableMetadata it_index_metadata;
 		it_index_metadata.Tipe = iterator->IndexTy;
 		it_index_metadata.Name = forNode->Condition->GetLocation();
 		it_index_metadata.Name.Symbol = "it_index";
 		m_Metadata.RegisterVariableMetadata(iterator->IteratorIndex->RegisterID, it_index_metadata);
-		((IRAlloca*)m_Metadata.GetSSA(iterator->IteratorIndex->RegisterID)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIndex->RegisterID);
+		((IRAlloca*)m_Metadata.GetRegister(iterator->IteratorIndex->RegisterID)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIndex->RegisterID);
 
 		VariableMetadata it_metadata;
 		it_metadata.Tipe = iterator->ItTy;
 		it_metadata.Name = forNode->Condition->GetLocation();
 		it_metadata.Name.Symbol = "it";
 		m_Metadata.RegisterVariableMetadata(iterator->IteratorIt->RegisterID, it_metadata);
-		((IRAlloca*)m_Metadata.GetSSA(iterator->IteratorIt->RegisterID)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIt->RegisterID);
+		((IRAlloca*)m_Metadata.GetRegister(iterator->IteratorIt->RegisterID)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIt->RegisterID);
 
 		for (const Statement* stmt : forNode->Scope->GetStatements())
 		{
 			auto inst = StatementCodeGen(stmt);
-			auto ir_ssa_stack = PoPIRSSA();
-			for (auto inst : ir_ssa_stack)
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack)
 			{
 				while_inst->Instructions.push_back(inst);
 			}
@@ -1795,32 +1790,32 @@ namespace Glass
 				return nullptr;
 			}
 
-			u64 ID = GetVariableSSA(identifier->Symbol.Symbol);
-			IRSSA* ssa = GetSSA(ID);
+			u64 ID = GetVariableRegister(identifier->Symbol.Symbol);
+			IRRegister* ir_register = GetRegister(ID);
 
-			IRSSAValue ssa_val;
+			IRRegisterValue register_val;
 
-			ssa_val.RegisterID = GetVariableSSA(identifier->Symbol.Symbol);
+			register_val.RegisterID = GetVariableRegister(identifier->Symbol.Symbol);
 
-			m_Metadata.RegExprType(ssa_val.RegisterID, metadata->Tipe);
+			m_Metadata.RegExprType(register_val.RegisterID, metadata->Tipe);
 
-			return (IRInstruction*)IR(ssa_val);
+			return (IRInstruction*)IR(register_val);
 		}
 		else if (symbol_type == SymbolType::GlobVariable) {
 
 			u64 glob_id = m_Metadata.GetGlobalVariable(identifier->Symbol.Symbol);
 
-			auto ssa = CreateIRSSA();
+			auto ir_register = CreateIRRegister();
 
 			IRGlobalAddress* glob_address = IR(IRGlobalAddress(glob_id));
 
-			ssa->Value = glob_address;
+			ir_register->Value = glob_address;
 
 			const VariableMetadata* metadata = m_Metadata.GetVariableMetadata(glob_id);
 
-			m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
+			m_Metadata.RegExprType(ir_register->ID, metadata->Tipe);
 
-			return IR(IRSSAValue(ssa->ID));
+			return IR(IRRegisterValue(ir_register->ID));
 		}
 		else if (symbol_type == SymbolType::Type) {
 			return TypeValueCodeGen(TypeSystem::GetBasic(identifier->Symbol.Symbol));
@@ -1834,11 +1829,11 @@ namespace Glass
 
 	IRInstruction* Compiler::NumericLiteralCodeGen(const NumericLiteral* numericLiteral)
 	{
-		IRSSA* IRssa = CreateIRSSA();
+		IRRegister* ir_register = CreateIRRegister();
 
-		IRssa->Value = IR(IRCONSTValue());
+		ir_register->Value = IR(IRCONSTValue());
 
-		IRCONSTValue* Constant = (IRCONSTValue*)IRssa->Value;
+		IRCONSTValue* Constant = (IRCONSTValue*)ir_register->Value;
 
 		if (numericLiteral->type == NumericLiteral::Type::Float)
 		{
@@ -1859,9 +1854,9 @@ namespace Glass
 			__debugbreak();
 		}
 
-		m_Metadata.RegExprType(IRssa->ID, TypeSystem::GetBasic(Constant->Type));
+		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetBasic(Constant->Type));
 
-		return IR(IRSSAValue(IRssa->ID));
+		return IR(IRRegisterValue(ir_register->ID));
 	}
 
 	IRInstruction* Compiler::StringLiteralCodeGen(const StringLiteral* stringLiteral)
@@ -1873,21 +1868,21 @@ namespace Glass
 			data->Data.push_back(c);
 		}
 
-		auto ir_ssa = CreateIRSSA();
-		ir_ssa->Value = IR(IRDataValue(0, data->ID));
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = IR(IRDataValue(0, data->ID));
 
-		IRSSAValue ssa_val;
+		IRRegisterValue ir_register_val;
 
-		ssa_val.RegisterID = ir_ssa->ID;
+		ir_register_val.RegisterID = ir_register->ID;
 
 		{
 			Type type;
 			type.ID = IR_u8;
 			type.Pointer = 1;
-			m_Metadata.RegExprType(ssa_val.RegisterID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_u8), type.Pointer));
+			m_Metadata.RegExprType(ir_register_val.RegisterID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_u8), type.Pointer));
 		}
 
-		return IR(ssa_val);
+		return IR(ir_register_val);
 	}
 
 	IRInstruction* Compiler::BinaryExpressionCodeGen(const BinaryExpression* binaryExpr)
@@ -1897,8 +1892,8 @@ namespace Glass
 			return AssignmentCodeGen(binaryExpr);
 		}
 
-		IRSSAValue* A = nullptr;
-		IRSSAValue* B = nullptr;
+		IRRegisterValue* A = nullptr;
+		IRRegisterValue* B = nullptr;
 
 		TypeStorage* left_type = nullptr;
 		TypeStorage* right_type = nullptr;
@@ -1942,7 +1937,7 @@ namespace Glass
 			return nullptr;
 		}
 
-		IRSSA* IRssa = CreateIRSSA();
+		IRRegister* ir_register = CreateIRRegister();
 
 		if ((left_type->Kind != TypeStorageKind::Pointer) && (right_type->Kind != TypeStorageKind::Pointer))
 		{
@@ -2052,7 +2047,7 @@ namespace Glass
 
 					call.Function.Symbol = op_func_metadata->Symbol.Symbol;
 
-					IRSSAValue* op_result = (IRSSAValue*)ExpressionCodeGen(AST(call));
+					IRRegisterValue* op_result = (IRRegisterValue*)ExpressionCodeGen(AST(call));
 
 					m_Metadata.RegExprType(op_result->RegisterID, op_func_metadata->ReturnType);
 
@@ -2069,97 +2064,97 @@ namespace Glass
 		{
 			IRADD IROp;
 
-			IROp.SSA_A = A;
-			IROp.SSA_B = B;
+			IROp.RegisterA = A;
+			IROp.RegisterB = B;
 
-			IRssa->Value = IR(IROp);
+			ir_register->Value = IR(IROp);
 		}
 		break;
 		case Operator::Subtract:
 		{
 			IRSUB IROp;
 
-			IROp.SSA_A = A;
-			IROp.SSA_B = B;
+			IROp.RegisterA = A;
+			IROp.RegisterB = B;
 
-			IRssa->Value = IR(IROp);
+			ir_register->Value = IR(IROp);
 		}
 		break;
 		case Operator::Multiply:
 		{
 			IRMUL IROp;
 
-			IROp.SSA_A = A;
-			IROp.SSA_B = B;
+			IROp.RegisterA = A;
+			IROp.RegisterB = B;
 
-			IRssa->Value = IR(IROp);
+			ir_register->Value = IR(IROp);
 		}
 		break;
 		case Operator::Divide:
 		{
 			IRDIV IROp;
 
-			IROp.SSA_A = A;
-			IROp.SSA_B = B;
+			IROp.RegisterA = A;
+			IROp.RegisterB = B;
 
-			IRssa->Value = IR(IROp);
+			ir_register->Value = IR(IROp);
 		}
 		break;
 		case Operator::Equal:
 		{
-			IRssa->Value = IR(IREQ(A, B));
+			ir_register->Value = IR(IREQ(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::NotEqual:
 		{
-			IRssa->Value = IR(IRNOTEQ(A, B));
+			ir_register->Value = IR(IRNOTEQ(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::GreaterThan:
 		{
-			IRssa->Value = IR(IRGreater(A, B));
+			ir_register->Value = IR(IRGreater(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::LesserThan:
 		{
-			IRssa->Value = IR(IRLesser(A, B));
+			ir_register->Value = IR(IRLesser(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::GreaterThanEq:
 		{
-			IRssa->Value = IR(IRGreater(A, B));
+			ir_register->Value = IR(IRGreater(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::LesserThanEq:
 		{
-			IRssa->Value = IR(IRLesser(A, B));
+			ir_register->Value = IR(IRLesser(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::BitAnd:
 		{
-			IRssa->Value = IR(IRBitAnd(A, B));
+			ir_register->Value = IR(IRBitAnd(A, B));
 		}
 		break;
 		case Operator::BitOr:
 		{
-			IRssa->Value = IR(IRBitOr(A, B));
+			ir_register->Value = IR(IRBitOr(A, B));
 		}
 		break;
 		case Operator::And:
 		{
-			IRssa->Value = IR(IRAnd(A, B));
+			ir_register->Value = IR(IRAnd(A, B));
 			result_type = IR_bool;
 		}
 		break;
 		case Operator::Or:
 		{
-			IRssa->Value = IR(IROr(A, B));
+			ir_register->Value = IR(IROr(A, B));
 			result_type = IR_bool;
 		}
 		break;
@@ -2169,15 +2164,15 @@ namespace Glass
 			break;
 		}
 
-		((IRBinOp*)IRssa->Value)->Type = result_type;
+		((IRBinOp*)ir_register->Value)->Type = result_type;
 
-		IRSSAValue* ssa_value = IR(IRSSAValue());
+		IRRegisterValue* register_value = IR(IRRegisterValue());
 
-		ssa_value->RegisterID = IRssa->ID;
+		register_value->RegisterID = ir_register->ID;
 
-		m_Metadata.RegExprType(ssa_value->RegisterID, TypeSystem::GetBasic(result_type));
+		m_Metadata.RegExprType(register_value->RegisterID, TypeSystem::GetBasic(result_type));
 
-		return ssa_value;
+		return register_value;
 	}
 
 	IRInstruction* Compiler::AssignmentCodeGen(const BinaryExpression* binaryExpr)
@@ -2208,20 +2203,20 @@ namespace Glass
 
 				left_type = m_Metadata.GetVariableMetadata(glob_id)->Tipe;
 				m_AutoCastTargetType = left_type;
-				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+				IRRegisterValue* right_val = (IRRegisterValue*)GetExpressionByValue(binaryExpr->Right);
 				m_AutoCastTargetType = nullptr;
 				if (!right_val) {
 					return nullptr;
 				}
-				auto ssa = CreateIRSSA();
-				ssa->Value = IR(IRGlobalAddress(glob_id));
+				auto ir_register = CreateIRRegister();
+				ir_register->Value = IR(IRGlobalAddress(glob_id));
 
 				right_type = m_Metadata.GetExprType(right_val->RegisterID);
 
 				IRStore* store = IR(IRStore());
 				{
 					store->Data = right_val;
-					store->AddressSSA = ssa->ID;
+					store->AddressRegister = ir_register->ID;
 					store->Type = left_type;
 				}
 
@@ -2229,15 +2224,15 @@ namespace Glass
 			}
 			else if (symbol_type == SymbolType::Variable) {
 
-				u64 var_ssa_id = GetVariableSSA(identifier_left->Symbol.Symbol);
-				IRSSA* var_ssa = m_Metadata.GetSSA(var_ssa_id);
+				u64 var_register_id = GetVariableRegister(identifier_left->Symbol.Symbol);
+				IRRegister* var_rgister = m_Metadata.GetRegister(var_register_id);
 
-				const auto metadata = m_Metadata.GetVariableMetadata(var_ssa_id);
+				const auto metadata = m_Metadata.GetVariableMetadata(var_register_id);
 
 				SetLikelyConstantType(metadata->Tipe->BaseID);
 
 				m_AutoCastTargetType = metadata->Tipe;
-				IRSSAValue* right_val = (IRSSAValue*)GetExpressionByValue(binaryExpr->Right);
+				IRRegisterValue* right_val = (IRRegisterValue*)GetExpressionByValue(binaryExpr->Right);
 				m_AutoCastTargetType = nullptr;
 
 				if (!right_val) {
@@ -2250,7 +2245,7 @@ namespace Glass
 				IRStore* store = IR(IRStore());
 				{
 					store->Data = right_val;
-					store->AddressSSA = var_ssa_id;
+					store->AddressRegister = var_register_id;
 					store->Type = left_type;
 				}
 
@@ -2266,7 +2261,7 @@ namespace Glass
 		}
 		if (left->GetType() == NodeType::MemberAccess)
 		{
-			IRSSAValue* member_access = (IRSSAValue*)ExpressionCodeGen(left);
+			IRRegisterValue* member_access = (IRRegisterValue*)ExpressionCodeGen(left);
 
 			if (!member_access)
 				return nullptr;
@@ -2276,23 +2271,23 @@ namespace Glass
 			SetLikelyConstantType(left_type->BaseID);
 			m_AutoCastTargetType = left_type;
 
-			IRSSAValue* right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+			IRRegisterValue* right_register = (IRRegisterValue*)GetExpressionByValue(right);
 			m_AutoCastTargetType = nullptr;
 
-			if (!right_ssa) {
+			if (!right_register) {
 				return nullptr;
 			}
 
-			right_type = m_Metadata.GetExprType(right_ssa->RegisterID);
+			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
-			if (!member_access || !right_ssa) {
+			if (!member_access || !right_register) {
 				return nullptr;
 			}
 
 			IRStore* store = IR(IRStore());
 			{
-				store->Data = right_ssa;
-				store->AddressSSA = member_access->RegisterID;
+				store->Data = right_register;
+				store->AddressRegister = member_access->RegisterID;
 				store->Type = left_type;
 			}
 
@@ -2302,44 +2297,44 @@ namespace Glass
 		}
 		if (left->GetType() == NodeType::ArrayAccess)
 		{
-			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
-			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
+			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
 
-			if (!right_ssa)
+			if (!right_register)
 				return nullptr;
 
-			if (!left_ssa)
+			if (!left_register)
 				return nullptr;
 
-			left_type = m_Metadata.GetExprType(left_ssa->RegisterID);
-			right_type = m_Metadata.GetExprType(right_ssa->RegisterID);
+			left_type = m_Metadata.GetExprType(left_register->RegisterID);
+			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
 			IRStore* store = IR(IRStore());
 			{
-				store->Data = right_ssa;
-				store->AddressSSA = left_ssa->RegisterID;
+				store->Data = right_register;
+				store->AddressRegister = left_register->RegisterID;
 				store->Type = right_type;
 			}
 			result = store;
 		}
 		if (left->GetType() == NodeType::DeReference)
 		{
-			auto left_ssa = (IRSSAValue*)ExpressionCodeGen(left);
-			auto right_ssa = (IRSSAValue*)GetExpressionByValue(right);
+			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
+			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
 
-			if (!left_ssa || !right_ssa) {
+			if (!left_register || !right_register) {
 				return nullptr;
 			}
 
-			auto left_type_code_gen = m_Metadata.GetExprType(left_ssa->RegisterID);
+			auto left_type_code_gen = m_Metadata.GetExprType(left_register->RegisterID);
 
 			left_type = TypeSystem::ReduceIndirection((TSPtr*)left_type_code_gen);
-			right_type = m_Metadata.GetExprType(right_ssa->RegisterID);
+			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
 			IRStore* store = IR(IRStore());
 			{
-				store->Data = right_ssa;
-				store->AddressSSA = left_ssa->RegisterID;
+				store->Data = right_register;
+				store->AddressRegister = left_register->RegisterID;
 				store->Type = left_type_code_gen;
 			}
 			result = store;
@@ -2387,7 +2382,7 @@ namespace Glass
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
 
-		std::vector<IRSSAValue*> argumentValueRefs;
+		std::vector<IRRegisterValue*> argumentValueRefs;
 		std::vector<TypeStorage*> argumentTypes;
 
 		// 		if (call->Function.Symbol == "print") {
@@ -2405,7 +2400,7 @@ namespace Glass
 				}
 			}
 
-			IRSSAValue* argument_as_value_ref = (IRSSAValue*)ExpressionCodeGen(argument_expr);
+			IRRegisterValue* argument_as_value_ref = (IRRegisterValue*)ExpressionCodeGen(argument_expr);
 
 			if (!metadata->IsOverloaded()) {
 				ResetLikelyConstantType();
@@ -2504,7 +2499,7 @@ namespace Glass
 
 			IRInstruction* arg = nullptr;
 
-			IRSSAValue* argument_code = nullptr;
+			IRRegisterValue* argument_code = nullptr;
 
 			if (decl_arg != nullptr)
 			{
@@ -2518,7 +2513,7 @@ namespace Glass
 				}
 				else {
 
-					std::vector<IRSSAValue*> pre_generated_variadic_arguments;
+					std::vector<IRRegisterValue*> pre_generated_variadic_arguments;
 
 					for (size_t j = i; j < argumentValueRefs.size(); j++) {
 						pre_generated_variadic_arguments.push_back(argumentValueRefs[j]);
@@ -2573,18 +2568,18 @@ namespace Glass
 
 		if (has_return)
 		{
-			auto ir_ssa = CreateIRSSA();
-			ir_ssa->Value = IR(ir_call);
+			auto ir_register = CreateIRRegister();
+			ir_register->Value = IR(ir_call);
 
-			IRSSAValue* ir_ssa_val = IR(IRSSAValue(ir_ssa->ID));
+			IRRegisterValue* ir_register_val = IR(IRRegisterValue(ir_register->ID));
 
-			m_Metadata.RegExprType(ir_ssa_val->RegisterID, metadata->ReturnType);
+			m_Metadata.RegExprType(ir_register_val->RegisterID, metadata->ReturnType);
 
-			return ir_ssa_val;
+			return ir_register_val;
 		}
 		else {
-			auto void_ssa = CreateIRSSA();
-			void_ssa->Value = IR(ir_call);
+			auto void_register = CreateIRRegister();
+			void_register->Value = IR(ir_call);
 			return nullptr;
 		}
 	}
@@ -2678,7 +2673,7 @@ namespace Glass
 			auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 			if (call_return_type != TypeSystem::GetVoid()) {
-				return CreateIRSSA(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+				return CreateIRRegister(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
 			}
 
 			return IR(IRFunctionCall(call_values, ir_func->ID));
@@ -2707,7 +2702,7 @@ namespace Glass
 
 		HandleTopLevelFunction(ast_copy_as_function);
 
-		u64 register_counter = m_SSAIDCounter;
+		u64 register_counter = m_RegisterIDCounter;
 		u64 calling_function_ctx_id = m_Metadata.CurrentContext()->ID;
 		auto calling_function_return_type = GetExpectedReturnType();
 
@@ -2721,7 +2716,7 @@ namespace Glass
 
 		SetExpectedReturnType(calling_function_return_type);
 
-		m_SSAIDCounter = register_counter;
+		m_RegisterIDCounter = register_counter;
 		m_Metadata.m_CurrentFunction = current_function_id;
 
 		m_Metadata.PushContext(calling_function_ctx_id);
@@ -2734,7 +2729,7 @@ namespace Glass
 		auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 		if (call_return_type != TypeSystem::GetVoid()) {
-			return CreateIRSSA(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+			return CreateIRRegister(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
 		}
 
 		return IR(IRFunctionCall(call_values, ir_func->ID));
@@ -2747,28 +2742,28 @@ namespace Glass
 			SymbolType symbol_type = m_Metadata.GetSymbolType(((Identifier*)memberAccess->Object)->Symbol.Symbol);
 
 			if (symbol_type == SymbolType::Enum) {
-				return (IRSSAValue*)EnumMemberAccessCodeGen(memberAccess);
+				return (IRRegisterValue*)EnumMemberAccessCodeGen(memberAccess);
 			}
 		}
 
 		u64 struct_id = 0;
 		u64 member_id = 0;
-		u64 object_ssa_id = 0;
+		u64 object_register_id = 0;
 		bool reference_access = false;
 
 		TypeStorage* result_type = nullptr;
 
-		IRSSAValue* obj_ssa_value = (IRSSAValue*)ExpressionCodeGen(memberAccess->Object);
+		IRRegisterValue* obj_register_value = (IRRegisterValue*)ExpressionCodeGen(memberAccess->Object);
 
-		if (!obj_ssa_value)
+		if (!obj_register_value)
 			return nullptr;
 
 		const StructMetadata* struct_metadata = nullptr;
 
 		{
-			object_ssa_id = obj_ssa_value->RegisterID;
+			object_register_id = obj_register_value->RegisterID;
 
-			const Glass::Type& obj_expr_type = TSToLegacy(m_Metadata.GetExprType(obj_ssa_value->RegisterID));
+			const Glass::Type& obj_expr_type = TSToLegacy(m_Metadata.GetExprType(obj_register_value->RegisterID));
 
 			//@Note this is here because variables are unique in the sense that they always are a pointer or a double pointer as int
 			if (memberAccess->Object->GetType() == NodeType::Identifier) {
@@ -2779,10 +2774,9 @@ namespace Glass
 				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
 				if (obj_expr_type.Pointer == 0) {
 
-					auto temporary_reference = CreateIRSSA();
-					//temporary_reference->Value = IR(IRAddressOf(obj_ssa_value));
+					auto temporary_reference = CreateIRRegister();
 
-					object_ssa_id = temporary_reference->ID;
+					object_register_id = temporary_reference->ID;
 				}
 			}
 
@@ -2830,17 +2824,17 @@ namespace Glass
 
 		{
 			ir_mem_access.StructID = struct_id;
-			ir_mem_access.ObjectSSA = object_ssa_id;
+			ir_mem_access.ObjectRegister = object_register_id;
 			ir_mem_access.MemberID = member_id;
 			ir_mem_access.ReferenceAccess = reference_access;
 
-			auto address_ssa = CreateIRSSA();
+			auto address_register = CreateIRRegister();
 
-			address_ssa->Value = IR(ir_mem_access);
+			address_register->Value = IR(ir_mem_access);
 
-			m_Metadata.RegExprType(address_ssa->ID, result_type);
+			m_Metadata.RegExprType(address_register->ID, result_type);
 
-			return IR(IRSSAValue(address_ssa->ID));
+			return IR(IRRegisterValue(address_register->ID));
 		}
 	}
 
@@ -2869,7 +2863,7 @@ namespace Glass
 		node.type = NumericLiteral::Type::Int;
 
 		SetLikelyConstantType(IR_u64);
-		IRSSAValue* result = (IRSSAValue*)NumericLiteralCodeGen(AST(node));
+		IRRegisterValue* result = (IRRegisterValue*)NumericLiteralCodeGen(AST(node));
 		ResetLikelyConstantType();
 
 		m_Metadata.RegExprType(result->RegisterID, TypeSystem::GetBasic(metadata->Name.Symbol));
@@ -2897,14 +2891,14 @@ namespace Glass
 				size = m_Metadata.GetTypeSize(m_Metadata.GetType(identifier->Symbol.Symbol));
 			}
 			else {
-				IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
+				IRRegisterValue* expr_value = (IRRegisterValue*)ExpressionCodeGen(size_of->Expr);
 				TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->RegisterID);
 				size = m_Metadata.GetTypeSize(expr_type);
 			}
 		}
 		else {
 
-			IRSSAValue* expr_value = (IRSSAValue*)ExpressionCodeGen(size_of->Expr);
+			IRRegisterValue* expr_value = (IRRegisterValue*)ExpressionCodeGen(size_of->Expr);
 			TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->RegisterID);
 			size = m_Metadata.GetTypeSize(expr_type);
 		}
@@ -2924,7 +2918,7 @@ namespace Glass
 		if (!what_code)
 			return nullptr;
 		auto what_type = m_Metadata.GetExprType(what_code->RegisterID);
-		return CreateIRSSA(IR(IRSUB(CreateConstant(what_type->BaseID, 0, 0.0), what_code, what_type->BaseID)), what_type);
+		return CreateIRRegister(IR(IRSUB(CreateConstant(what_type->BaseID, 0, 0.0), what_code, what_type->BaseID)), what_type);
 	}
 
 	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)
@@ -2934,12 +2928,12 @@ namespace Glass
 
 		const FunctionMetadata* metadata = m_Metadata.GetFunctionMetadata(func_id);
 
-		auto ssa = CreateIRSSA();
-		ssa->Value = IR(IRFuncRef(func_id));
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = IR(IRFuncRef(func_id));
 
-		m_Metadata.RegExprType(ssa->ID, metadata->Signature);
+		m_Metadata.RegExprType(ir_register->ID, metadata->Signature);
 
-		return IR(IRSSAValue(ssa->ID));
+		return IR(IRRegisterValue(ir_register->ID));
 	}
 
 	IRInstruction* Compiler::FuncRefCallCodeGen(const FunctionCall* call)
@@ -2949,12 +2943,12 @@ namespace Glass
 		Identifier* function_as_identifier = AST(Identifier());
 		function_as_identifier->Symbol = call->Function;
 
-		auto callee_ssa = GetExpressionByValue(function_as_identifier);
-		if (!callee_ssa)
+		auto callee_register = GetExpressionByValue(function_as_identifier);
+		if (!callee_register)
 			return nullptr;
-		auto callee_type = m_Metadata.GetExprType(callee_ssa->RegisterID);
+		auto callee_type = m_Metadata.GetExprType(callee_register->RegisterID);
 
-		std::vector<u64> argument_SSAs;
+		std::vector<u64> argument_Registers;
 
 		u64 index = 0;
 		for (auto arg : call->Arguments) {
@@ -2966,17 +2960,17 @@ namespace Glass
 				return nullptr;
 			}
 
-			argument_SSAs.push_back(argument_code->RegisterID);
+			argument_Registers.push_back(argument_code->RegisterID);
 			index++;
 		}
 
-		auto ir_call = IR(IRCallFuncRef(callee_ssa->RegisterID, argument_SSAs, callee_type));
+		auto ir_call = IR(IRCallFuncRef(callee_register->RegisterID, argument_Registers, callee_type));
 
 		if (((TSFunc*)callee_type)->ReturnType != TypeSystem::GetBasic(IR_void)) {
-			auto return_ssa = CreateIRSSA();
-			return_ssa->Value = ir_call;
-			m_Metadata.RegExprType(return_ssa->ID, ((TSFunc*)callee_type)->ReturnType);
-			return IR(IRSSAValue(return_ssa->ID));
+			auto return_register = CreateIRRegister();
+			return_register->Value = ir_call;
+			m_Metadata.RegExprType(return_register->ID, ((TSFunc*)callee_type)->ReturnType);
+			return IR(IRRegisterValue(return_register->ID));
 		}
 		else {
 			return ir_call;
@@ -2993,12 +2987,11 @@ namespace Glass
 
 			auto code = StatementCodeGen(stmt);
 
+			auto Registers = PoPIRRegisters();
 
-			auto SSAs = PoPIRSSA();
-
-			for (auto ssa : SSAs)
+			for (auto ir_register : Registers)
 			{
-				Instructions.push_back(ssa);
+				Instructions.push_back(ir_register);
 			}
 
 			if (code != nullptr) {
@@ -3021,8 +3014,8 @@ namespace Glass
 
 	IRInstruction* Compiler::ArrayAccessCodeGen(const ArrayAccess* arrayAccess)
 	{
-		auto object = (IRSSAValue*)ExpressionCodeGen(arrayAccess->Object);
-		auto index = (IRSSAValue*)GetExpressionByValue(arrayAccess->Index);
+		auto object = (IRRegisterValue*)ExpressionCodeGen(arrayAccess->Object);
+		auto index = (IRRegisterValue*)GetExpressionByValue(arrayAccess->Index);
 
 		if (!object || !index) {
 			return nullptr;
@@ -3042,20 +3035,20 @@ namespace Glass
 
 			IRMemberAccess* data_member_access = IR(IRMemberAccess());
 			data_member_access->MemberID = array_struct->FindMember("data");
-			data_member_access->ObjectSSA = object->RegisterID;
+			data_member_access->ObjectRegister = object->RegisterID;
 			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_array);
 			data_member_access->ReferenceAccess = false;
 
-			auto data_member_access_ssa = CreateIRSSA();
-			data_member_access_ssa->Value = data_member_access;
+			auto data_member_access_register = CreateIRRegister();
+			data_member_access_register->Value = data_member_access;
 
-			auto data_member_access_load_ssa =
-				CreateLoad(TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1), data_member_access_ssa->ID);
+			auto data_member_access_load_register =
+				CreateLoad(TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1), data_member_access_register->ID);
 
-			auto data_member_access_pointer_cast_ssa = CreateIRSSA();
+			auto data_member_access_pointer_cast_register = CreateIRRegister();
 			auto element_ty = TypeSystem::GetPtr(TypeSystem::GetArrayElementTy(obj_expr_type), 1);
-			data_member_access_pointer_cast_ssa->Value = IR(IRPointerCast(element_ty, data_member_access_load_ssa->RegisterID));
-			object = IR(IRSSAValue(data_member_access_pointer_cast_ssa->ID));
+			data_member_access_pointer_cast_register->Value = IR(IRPointerCast(element_ty, data_member_access_load_register->RegisterID));
+			object = IR(IRRegisterValue(data_member_access_pointer_cast_register->ID));
 
 			obj_expr_type = element_ty;
 		}
@@ -3065,21 +3058,21 @@ namespace Glass
 
 		//@Todo add support for non pointer arrays
 
-		IRSSA* array_access_ssa = CreateIRSSA();
+		IRRegister* array_access_register = CreateIRRegister();
 
 		IRArrayAccess* ir_array_Access = IR(IRArrayAccess());
 
 		ir_array_Access->ArrayAddress = object->RegisterID;
-		ir_array_Access->ElementSSA = index->RegisterID;
+		ir_array_Access->ElementIndexRegister = index->RegisterID;
 		ir_array_Access->Type = TypeSystem::GetBasic(obj_expr_type->BaseID);
 
-		array_access_ssa->Value = ir_array_Access;
+		array_access_register->Value = ir_array_Access;
 
 		obj_expr_type = TypeSystem::ReduceIndirection((TSPtr*)obj_expr_type);
 
-		m_Metadata.RegExprType(array_access_ssa->ID, obj_expr_type);
+		m_Metadata.RegExprType(array_access_register->ID, obj_expr_type);
 
-		return IR(IRSSAValue(array_access_ssa->ID));
+		return IR(IRRegisterValue(array_access_register->ID));
 	}
 
 	IRInstruction* Compiler::TypeofCodeGen(const TypeOfNode* typeof)
@@ -3107,7 +3100,7 @@ namespace Glass
 
 			if (symbol_type == SymbolType::Variable)
 			{
-				const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariableSSA(type_ident->Symbol.Symbol));
+				const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariableRegister(type_ident->Symbol.Symbol));
 				type_of_type = metadata->Tipe;
 			}
 
@@ -3124,24 +3117,24 @@ namespace Glass
 		}
 		else
 		{
-			IRSSAValue* code = (IRSSAValue*)ExpressionCodeGen(typeof->What);
+			IRRegisterValue* code = (IRRegisterValue*)ExpressionCodeGen(typeof->What);
 			type_of_type = m_Metadata.GetExprType(code->RegisterID);
 		}
 
-		IRSSA* ssa = CreateIRSSA();
+		IRRegister* ir_register = CreateIRRegister();
 
 		IRTypeOf type_of;
 		type_of.Type = type_of_type;
 
-		ssa->Value = IR(type_of);
+		ir_register->Value = IR(type_of);
 
 		Type type;
 		type.ID = IR_typeinfo;
 		type.Pointer = 1;
 
-		m_Metadata.RegExprType(ssa->ID, LegacyToTS(type));
+		m_Metadata.RegExprType(ir_register->ID, LegacyToTS(type));
 
-		return IR(IRSSAValue(ssa->ID));
+		return IR(IRRegisterValue(ir_register->ID));
 	}
 
 	IRInstruction* Compiler::AutoCastCodeGen(const AutoCastNode* autoCastNode)
@@ -3171,7 +3164,7 @@ namespace Glass
 		return CastCodeGen(cast_type, cast_expr_code, castNode);
 	}
 
-	IRInstruction* Compiler::CastCodeGen(TypeStorage* cast_type, IRSSAValue* code, const Expression* ast_node)
+	IRInstruction* Compiler::CastCodeGen(TypeStorage* cast_type, IRRegisterValue* code, const Expression* ast_node)
 	{
 		GS_CORE_ASSERT(cast_type);
 		GS_CORE_ASSERT(code);
@@ -3182,7 +3175,7 @@ namespace Glass
 		if (!expr_value)
 			return nullptr;
 
-		auto new_ssa = CreateIRSSA();
+		auto new_register = CreateIRRegister();
 
 		auto castee_type = m_Metadata.GetExprType(expr_value->RegisterID);
 
@@ -3193,7 +3186,7 @@ namespace Glass
 		auto cast_flags = m_Metadata.GetTypeFlags(cast_type->BaseID);
 
 		if (cast_type == castee_type) {
-			m_Metadata.RegExprType(new_ssa->ID, cast_type);
+			m_Metadata.RegExprType(new_register->ID, cast_type);
 			return expr_value;
 		}
 
@@ -3256,20 +3249,20 @@ namespace Glass
 			}
 		}
 
-		m_Metadata.RegExprType(new_ssa->ID, cast_type);
+		m_Metadata.RegExprType(new_register->ID, cast_type);
 
-		new_ssa->Value = cast_ir_node;
-		return IR(IRSSAValue(new_ssa->ID), cast_ir_node);
+		new_register->Value = cast_ir_node;
+		return IR(IRRegisterValue(new_register->ID), cast_ir_node);
 	}
 
 	IRInstruction* Compiler::NullCodeGen()
 	{
-		auto null_ptr_ssa = CreateIRSSA();
-		null_ptr_ssa->Value = IR(IRNullPtr(IR_void, 1));
+		auto null_ptr_register = CreateIRRegister();
+		null_ptr_register->Value = IR(IRNullPtr(IR_void, 1));
 
-		m_Metadata.RegExprType(null_ptr_ssa->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
+		m_Metadata.RegExprType(null_ptr_register->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
 
-		return IR(IRSSAValue(null_ptr_ssa->ID));
+		return IR(IRRegisterValue(null_ptr_register->ID));
 	}
 
 	IRInstruction* Compiler::TypeInfoCodeGen(const FunctionCall* type_info_call)
@@ -3288,7 +3281,7 @@ namespace Glass
 			return nullptr;
 		}
 
-		IRSSAValue* type_arg_value = GetExpressionByValue(type_info_call->Arguments[0]);
+		IRRegisterValue* type_arg_value = GetExpressionByValue(type_info_call->Arguments[0]);
 
 		if (!type_arg_value) {
 			return nullptr;
@@ -3305,16 +3298,16 @@ namespace Glass
 
 		auto result_type = TypeSystem::GetPtr(TypeSystem::GetBasic(IR_typeinfo), 1);
 
-		IRSSA* type_info_ssa = CreateIRSSA();
-		type_info_ssa->Value = IR(IRTypeInfo(type_arg_value->RegisterID));
+		IRRegister* type_info_register = CreateIRRegister();
+		type_info_register->Value = IR(IRTypeInfo(type_arg_value->RegisterID));
 
-		m_Metadata.RegExprType(type_info_ssa->ID, result_type);
-		return IR(IRSSAValue(type_info_ssa->ID));
+		m_Metadata.RegExprType(type_info_register->ID, result_type);
+		return IR(IRRegisterValue(type_info_register->ID));
 	}
 
 	IRInstruction* Compiler::RefCodeGen(const RefNode* refNode)
 	{
-		IRSSAValue* referee = (IRSSAValue*)ExpressionCodeGen(refNode->What);
+		IRRegisterValue* referee = (IRRegisterValue*)ExpressionCodeGen(refNode->What);
 
 		if (!referee) {
 			return nullptr;
@@ -3324,12 +3317,12 @@ namespace Glass
 
 		TSPtr* result_type = (TSPtr*)TypeSystem::IncreaseIndirection(referee_type);
 
-		IRSSA* rvalue_ptr_storage = CreateIRSSA();
+		IRRegister* rvalue_ptr_storage = CreateIRRegister();
 		rvalue_ptr_storage->Value = referee;
 
 		m_Metadata.RegExprType(rvalue_ptr_storage->ID, result_type);
 
-		return IR(IRSSAValue(rvalue_ptr_storage->ID));
+		return IR(IRRegisterValue(rvalue_ptr_storage->ID));
 	}
 
 	//@DeDef
@@ -3340,7 +3333,7 @@ namespace Glass
 
 	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{
-		IRSSAValue* expr_value = (IRSSAValue*)GetExpressionByValue(deRefNode->What);
+		IRRegisterValue* expr_value = (IRRegisterValue*)GetExpressionByValue(deRefNode->What);
 
 		if (!expr_value)
 			return nullptr;
@@ -3360,10 +3353,10 @@ namespace Glass
 		return expr_value;
 	}
 
-	IRSSAValue* Compiler::GetExpressionByValue(const Expression* expr, IRSSAValue* generated_code)
+	IRRegisterValue* Compiler::GetExpressionByValue(const Expression* expr, IRRegisterValue* generated_code)
 	{
 		if (!generated_code) {
-			generated_code = (IRSSAValue*)ExpressionCodeGen(expr);
+			generated_code = (IRRegisterValue*)ExpressionCodeGen(expr);
 		}
 
 		switch (expr->GetType())
@@ -3377,7 +3370,7 @@ namespace Glass
 				SymbolType symbol_type = m_Metadata.GetSymbolType(((Identifier*)member_access->Object)->Symbol.Symbol);
 
 				if (symbol_type == SymbolType::Enum) {
-					return (IRSSAValue*)EnumMemberAccessCodeGen(member_access);
+					return (IRRegisterValue*)EnumMemberAccessCodeGen(member_access);
 				}
 			}
 
@@ -3388,17 +3381,17 @@ namespace Glass
 
 			auto expr_type = m_Metadata.GetExprType(ir_address->RegisterID);
 
-			IRSSA* value_ssa = CreateIRSSA();
+			IRRegister* value_register = CreateIRRegister();
 
 			IRLoad load;
-			load.AddressSSA = ir_address->RegisterID;
+			load.AddressRegister = ir_address->RegisterID;
 			load.Type = expr_type;
 
-			value_ssa->Value = IR(load);
+			value_register->Value = IR(load);
 
-			m_Metadata.RegExprType(value_ssa->ID, m_Metadata.GetExprType(ir_address->RegisterID));
+			m_Metadata.RegExprType(value_register->ID, m_Metadata.GetExprType(ir_address->RegisterID));
 
-			return IR(IRSSAValue(value_ssa->ID));
+			return IR(IRRegisterValue(value_register->ID));
 		}
 		break;
 		case NodeType::ArrayAccess:
@@ -3413,18 +3406,18 @@ namespace Glass
 
 			if (!TypeSystem::IsPointer(expr_type) && !TypeSystem::IsArray(expr_type))
 			{
-				IRSSA* value_ssa = CreateIRSSA();
+				IRRegister* value_register = CreateIRRegister();
 
 				IRLoad load;
 
-				load.AddressSSA = ir_address->RegisterID;
+				load.AddressRegister = ir_address->RegisterID;
 				load.Type = expr_type;
 
-				value_ssa->Value = IR(load);
+				value_register->Value = IR(load);
 
-				m_Metadata.RegExprType(value_ssa->ID, expr_type);
+				m_Metadata.RegExprType(value_register->ID, expr_type);
 
-				return IR(IRSSAValue(value_ssa->ID));
+				return IR(IRRegisterValue(value_register->ID));
 			}
 
 			return ir_address;
@@ -3462,16 +3455,16 @@ namespace Glass
 				//const auto metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(identifier->Symbol.Symbol));
 
 				IRLoad load;
-				load.AddressSSA = ir_address->RegisterID;
+				load.AddressRegister = ir_address->RegisterID;
 				load.Type = metadata->Tipe;
 
-				IRSSA* ssa = CreateIRSSA();
-				IRSSA* var_ssa = m_Metadata.GetSSA(load.AddressSSA);
-				ssa->Value = IR(load);
+				IRRegister* ir_register = CreateIRRegister();
+				IRRegister* ir_register_val = m_Metadata.GetRegister(load.AddressRegister);
+				ir_register->Value = IR(load);
 
-				m_Metadata.RegExprType(ssa->ID, metadata->Tipe);
+				m_Metadata.RegExprType(ir_register->ID, metadata->Tipe);
 
-				return IR(IRSSAValue(ssa->ID));
+				return IR(IRRegisterValue(ir_register->ID));
 			}
 			else if (symbol_type == SymbolType::Constant) {
 				return generated_code;
@@ -3486,17 +3479,17 @@ namespace Glass
 				auto expr_type = m_Metadata.GetExprType(ir_address->RegisterID);
 
 				IRLoad load;
-				load.AddressSSA = ir_address->RegisterID;
+				load.AddressRegister = ir_address->RegisterID;
 
-				IRSSA* ssa = CreateIRSSA();
+				IRRegister* ir_register = CreateIRRegister();
 
 				load.Type = expr_type;
 
-				ssa->Value = IR(load);
+				ir_register->Value = IR(load);
 
-				m_Metadata.RegExprType(ssa->ID, expr_type);
+				m_Metadata.RegExprType(ir_register->ID, expr_type);
 
-				return IR(IRSSAValue(ssa->ID));
+				return IR(IRRegisterValue(ir_register->ID));
 			}
 		}
 		break;
@@ -3514,15 +3507,15 @@ namespace Glass
 
 			IRLoad* ir_load = IR(IRLoad());
 			ir_load->Type = new_type;
-			ir_load->AddressSSA = ir_address->RegisterID;
+			ir_load->AddressRegister = ir_address->RegisterID;
 
-			auto load_ssa = CreateIRSSA();
+			auto load_register = CreateIRRegister();
 
-			load_ssa->Value = ir_load;
+			load_register->Value = ir_load;
 
-			m_Metadata.RegExprType(load_ssa->ID, new_type);
+			m_Metadata.RegExprType(load_register->ID, new_type);
 
-			return IR(IRSSAValue(load_ssa->ID));
+			return IR(IRRegisterValue(load_register->ID));
 		}
 		break;
 		default:
@@ -3531,9 +3524,9 @@ namespace Glass
 		}
 	}
 
-	IRSSAValue* Compiler::PassAsAny(const Expression* expr, IRSSAValue* pre_generated /*= nullptr*/)
+	IRRegisterValue* Compiler::PassAsAny(const Expression* expr, IRRegisterValue* pre_generated /*= nullptr*/)
 	{
-		IRSSAValue* expr_result = (IRSSAValue*)GetExpressionByValue(expr, pre_generated);
+		IRRegisterValue* expr_result = (IRRegisterValue*)GetExpressionByValue(expr, pre_generated);
 
 		if (expr_result == nullptr)
 			return nullptr;
@@ -3544,25 +3537,25 @@ namespace Glass
 			return expr_result;
 		}
 
-		IRSSA* any_ssa = CreateIRSSA();
-		any_ssa->Value = IR(IRAny(expr_result->RegisterID, expr_type));
+		IRRegister* any_register = CreateIRRegister();
+		any_register->Value = IR(IRAny(expr_result->RegisterID, expr_type));
 
-		m_Metadata.RegExprType(any_ssa->ID, expr_type);
+		m_Metadata.RegExprType(any_register->ID, expr_type);
 
-		auto ir_load_ssa = CreateIRSSA();
+		auto ir_load_register = CreateIRRegister();
 
 		IRLoad* ir_load = IR(IRLoad());
-		ir_load->AddressSSA = any_ssa->ID;
+		ir_load->AddressRegister = any_register->ID;
 		ir_load->Type = TypeSystem::GetBasic(IR_any);
 
-		ir_load_ssa->Value = ir_load;
+		ir_load_register->Value = ir_load;
 
-		m_Metadata.RegExprType(ir_load_ssa->ID, expr_type);
+		m_Metadata.RegExprType(ir_load_register->ID, expr_type);
 
-		return IR(IRSSAValue(ir_load_ssa->ID));
+		return IR(IRRegisterValue(ir_load_register->ID));
 	}
 
-	IRSSAValue* Compiler::PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRSSAValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg)
+	IRRegisterValue* Compiler::PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRRegisterValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg)
 	{
 		if (decl_arg->Type->BaseID == IR_any) {
 
@@ -3573,13 +3566,13 @@ namespace Glass
 
 				Expression* arg = arguments[i];
 
-				IRSSAValue* code = nullptr;
+				IRRegisterValue* code = nullptr;
 
 				if (i < pre_generated_arguments.size()) {
 					code = GetExpressionByValue(arg, pre_generated_arguments[i]);
 				}
 				else {
-					code = (IRSSAValue*)GetExpressionByValue(arg);
+					code = (IRRegisterValue*)GetExpressionByValue(arg);
 				}
 
 				if (!code) {
@@ -3593,12 +3586,12 @@ namespace Glass
 				anys.push_back(IRAny(code->RegisterID, arg_type));
 			}
 
-			auto any_array_ir_ssa = CreateIRSSA();
-			any_array_ir_ssa->Value = IR(IRAnyArray(anys));
+			auto any_array_ir_register = CreateIRRegister();
+			any_array_ir_register->Value = IR(IRAnyArray(anys));
 
-			m_Metadata.RegExprType(any_array_ir_ssa->ID, TypeSystem::GetBasic(IR_array));
+			m_Metadata.RegExprType(any_array_ir_register->ID, TypeSystem::GetBasic(IR_array));
 
-			return IR(IRSSAValue(any_array_ir_ssa->ID));
+			return IR(IRRegisterValue(any_array_ir_register->ID));
 		}
 
 		GS_CORE_ASSERT(0, "Non any var args are yet to be implemented");
@@ -3607,52 +3600,52 @@ namespace Glass
 	}
 
 
-	IRSSAValue* Compiler::TypeExpressionCodeGen(TypeExpression* type_expr)
+	IRRegisterValue* Compiler::TypeExpressionCodeGen(TypeExpression* type_expr)
 	{
 		auto type = TypeExpressionGetType(type_expr);
 		return TypeValueCodeGen(type);
 	}
 
-	IRSSAValue* Compiler::TypeValueCodeGen(TypeStorage* type)
+	IRRegisterValue* Compiler::TypeValueCodeGen(TypeStorage* type)
 	{
 		auto expr_type = TypeSystem::GetBasic(IR_type);
 
-		auto type_expr_value_ssa = CreateIRSSA();
+		auto type_expr_value_register = CreateIRRegister();
 
-		type_expr_value_ssa->Value = IR(IRTypeValue(type));
+		type_expr_value_register->Value = IR(IRTypeValue(type));
 
-		m_Metadata.RegExprType(type_expr_value_ssa->ID, expr_type);
+		m_Metadata.RegExprType(type_expr_value_register->ID, expr_type);
 
-		return IR(IRSSAValue(type_expr_value_ssa->ID));
+		return IR(IRRegisterValue(type_expr_value_register->ID));
 	}
 
 
-	IRSSAValue* Compiler::CreateLoad(TypeStorage* type, u64 address)
+	IRRegisterValue* Compiler::CreateLoad(TypeStorage* type, u64 address)
 	{
-		auto load_ssa = CreateIRSSA();
-		load_ssa->Value = IR(IRLoad(address, type));
-		m_Metadata.RegExprType(load_ssa->ID, type);
-		return IR(IRSSAValue(load_ssa->ID));
+		auto load_register = CreateIRRegister();
+		load_register->Value = IR(IRLoad(address, type));
+		m_Metadata.RegExprType(load_register->ID, type);
+		return IR(IRRegisterValue(load_register->ID));
 	}
 
-	IRSSAValue* Compiler::CreateStore(TypeStorage* type, u64 address, IRInstruction* data)
+	IRRegisterValue* Compiler::CreateStore(TypeStorage* type, u64 address, IRInstruction* data)
 	{
-		auto store_ssa = CreateIRSSA();
-		store_ssa->Value = IR(IRStore(address, data, type));
-		return IR(IRSSAValue(store_ssa->ID));
+		auto store_register = CreateIRRegister();
+		store_register->Value = IR(IRStore(address, data, type));
+		return IR(IRRegisterValue(store_register->ID));
 	}
 
-	IRSSAValue* Compiler::CreateConstantInteger(u64 integer_base_type, i64 value)
+	IRRegisterValue* Compiler::CreateConstantInteger(u64 integer_base_type, i64 value)
 	{
 		IRCONSTValue* Constant = IR(IRCONSTValue());;
 
 		Constant->Type = integer_base_type;
 		memcpy(&Constant->Data, &value, sizeof(i64));
 
-		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+		return CreateIRRegister(Constant, TypeSystem::GetBasic(Constant->Type));
 	}
 
-	IRSSAValue* Compiler::CreateConstant(u64 base_type, i64 value_integer, double value_float)
+	IRRegisterValue* Compiler::CreateConstant(u64 base_type, i64 value_integer, double value_float)
 	{
 		IRCONSTValue* Constant = IR(IRCONSTValue());
 
@@ -3665,17 +3658,17 @@ namespace Glass
 			memcpy(&Constant->Data, &value_integer, sizeof(i64));
 		}
 
-		return CreateIRSSA(Constant, TypeSystem::GetBasic(Constant->Type));
+		return CreateIRRegister(Constant, TypeSystem::GetBasic(Constant->Type));
 	}
 
-	IRSSAValue* Compiler::CreateCopy(TypeStorage* type, IRSSAValue* loaded_value)
+	IRRegisterValue* Compiler::CreateCopy(TypeStorage* type, IRRegisterValue* loaded_value)
 	{
-		auto alloca = CreateIRSSA(IR(IRAlloca(type)), type);
+		auto alloca = CreateIRRegister(IR(IRAlloca(type)), type);
 		CreateStore(type, alloca->RegisterID, loaded_value);
 		return alloca;
 	}
 
-	IRSSAValue* Compiler::CreateMemberAccess(const std::string& strct, const std::string& member, u64 address)
+	IRRegisterValue* Compiler::CreateMemberAccess(const std::string& strct, const std::string& member, u64 address)
 	{
 		u64 struct_id = m_Metadata.GetStructIDFromType(m_Metadata.GetType(strct));
 
@@ -3684,14 +3677,14 @@ namespace Glass
 		IRMemberAccess* member_access = IR(IRMemberAccess());
 		member_access->StructID = struct_id;
 		member_access->MemberID = metadata->FindMember(member);
-		member_access->ObjectSSA = address;
+		member_access->ObjectRegister = address;
 
-		return CreateIRSSA(member_access);
+		return CreateIRRegister(member_access);
 	}
 
-	IRSSAValue* Compiler::CreatePointerCast(TypeStorage* to_type, u64 address)
+	IRRegisterValue* Compiler::CreatePointerCast(TypeStorage* to_type, u64 address)
 	{
-		return CreateIRSSA(IR(IRPointerCast(to_type, address)));
+		return CreateIRRegister(IR(IRPointerCast(to_type, address)));
 	}
 
 	IRFunction* Compiler::CreateIRFunction(const FunctionNode* functionNode)
@@ -3702,33 +3695,33 @@ namespace Glass
 		return IRF;
 	}
 
-	IRSSA* Compiler::CreateIRSSA()
+	IRRegister* Compiler::CreateIRRegister()
 	{
-		IRSSA* SSA = IR(IRSSA());
-		SSA->ID = m_SSAIDCounter;
+		IRRegister* Register = IR(IRRegister());
+		Register->ID = m_RegisterIDCounter;
 
-		m_SSAIDCounter++;
+		m_RegisterIDCounter++;
 
-		PushIRSSA(SSA);
+		PushIRRegister(Register);
 
-		SSA->SetDBGLoc(m_CurrentDBGLoc);
+		Register->SetDBGLoc(m_CurrentDBGLoc);
 
-		return SSA;
+		return Register;
 	}
 
-	IRSSAValue* Compiler::CreateIRSSA(IRInstruction* value)
+	IRRegisterValue* Compiler::CreateIRRegister(IRInstruction* value)
 	{
-		auto ssa = CreateIRSSA();
-		ssa->Value = value;
-		return IR(IRSSAValue(ssa->ID));
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = value;
+		return IR(IRRegisterValue(ir_register->ID));
 	}
 
-	IRSSAValue* Compiler::CreateIRSSA(IRInstruction* value, TypeStorage* semantic_type)
+	IRRegisterValue* Compiler::CreateIRRegister(IRInstruction* value, TypeStorage* semantic_type)
 	{
-		auto ssa = CreateIRSSA();
-		ssa->Value = value;
-		m_Metadata.RegExprType(ssa->ID, semantic_type);
-		return IR(IRSSAValue(ssa->ID));
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = value;
+		m_Metadata.RegExprType(ir_register->ID, semantic_type);
+		return IR(IRRegisterValue(ir_register->ID));
 	}
 
 	IRData* Compiler::CreateIRData()
@@ -3833,7 +3826,7 @@ namespace Glass
 		return new_ts_type;
 	}
 
-	void Compiler::BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRSSAValue** A, IRSSAValue** B)
+	void Compiler::BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B)
 	{
 		if (left->GetType() != NodeType::NumericLiteral) {
 			*A = GetExpressionByValue(left);

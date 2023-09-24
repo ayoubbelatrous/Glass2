@@ -240,13 +240,13 @@ namespace Glass
 		{
 			AssembleConstValue((IRCONSTValue*)inst, stream);
 		}break;
-		case IRNodeType::SSA:
+		case IRNodeType::Register:
 		{
-			AssembleIRRegister((IRSSA*)inst, stream);
+			AssembleIRRegister((IRRegister*)inst, stream);
 		}break;
-		case IRNodeType::SSAValue:
+		case IRNodeType::RegisterValue:
 		{
-			AssembleIRRegisterValue((IRSSAValue*)inst, stream);
+			AssembleIRRegisterValue((IRRegisterValue*)inst, stream);
 		}break;
 		case IRNodeType::Data: {
 			AssembleData((IRData*)inst, stream);
@@ -272,7 +272,7 @@ namespace Glass
 			AssembleLogicalOp((IRBinOp*)inst, stream);
 			break;
 		case IRNodeType::PointerCast: {
-			SetRegisterValue(GetIRRegister(((IRPointerCast*)inst)->PointerSSA));
+			SetRegisterValue(GetIRRegister(((IRPointerCast*)inst)->PointerRegister));
 		}
 									break;
 
@@ -461,7 +461,7 @@ namespace Glass
 
 	void X86_BackEnd::AssembleStore(IRStore* inst, std::vector<X86_Inst*>& stream)
 	{
-		GS_CORE_ASSERT(inst->Data->GetType() == IRNodeType::SSAValue);
+		GS_CORE_ASSERT(inst->Data->GetType() == IRNodeType::RegisterValue);
 
 		GS_CORE_ASSERT(inst->Type);
 		u64 stored_size = TypeSystem::GetTypeSize(inst->Type);
@@ -471,7 +471,7 @@ namespace Glass
 			return;
 		}
 
-		IRSSAValue* data_as_register_ref = ((IRSSAValue*)inst->Data);
+		IRRegisterValue* data_as_register_ref = ((IRRegisterValue*)inst->Data);
 
 		if (stored_size > 8) {
 
@@ -486,7 +486,7 @@ namespace Glass
 			auto memcpy_ret = GetReturnLocation(void_ptr_Ty, stream);
 
 			auto src = GetArgumentLocation(void_ptr_Ty, 1, stream, ARG_DIR_OUT);
-			auto source = GetIRRegister(((IRSSAValue*)inst->Data)->RegisterID);
+			auto source = GetIRRegister(((IRRegisterValue*)inst->Data)->RegisterID);
 
 			if (source->type == X86_CONSTANT_OFFSET) {
 
@@ -501,7 +501,7 @@ namespace Glass
 			}
 
 			auto dest = GetArgumentLocation(void_ptr_Ty, 0, stream, ARG_DIR_OUT);
-			auto destination = GetIRRegister(inst->AddressSSA);
+			auto destination = GetIRRegister(inst->AddressRegister);
 
 			if (destination->type == X86_CONSTANT_OFFSET) {
 
@@ -533,7 +533,7 @@ namespace Glass
 				SetRegisterValue(ASMA(X86_Inst()));
 			}
 
-			auto data_ir_register = m_Metadata->GetSSA(data_as_register_ref->RegisterID);
+			auto data_ir_register = m_Metadata->GetRegister(data_as_register_ref->RegisterID);
 
 			IRNodeType node_type = data_ir_register->Value->GetType();
 
@@ -543,14 +543,14 @@ namespace Glass
 			case IRNodeType::Equal:
 			case IRNodeType::NotEqual: {
 				IRBinOp* as_binop = (IRBinOp*)data_ir_register->Value;
-				Make_Move(GetIRRegister(data_as_register_ref->RegisterID), GetIRRegister(inst->AddressSSA), stream, 1);
+				Make_Move(GetIRRegister(data_as_register_ref->RegisterID), GetIRRegister(inst->AddressRegister), stream, 1);
 			}
 									 break;
 			default: {
 
 				X86_Inst move = {};
 				move.type = X86_MOV;
-				move.as.move.destination = GetIRRegister(inst->AddressSSA);
+				move.as.move.destination = GetIRRegister(inst->AddressRegister);
 				move.as.move.source = GetIRRegister(data_as_register_ref->RegisterID);
 
 				stream.push_back(ASMA(move));
@@ -569,7 +569,7 @@ namespace Glass
 			return;
 		}
 
-		auto loaded_value_loc = GetIRRegister(inst->AddressSSA);
+		auto loaded_value_loc = GetIRRegister(inst->AddressRegister);
 
 		if (load_size > 8) {
 
@@ -615,7 +615,7 @@ namespace Glass
 
 		const MemberMetadata& member = struct_metadata->Members[member_access->MemberID];
 
-		X86_Inst* struct_location = GetIRRegister(member_access->ObjectSSA);
+		X86_Inst* struct_location = GetIRRegister(member_access->ObjectRegister);
 		GS_CORE_ASSERT(struct_location->type == X86_CONSTANT_OFFSET);
 
 		X86_Inst* member_location = ASMA(X86_Inst(*struct_location));
@@ -705,8 +705,8 @@ namespace Glass
 
 		for (size_t i = 0; i < inst->Arguments.size(); i++)
 		{
-			auto arg = (IRSSAValue*)inst->Arguments[i];
-			GS_CORE_ASSERT(arg->GetType() == IRNodeType::SSAValue);
+			auto arg = (IRRegisterValue*)inst->Arguments[i];
+			GS_CORE_ASSERT(arg->GetType() == IRNodeType::RegisterValue);
 
 			auto arg_type = GetIRRegisterType(arg->RegisterID);
 
@@ -764,9 +764,9 @@ namespace Glass
 		if (CurrentReturnTarget) {
 
 			GS_CORE_ASSERT(inst->Value);
-			GS_CORE_ASSERT(inst->Value->GetType() == IRNodeType::SSAValue);
+			GS_CORE_ASSERT(inst->Value->GetType() == IRNodeType::RegisterValue);
 
-			Make_Move(GetIRRegister(((IRSSAValue*)inst->Value)->RegisterID), CurrentReturnTarget, stream, 4);
+			Make_Move(GetIRRegister(((IRRegisterValue*)inst->Value)->RegisterID), CurrentReturnTarget, stream, 4);
 		}
 		else {
 			GS_CORE_ASSERT(inst->Value);
@@ -791,7 +791,7 @@ namespace Glass
 		};
 
 
-		auto temprary_move_a = GetIRRegister(inst->SSA_A->RegisterID);
+		auto temprary_move_a = GetIRRegister(inst->RegisterA->RegisterID);
 		auto dest_inst = Allocate_Register(RegisterUsage::REG_I32, GetRegisterID(), stream);
 
 		SetRegisterValue(dest_inst);
@@ -810,7 +810,7 @@ namespace Glass
 		X86_Inst add;
 		add.type = op_lookup.at(node_type);
 		add.as.bin_op.destination = dest_inst;
-		add.as.bin_op.value = GetIRRegister(inst->SSA_B->RegisterID);
+		add.as.bin_op.value = GetIRRegister(inst->RegisterB->RegisterID);
 		stream.push_back(ASMA(add));
 
 		return;
@@ -823,7 +823,7 @@ namespace Glass
 		auto compare_size = TypeSystem::GetTypeSize(compare_type);
 		GS_CORE_ASSERT(compare_size);
 
-		auto register_a = GetIRRegister(inst->SSA_A->RegisterID); // we are freeing before allocation there is a very high chance that we will pick a tmp register that is the same as the operand that will cause for example mov al, al which will be removed if the option is set
+		auto register_a = GetIRRegister(inst->RegisterA->RegisterID); // we are freeing before allocation there is a very high chance that we will pick a tmp register that is the same as the operand that will cause for example mov al, al which will be removed if the option is set
 		auto destination_register = Allocate_Register(RegisterUsageBySize(compare_type), GetRegisterID(), stream);
 
 		Make_Move(register_a, destination_register, stream, compare_size, "compare move");
@@ -831,7 +831,7 @@ namespace Glass
 		X86_Inst* compare = ASMA(X86_Inst());
 		compare->type = X86_CMP;
 		compare->as.cmp.a = destination_register;
-		compare->as.cmp.b = GetIRRegister(inst->SSA_B->RegisterID);
+		compare->as.cmp.b = GetIRRegister(inst->RegisterB->RegisterID);
 		Free_Register(destination_register->as.reg_alloc.register_allocation_id);
 		stream.push_back(compare);
 
@@ -845,7 +845,7 @@ namespace Glass
 		SetRegisterValue(b8_register);
 	}
 
-	void X86_BackEnd::AssembleIRRegister(IRSSA* inst, std::vector<X86_Inst*>& stream)
+	void X86_BackEnd::AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream)
 	{
 		IsRegisterValue = true;
 
@@ -866,9 +866,9 @@ namespace Glass
 		IsRegisterValue = false;
 	}
 
-	void X86_BackEnd::AssembleIRRegisterValue(IRSSAValue* register_value, std::vector<X86_Inst*>& stream)
+	void X86_BackEnd::AssembleIRRegisterValue(IRRegisterValue* register_value, std::vector<X86_Inst*>& stream)
 	{
-		IRSSA* Register = m_Metadata->GetSSA(register_value->RegisterID);
+		IRRegister* Register = m_Metadata->GetRegister(register_value->RegisterID);
 
 		if (Register->Value->GetType() == IRNodeType::Alloca || Register->Value->GetType() == IRNodeType::Argument || Register->Value->GetType() == IRNodeType::MemberAccess) {
 
@@ -946,9 +946,9 @@ namespace Glass
 			IRArgumentAllocation* argument = (IRArgumentAllocation*)inst;
 			type = m_CurrentFunction->Arguments[argument->ArgumentIndex].Type;
 		}break;
-		case IRNodeType::SSAValue:
+		case IRNodeType::RegisterValue:
 		{
-			type = m_Data.IR_RegisterTypes.at(((IRSSAValue*)inst)->RegisterID);
+			type = m_Data.IR_RegisterTypes.at(((IRRegisterValue*)inst)->RegisterID);
 		}break;
 		case IRNodeType::NullPtr:
 		{

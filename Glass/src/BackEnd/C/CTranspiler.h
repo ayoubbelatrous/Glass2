@@ -18,11 +18,11 @@ namespace Glass
 		std::string TypeOfCodeGen(IRTypeOf* type_of);
 
 		std::string FunctionCodeGen(IRFunction* IRF);
-		std::string SSACodeGen(IRSSA* SSA);
+		std::string SSACodeGen(IRRegister* SSA);
 
 		std::string StructCodeGen(IRStruct* ir_struct);
 
-		std::string SSAValueCodeGen(IRSSAValue* ssaVal);
+		std::string SSAValueCodeGen(IRRegisterValue* ssaVal);
 		std::string OpCodeGen(IRInstruction* op);
 
 		std::string CallCodeGen(IRFunctionCall* call);

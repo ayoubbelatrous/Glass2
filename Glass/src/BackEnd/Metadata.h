@@ -115,8 +115,7 @@ namespace Glass {
 		bool Global = false;
 		bool Foreign = false;
 
-		IRSSA* DataSSA = nullptr;
-		IRSSA* AddressSSA = nullptr;
+		IRRegister* AddressRegister = nullptr;
 	};
 
 	struct MemberMetadata
@@ -161,7 +160,7 @@ namespace Glass {
 		ArgumentMetadata(
 			std::string name,
 			TypeStorage* type,
-			u64 ssa_id = 0,
+			u64 register_id = 0,
 			bool variadic = false,
 			bool polyMorphic = false,
 			u64 PolyMorhID = 0)
@@ -175,7 +174,7 @@ namespace Glass {
 		bool PolyMorphic = false;
 		u64 PolyMorhID = 0;
 
-		IRSSAValue* AllocationLocation = nullptr;
+		IRRegisterValue* AllocationLocation = nullptr;
 	};
 
 	struct PolyMorphicType
@@ -383,11 +382,11 @@ namespace Glass {
 			m_CurrentCTXScope = CurrentContext()->Parent;
 		}
 
-		std::unordered_map<u64, std::unordered_map<u64, IRSSA*>> m_SSAs;
+		std::unordered_map<u64, std::unordered_map<u64, IRRegister*>> m_Registers;
 
 		std::unordered_map<std::string, u64> m_GlobalVariables;
 
-		std::unordered_map<u64, std::unordered_map<std::string, u64>> m_VariableSSAs;
+		std::unordered_map<u64, std::unordered_map<std::string, u64>> m_VariableRegisters;
 		std::unordered_map<u64, std::unordered_map<std::string, u64>> m_Variables;
 		std::unordered_map<u64, std::unordered_map<u64, VariableMetadata >> m_VariableMetadata;
 
@@ -481,8 +480,8 @@ namespace Glass {
 			return m_TypeFlags[id];
 		}
 
-		IRSSA* GetSSA(u64 ID) const {
-			return m_SSAs.at(m_CurrentFunction).at(ID);
+		IRRegister* GetRegister(u64 ID) const {
+			return m_Registers.at(m_CurrentFunction).at(ID);
 		}
 
 		FunctionMetadata* GetFunctionMetadata(u64 ID) {
@@ -542,20 +541,20 @@ namespace Glass {
 			}
 		}
 
-		u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
-			m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
-			return m_VariableSSAs[CurrentContextID()][name] = ssa->ID;
+		u64 RegisterVariable(IRRegister* ir_register, const std::string& name) {
+			m_Registers[m_CurrentFunction][ir_register->ID] = ir_register;
+			return m_VariableRegisters[CurrentContextID()][name] = ir_register->ID;
 		}
 
-		u64 GetVariableSSARecursive(u64 ctx_id, const std::string& name) const {
+		u64 GetVariableRegisterRecursive(u64 ctx_id, const std::string& name) const {
 
 			if (ctx_id == 1) {
 				return (u64)-1;
 			}
 
-			if (m_VariableSSAs.find(ctx_id) != m_VariableSSAs.end()) {
-				if (m_VariableSSAs.at(ctx_id).find(name) != m_VariableSSAs.at(ctx_id).end()) {
-					return m_VariableSSAs.at(ctx_id).at(name);
+			if (m_VariableRegisters.find(ctx_id) != m_VariableRegisters.end()) {
+				if (m_VariableRegisters.at(ctx_id).find(name) != m_VariableRegisters.at(ctx_id).end()) {
+					return m_VariableRegisters.at(ctx_id).at(name);
 				}
 			}
 
@@ -565,11 +564,11 @@ namespace Glass {
 				return (u64)-1;
 			}
 
-			return GetVariableSSARecursive(parent_ctx, name);
+			return GetVariableRegisterRecursive(parent_ctx, name);
 		}
 
-		u64 GetVariableSSA(const std::string& name) const {
-			return GetVariableSSARecursive(CurrentContextID(), name);
+		u64 GetVariableRegister(const std::string& name) const {
+			return GetVariableRegisterRecursive(CurrentContextID(), name);
 		}
 
 		u64 GetVariableRecursive(u64 ctx_id, const std::string& name) const {
@@ -627,8 +626,8 @@ namespace Glass {
 			return GetVariableMetadataRecursive(CurrentContextID(), ID);
 		}
 
-		void RegisterSSA(IRSSA* ssa) {
-			m_SSAs[m_CurrentFunction][ssa->ID] = ssa;
+		void RegisterIRRegister(IRRegister* ir_register) {
+			m_Registers[m_CurrentFunction][ir_register->ID] = ir_register;
 		}
 
 		void RegisterGlobalVariable(u64 glob_id, const std::string& name) {
@@ -711,12 +710,12 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		TypeStorage* GetExprType(u64 ssa) const {
-			return m_ExpressionType.at(m_CurrentFunction).at(ssa);
+		TypeStorage* GetExprType(u64 register_id) const {
+			return m_ExpressionType.at(m_CurrentFunction).at(register_id);
 		}
 
-		void RegExprType(u64 ssa, TypeStorage* type) {
-			m_ExpressionType[m_CurrentFunction][ssa] = type;
+		void RegExprType(u64 register_id, TypeStorage* type) {
+			m_ExpressionType[m_CurrentFunction][register_id] = type;
 		}
 
 		SymbolType GetSymbolType(const std::string& symbol) const;

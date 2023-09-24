@@ -85,8 +85,8 @@ namespace Glass
 	{
 		Invalid,
 
-		SSA,
-		SSAValue,
+		Register,
+		RegisterValue,
 
 		ConstValue,
 
@@ -270,13 +270,13 @@ namespace Glass
 		}
 	};
 
-	struct IRSSAValue : public IRInstruction {
+	struct IRRegisterValue : public IRInstruction {
 		u64 ID = 0;
 		u64 RegisterID = 0;
 
-		IRSSAValue() = default;
-		IRSSAValue(u64 ssa)
-			:RegisterID(ssa)
+		IRRegisterValue() = default;
+		IRRegisterValue(u64 regisrer_id)
+			:RegisterID(regisrer_id)
 		{
 		}
 
@@ -285,13 +285,13 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const {
-			return IRNodeType::SSAValue;
+			return IRNodeType::RegisterValue;
 		}
 	};
 
 	struct IRBinOp : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type;
 
 		virtual std::string ToString() const override {
@@ -304,17 +304,17 @@ namespace Glass
 	};
 
 	struct IRADD : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type;
 
 		IRADD() = default;
-		IRADD(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRADD(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
-		IRADD(IRSSAValue* A, IRSSAValue* B, u64 type)
-			:SSA_A(A), SSA_B(B), Type(type)
+		IRADD(IRRegisterValue* A, IRRegisterValue* B, u64 type)
+			:RegisterA(A), RegisterB(B), Type(type)
 		{
 		}
 
@@ -323,9 +323,9 @@ namespace Glass
 
 			str += "ADD ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -336,14 +336,14 @@ namespace Glass
 	};
 
 	struct IRSUB : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type;
 
 		IRSUB() = default;
 
-		IRSUB(IRSSAValue* a, IRSSAValue* b, u64 type)
-			: SSA_A(a), SSA_B(b), Type(type)
+		IRSUB(IRRegisterValue* a, IRRegisterValue* b, u64 type)
+			: RegisterA(a), RegisterB(b), Type(type)
 		{
 		}
 
@@ -352,9 +352,9 @@ namespace Glass
 
 			str += "SUB ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -365,13 +365,13 @@ namespace Glass
 	};
 
 	struct IRMUL : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type;
 
 		IRMUL() = default;
-		IRMUL(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRMUL(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -380,9 +380,9 @@ namespace Glass
 
 			str += "MUL ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -393,8 +393,8 @@ namespace Glass
 	};
 
 	struct IRDIV : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type;
 
 		virtual std::string ToString() const override {
@@ -402,9 +402,9 @@ namespace Glass
 
 			str += "DIV ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -440,7 +440,7 @@ namespace Glass
 		u32 Col = 0;
 	};
 
-	struct IRSSA : public IRInstruction {
+	struct IRRegister : public IRInstruction {
 		u64 ID = 0;
 		IRInstruction* Value = nullptr;
 
@@ -457,7 +457,7 @@ namespace Glass
 		}
 
 		virtual IRNodeType GetType() const {
-			return IRNodeType::SSA;
+			return IRNodeType::Register;
 		}
 
 		DBGSourceLoc DBGLoc;
@@ -521,7 +521,7 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Overload = nullptr;
-		std::vector<IRSSA*> Arguments;
+		std::vector<IRRegister*> Arguments;
 		std::vector<IRInstruction*> Instructions;
 
 		virtual std::string ToString() const override
@@ -531,7 +531,7 @@ namespace Glass
 			str += std::to_string(ID) + " i32 : (";
 
 			for (auto a : Arguments) {
-				IRSSA* arg = (IRSSA*)a;
+				IRRegister* arg = (IRRegister*)a;
 				str += "$ ";
 				str += " : ";
 				str += std::to_string(arg->ID);
@@ -602,18 +602,18 @@ namespace Glass
 	struct IRStore : public IRInstruction {
 		u64 ID = 0;
 
-		u64 AddressSSA = 0;
+		u64 AddressRegister = 0;
 		IRInstruction* Data = nullptr;
 
 		TypeStorage* Type;
 
 		IRStore() = default;
 
-		IRStore(u64 addressSSA, IRInstruction* data, TypeStorage* type)
-			:AddressSSA(addressSSA), Data(data), Type(type) {}
+		IRStore(u64 addressRegister, IRInstruction* data, TypeStorage* type)
+			:AddressRegister(addressRegister), Data(data), Type(type) {}
 
 		virtual std::string ToString() const override {
-			return fmt::format("STORE ${} {}", AddressSSA, Data->ToString());
+			return fmt::format("STORE ${} {}", AddressRegister, Data->ToString());
 		}
 
 		virtual IRNodeType GetType() const {
@@ -624,17 +624,17 @@ namespace Glass
 	struct IRLoad : public IRInstruction {
 		u64 ID = 0;
 
-		u64 AddressSSA = 0;
+		u64 AddressRegister = 0;
 		TypeStorage* Type;
 
 		IRLoad() = default;
 
-		IRLoad(u64 address_ssa, TypeStorage* type)
-			:AddressSSA(address_ssa), Type(type)
+		IRLoad(u64 address_register, TypeStorage* type)
+			:AddressRegister(address_register), Type(type)
 		{}
 
 		virtual std::string ToString() const override {
-			return 	fmt::format("LOAD ${}", AddressSSA);
+			return 	fmt::format("LOAD ${}", AddressRegister);
 		}
 
 		virtual IRNodeType GetType() const {
@@ -708,7 +708,7 @@ namespace Glass
 		u64 ID = 0;
 
 		u64 StructID = 0;
-		u64 ObjectSSA = 0;
+		u64 ObjectRegister = 0;
 		u64 MemberID = 0;
 
 		bool ReferenceAccess = false;
@@ -726,13 +726,13 @@ namespace Glass
 		u64 ID = 0;
 
 		u64 ArrayAddress;
-		u64 ElementSSA;
+		u64 ElementIndexRegister;
 		TypeStorage* Type;
 
 		IRArrayAccess() = default;
 
-		IRArrayAccess(u64 array_address, u64 element_ssa, TypeStorage* type)
-			:ArrayAddress(array_address), ElementSSA(element_ssa), Type(type)
+		IRArrayAccess(u64 array_address, u64 element_index_register, TypeStorage* type)
+			:ArrayAddress(array_address), ElementIndexRegister(element_index_register), Type(type)
 		{
 		}
 
@@ -748,7 +748,7 @@ namespace Glass
 	//To be changed to branch
 	struct IRIf : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA = 0;
+		u64 ConditionRegister = 0;
 		std::vector<IRInstruction*> Instructions;
 
 		virtual std::string ToString() const override
@@ -774,8 +774,8 @@ namespace Glass
 	//To be changed to branch
 	struct IRWhile : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA = 0;
-		std::vector<IRSSA*> ConditionBlock;
+		u64 ConditionRegisterID = 0;
+		std::vector<IRRegister*> ConditionBlock;
 		std::vector<IRInstruction*> Instructions;
 
 		virtual std::string ToString() const override
@@ -835,7 +835,7 @@ namespace Glass
 
 	struct IRRef : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA;
+		u64 Register;
 
 		virtual std::string ToString() const override
 		{
@@ -864,10 +864,10 @@ namespace Glass
 
 	struct IRTypeInfo : public IRInstruction {
 		u64 ID = 0;
-		u64 ArgumentSSA = -1;
+		u64 ArgumentRegister = -1;
 
 		IRTypeInfo(u64 argument)
-			:ArgumentSSA(argument)
+			:ArgumentRegister(argument)
 		{}
 
 		virtual std::string ToString() const override
@@ -881,13 +881,13 @@ namespace Glass
 	};
 
 	struct IREQ : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type = -1;
 
 		IREQ() = default;
-		IREQ(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IREQ(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -896,9 +896,9 @@ namespace Glass
 
 			str += "EQ ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -909,13 +909,13 @@ namespace Glass
 	};
 
 	struct IRNOTEQ : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type = -1;
 
 		IRNOTEQ() = default;
-		IRNOTEQ(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRNOTEQ(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -924,9 +924,9 @@ namespace Glass
 
 			str += "NOTEQ ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -937,13 +937,13 @@ namespace Glass
 	};
 
 	struct IRGreater : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type = -1;
 
 		IRGreater() = default;
-		IRGreater(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRGreater(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -952,9 +952,9 @@ namespace Glass
 
 			str += "Greater ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -965,13 +965,13 @@ namespace Glass
 	};
 
 	struct IRLesser : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 		u64 Type = -1;
 
 		IRLesser() = default;
-		IRLesser(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRLesser(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -980,9 +980,9 @@ namespace Glass
 
 			str += "Lesser ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -993,12 +993,12 @@ namespace Glass
 	};
 
 	struct IRBitAnd : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 
 		IRBitAnd() = default;
-		IRBitAnd(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRBitAnd(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -1007,9 +1007,9 @@ namespace Glass
 
 			str += "BitAnd ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -1020,12 +1020,12 @@ namespace Glass
 	};
 
 	struct IRBitOr : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 
 		IRBitOr() = default;
-		IRBitOr(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRBitOr(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -1034,9 +1034,9 @@ namespace Glass
 
 			str += "BitOr ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -1047,12 +1047,12 @@ namespace Glass
 	};
 
 	struct IRAnd : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 
 		IRAnd() = default;
-		IRAnd(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IRAnd(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -1061,9 +1061,9 @@ namespace Glass
 
 			str += "And ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -1074,12 +1074,12 @@ namespace Glass
 	};
 
 	struct IROr : public IRInstruction {
-		IRSSAValue* SSA_A = nullptr;
-		IRSSAValue* SSA_B = nullptr;
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
 
 		IROr() = default;
-		IROr(IRSSAValue* A, IRSSAValue* B)
-			:SSA_A(A), SSA_B(B)
+		IROr(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
 		{
 		}
 
@@ -1088,9 +1088,9 @@ namespace Glass
 
 			str += "Or ";
 
-			str += SSA_A->ToString();
+			str += RegisterA->ToString();
 			str += " : ";
-			str += SSA_B->ToString();
+			str += RegisterB->ToString();
 
 			return str;
 		}
@@ -1117,10 +1117,10 @@ namespace Glass
 
 	struct IRDeRef : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA = 0;
+		u64 Register = 0;
 
-		IRDeRef(u64 ssa)
-			:SSA(ssa) {}
+		IRDeRef(u64 register_id)
+			:Register(register_id) {}
 
 		virtual std::string ToString() const override
 		{
@@ -1152,12 +1152,12 @@ namespace Glass
 	struct IRCallFuncRef : public IRInstruction {
 		u64 ID = 0;
 
-		u64 PtrSSA = 0;
+		u64 PtrRegister = 0;
 		std::vector<u64> Arguments;
 		TypeStorage* Signature = 0;
 
-		IRCallFuncRef(u64 ptrSSA, const std::vector<u64>& arguments, TypeStorage* signature)
-			:PtrSSA(ptrSSA), Arguments(arguments), Signature(signature) {}
+		IRCallFuncRef(u64 ptrRegister, const std::vector<u64>& arguments, TypeStorage* signature)
+			:PtrRegister(ptrRegister), Arguments(arguments), Signature(signature) {}
 
 		virtual std::string ToString() const override
 		{
@@ -1207,7 +1207,7 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 SSA = 0;
+		u64 Register = 0;
 
 		virtual std::string ToString() const override {
 			return 	"(invalid cast) ";
@@ -1222,10 +1222,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 PointerSSA = 0;
+		u64 PointerRegister = 0;
 
-		IRPointerCast(TypeStorage* type, u64 pointer_ssa)
-			:Type(type), PointerSSA(pointer_ssa)
+		IRPointerCast(TypeStorage* type, u64 pointer_register)
+			:Type(type), PointerRegister(pointer_register)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1241,10 +1241,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 
-		IRInt2PtrCast(TypeStorage* type, u64 integer_ssa)
-			:Type(type), IntegerSSA(integer_ssa)
+		IRInt2PtrCast(TypeStorage* type, u64 integer_register)
+			:Type(type), IntegerRegister(integer_register)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1260,10 +1260,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 PointerSSA = 0;
+		u64 PointerRegister = 0;
 
-		IRPtr2IntCast(TypeStorage* type, u64 pointer_ssa)
-			:Type(type), PointerSSA(pointer_ssa)
+		IRPtr2IntCast(TypeStorage* type, u64 pointer_register)
+			:Type(type), PointerRegister(pointer_register)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1279,10 +1279,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 
-		IRZExtCast(TypeStorage* type, u64 integerSSA)
-			:Type(type), IntegerSSA(integerSSA)
+		IRZExtCast(TypeStorage* type, u64 integerRegister)
+			:Type(type), IntegerRegister(integerRegister)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1298,10 +1298,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 
-		IRSExtCast(TypeStorage* type, u64 integerSSA)
-			:Type(type), IntegerSSA(integerSSA)
+		IRSExtCast(TypeStorage* type, u64 integerRegister)
+			:Type(type), IntegerRegister(integerRegister)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1317,10 +1317,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 
-		IRIntTrunc(TypeStorage* type, u64 integerSSA)
-			:Type(type), IntegerSSA(integerSSA)
+		IRIntTrunc(TypeStorage* type, u64 integerRegister)
+			:Type(type), IntegerRegister(integerRegister)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1336,11 +1336,11 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 		bool Signed = false;
 
-		IRInt2FP(TypeStorage* type, u64 integerSSA, bool _signed)
-			:Type(type), IntegerSSA(integerSSA), Signed(_signed)
+		IRInt2FP(TypeStorage* type, u64 integerRegister, bool _signed)
+			:Type(type), IntegerRegister(integerRegister), Signed(_signed)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1356,11 +1356,11 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 IntegerSSA = 0;
+		u64 IntegerRegister = 0;
 		bool Signed = false;
 
-		IRFP2Int(TypeStorage* type, u64 integerSSA, bool _signed)
-			:Type(type), IntegerSSA(integerSSA), Signed(_signed)
+		IRFP2Int(TypeStorage* type, u64 integerRegister, bool _signed)
+			:Type(type), IntegerRegister(integerRegister), Signed(_signed)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1376,10 +1376,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 FloatSSA = 0;
+		u64 FloatRegister = 0;
 
-		IRFPExt(TypeStorage* type, u64 floatSSA)
-			:Type(type), FloatSSA(floatSSA)
+		IRFPExt(TypeStorage* type, u64 floatRegister)
+			:Type(type), FloatRegister(floatRegister)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1395,10 +1395,10 @@ namespace Glass
 		u64 ID = 0;
 
 		TypeStorage* Type = nullptr;
-		u64 FloatSSA = 0;
+		u64 FloatRegister = 0;
 
-		IRFPTrunc(TypeStorage* type, u64 floatSSA)
-			:Type(type), FloatSSA(floatSSA)
+		IRFPTrunc(TypeStorage* type, u64 floatRegister)
+			:Type(type), FloatRegister(floatRegister)
 		{}
 
 		virtual std::string ToString() const override {
@@ -1413,16 +1413,16 @@ namespace Glass
 	struct IRAny : public IRInstruction {
 		u64 ID = 0;
 
-		u64 DataSSA;
+		u64 DataRegister;
 		TypeStorage* Type;
 
 		IRAny(u64 data, TypeStorage* type_id)
-			: DataSSA(data), Type(type_id)
+			: DataRegister(data), Type(type_id)
 		{
 		}
 
 		virtual std::string ToString() const override {
-			return fmt::format("Any ({})", DataSSA);
+			return fmt::format("Any ({})", DataRegister);
 		}
 
 		virtual IRNodeType GetType() const {
@@ -1466,12 +1466,12 @@ namespace Glass
 	struct IRIterator : public IRInstruction {
 		u64 ID = 0;
 
-		std::vector<IRSSA*> ConditionBlock;
-		std::vector<IRSSA*> IncrementorBlock;
-		u64 ConditionSSA;
+		std::vector<IRRegister*> ConditionBlock;
+		std::vector<IRRegister*> IncrementorBlock;
+		u64 ConditionRegisterID;
 
-		IRSSAValue* IteratorIndex;
-		IRSSAValue* IteratorIt;
+		IRRegisterValue* IteratorIndex;
+		IRRegisterValue* IteratorIt;
 
 		TypeStorage* IndexTy = nullptr;
 		TypeStorage* ItTy = nullptr;

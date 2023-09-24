@@ -83,7 +83,7 @@ namespace Glass
 
 		IRInstruction* RangeCodeGen(const RangeNode* rangeNode);
 
-		IRIterator* DynArrayIteratorCodeGen(const Expression* expression, IRSSAValue* generated);
+		IRIterator* DynArrayIteratorCodeGen(const Expression* expression, IRRegisterValue* generated);
 		IRIterator* IteratorCodeGen(const Expression* expr);
 
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
@@ -96,7 +96,7 @@ namespace Glass
 
 		IRInstruction* AutoCastCodeGen(const AutoCastNode* autoCastNode);
 		IRInstruction* CastNodeCodeGen(const CastNode* castNode);
-		IRInstruction* CastCodeGen(TypeStorage* cast_type, IRSSAValue* code, const Expression* ast_node);
+		IRInstruction* CastCodeGen(TypeStorage* cast_type, IRRegisterValue* code, const Expression* ast_node);
 
 		IRInstruction* NullCodeGen();
 
@@ -105,28 +105,28 @@ namespace Glass
 		IRInstruction* RefCodeGen(const RefNode* refNode);
 		IRInstruction* DeRefCodeGen(const DeRefNode* deRefNode);
 
-		IRSSAValue* GetExpressionByValue(const Expression* expr, IRSSAValue* generated_code = nullptr);
-		IRSSAValue* PassAsAny(const Expression* expr, IRSSAValue* pre_generated = nullptr);
-		IRSSAValue* PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRSSAValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg);
-		IRSSAValue* TypeExpressionCodeGen(TypeExpression* type_expr);
-		IRSSAValue* TypeValueCodeGen(TypeStorage* type);
+		IRRegisterValue* GetExpressionByValue(const Expression* expr, IRRegisterValue* generated_code = nullptr);
+		IRRegisterValue* PassAsAny(const Expression* expr, IRRegisterValue* pre_generated = nullptr);
+		IRRegisterValue* PassAsVariadicArray(const std::vector<Expression*>& arguments, const std::vector<IRRegisterValue*>& pre_generated_arguments, const ArgumentMetadata* decl_arg);
+		IRRegisterValue* TypeExpressionCodeGen(TypeExpression* type_expr);
+		IRRegisterValue* TypeValueCodeGen(TypeStorage* type);
 
-		IRSSAValue* CreateLoad(TypeStorage* type, u64 address);
-		IRSSAValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
+		IRRegisterValue* CreateLoad(TypeStorage* type, u64 address);
+		IRRegisterValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
-		IRSSAValue* CreateConstantInteger(u64 integer_base_type, i64 value);
-		IRSSAValue* CreateConstant(u64 base_type, i64 value_integer, double value_float);
+		IRRegisterValue* CreateConstantInteger(u64 integer_base_type, i64 value);
+		IRRegisterValue* CreateConstant(u64 base_type, i64 value_integer, double value_float);
 
-		IRSSAValue* CreateCopy(TypeStorage* type, IRSSAValue* loaded_value);
+		IRRegisterValue* CreateCopy(TypeStorage* type, IRRegisterValue* loaded_value);
 
-		IRSSAValue* CreateMemberAccess(const std::string& strct, const std::string& member, u64 address);
+		IRRegisterValue* CreateMemberAccess(const std::string& strct, const std::string& member, u64 address);
 
-		IRSSAValue* CreatePointerCast(TypeStorage* to_type, u64 address);
+		IRRegisterValue* CreatePointerCast(TypeStorage* to_type, u64 address);
 
 		IRFunction* CreateIRFunction(const FunctionNode* functionNode);
-		IRSSA* CreateIRSSA();
-		IRSSAValue* CreateIRSSA(IRInstruction* value);
-		IRSSAValue* CreateIRSSA(IRInstruction* value, TypeStorage* semantic_type);
+		IRRegister* CreateIRRegister();
+		IRRegisterValue* CreateIRRegister(IRInstruction* value);
+		IRRegisterValue* CreateIRRegister(IRInstruction* value, TypeStorage* semantic_type);
 		IRData* CreateIRData();
 
 		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
@@ -136,7 +136,7 @@ namespace Glass
 		Glass::Type TSToLegacy(TypeStorage* type);
 		TypeStorage* LegacyToTS(const Glass::Type& type);
 
-		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRSSAValue** A, IRSSAValue** B);
+		void BinaryDispatch(const Expression* left, const Expression* right, TypeStorage** left_type, TypeStorage** right_type, IRRegisterValue** A, IRRegisterValue** B);
 
 		bool CheckTypeConversion(u64 a, u64 b)
 		{
@@ -191,30 +191,30 @@ namespace Glass
 			return cpy;
 		}
 
-		void PushIRSSA(IRSSA* ssa) {
+		void PushIRRegister(IRRegister* ir_register) {
 			if (m_Scope == 0) {
-				m_SSAStack.push_back(ssa);
-				m_Metadata.RegisterSSA(ssa);
+				m_RegisterStack.push_back(ir_register);
+				m_Metadata.RegisterIRRegister(ir_register);
 			}
 			else {
-				m_SSAStacks[m_Scope].push_back(ssa);
-				m_Metadata.RegisterSSA(ssa);
+				m_RegisterStacks[m_Scope].push_back(ir_register);
+				m_Metadata.RegisterIRRegister(ir_register);
 			}
 		}
 
-		void ResetSSAIDCounter() {
-			m_SSAIDCounter = 1;
+		void ResetRegisterIDCounter() {
+			m_RegisterIDCounter = 1;
 		}
 
-		std::vector<IRSSA*> PoPIRSSA() {
+		std::vector<IRRegister*> PoPIRRegisters() {
 			if (m_Scope == 0) {
-				auto cpy = m_SSAStack;
-				m_SSAStack.clear();
+				auto cpy = m_RegisterStack;
+				m_RegisterStack.clear();
 				return cpy;
 			}
 			else {
-				auto cpy = m_SSAStacks[m_Scope];
-				m_SSAStacks[m_Scope].clear();
+				auto cpy = m_RegisterStacks[m_Scope];
+				m_RegisterStacks[m_Scope].clear();
 				return cpy;
 			}
 		}
@@ -229,20 +229,20 @@ namespace Glass
 			m_Scope--;
 		}
 
-		void PushIRInstruction(IRInstruction* ssa) {
-			m_InstructionStack.push_back(ssa);
+		void PushIRInstruction(IRInstruction* ir_instruction) {
+			m_InstructionStack.push_back(ir_instruction);
 		}
 
-		IRSSA* GetSSA(u64 ID) {
-			return m_Metadata.GetSSA(ID);
+		IRRegister* GetRegister(u64 ID) {
+			return m_Metadata.GetRegister(ID);
 		}
 
-		u64 GetVariableSSA(const std::string& name) {
-			return m_Metadata.GetVariableSSA(name);
+		u64 GetVariableRegister(const std::string& name) {
+			return m_Metadata.GetVariableRegister(name);
 		}
 
-		u64 RegisterVariable(IRSSA* ssa, const std::string& name) {
-			return m_Metadata.RegisterVariable(ssa, name);
+		u64 RegisterVariable(IRRegister* ir_register, const std::string& name) {
+			return m_Metadata.RegisterVariable(ir_register, name);
 		}
 
 		void PushMessage(CompilerMessage msg) {
@@ -443,7 +443,7 @@ namespace Glass
 		}
 
 		u64 m_FunctionIDCounter = 1;
-		u64 m_SSAIDCounter = 1;
+		u64 m_RegisterIDCounter = 1;
 		u64 m_DATAIDCounter = 1;
 		u64 m_TypeIDCounter = 99;
 		u64 m_StructIDCounter = 99;
@@ -454,10 +454,10 @@ namespace Glass
 
 		u64 m_Scope = 0;
 
-		std::unordered_map<u64, std::vector<IRSSA*> > m_SSAStacks;
+		std::unordered_map<u64, std::vector<IRRegister*> > m_RegisterStacks;
 
 		std::vector<IRInstruction*> m_InstructionStack;
-		std::vector<IRSSA*> m_SSAStack;
+		std::vector<IRRegister*> m_RegisterStack;
 		std::vector<IRData*> m_DataStack;
 	};
 }

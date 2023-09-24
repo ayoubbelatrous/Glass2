@@ -566,7 +566,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::TypeInfoCodeGen(const IRTypeInfo* type_info)
 	{
-		auto index = GetName(type_info->ArgumentSSA);
+		auto index = GetName(type_info->ArgumentRegister);
 
 		auto type_info_array = m_LLVMBuilder
 			->CreateBitCast(m_GlobalTypeInfoArray, llvm::PointerType::get(m_TypeInfoElemTy, 0));
@@ -597,7 +597,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::CallFuncRefCodeGen(const IRCallFuncRef* func_ref)
 	{
-		auto llvm_FuncPtr = GetName(func_ref->PtrSSA);
+		auto llvm_FuncPtr = GetName(func_ref->PtrRegister);
 
 		auto llvm_FuncType = GetLLVMType(func_ref->Signature);
 
@@ -647,8 +647,8 @@ namespace Glass
 
 		case IRNodeType::Return: return ReturnCodeGen((IRReturn*)instruction);
 		case IRNodeType::Break: return BreakCodeGen((IRBreak*)instruction);
-		case IRNodeType::SSA: return SSACodeGen((IRSSA*)instruction);
-		case IRNodeType::SSAValue: return SSAValueCodeGen((IRSSAValue*)instruction);
+		case IRNodeType::Register: return RegisterCodeGen((IRRegister*)instruction);
+		case IRNodeType::RegisterValue: return RegisterValueCodeGen((IRRegisterValue*)instruction);
 		case IRNodeType::Alloca: return AllocaCodeGen((IRAlloca*)instruction);
 
 		case IRNodeType::GlobDecl: GlobalVariableCodeGen((IRGlobalDecl*)instruction); break;
@@ -841,22 +841,20 @@ namespace Glass
 		u64 argument_id = 0;
 		for (const ArgumentMetadata& arg_metadata : func_metadata->Arguments) {
 
-			//InsertName(arg_metadata.SSAID, argument_Alloca);
+			/*
+		llvm::DILocalVariable* D = m_DBuilder->createParameterVariable(
+			m_DLexicalBlocks.back(),
+			arg_metadata.Name,
+			(u32)argument_id,
+			(llvm::DIFile*)mDContext,
+			line_number,
+			GetLLVMDebugType(arg_metadata.Type),
+			true);
 
-				/*
-			llvm::DILocalVariable* D = m_DBuilder->createParameterVariable(
-				m_DLexicalBlocks.back(),
-				arg_metadata.Name,
-				(u32)argument_id,
-				(llvm::DIFile*)mDContext,
-				line_number,
-				GetLLVMDebugType(arg_metadata.Type),
-				true);
-
-			m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
-				llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
-				m_LLVMBuilder->GetInsertBlock());
-				*/
+		m_DBuilder->insertDeclare(argument_Alloca, D, m_DBuilder->createExpression(),
+			llvm::DILocation::get(m_DLexicalBlocks.back()->getContext(), line_number, 0, m_DLexicalBlocks.back()),
+			m_LLVMBuilder->GetInsertBlock());
+			*/
 
 			argument_id++;
 		}
@@ -878,24 +876,24 @@ namespace Glass
 		return llvm_Func;
 	}
 
-	llvm::Value* LLVMBackend::SSACodeGen(const IRSSA* ssa) {
-		if (ssa->Value) {
+	llvm::Value* LLVMBackend::RegisterCodeGen(const IRRegister* ir_register) {
+		if (ir_register->Value) {
 
-			auto value = CodeGen(ssa->Value);
+			auto value = CodeGen(ir_register->Value);
 
 			//@Debugging
-			SetDBGLocation(ssa->GetDBGLoc());
+			SetDBGLocation(ir_register->GetDBGLoc());
 
 			if (value) {
-				InsertName(ssa->ID, value);
+				InsertName(ir_register->ID, value);
 			}
 		}
 
 		return 0;
 	}
 
-	llvm::Value* LLVMBackend::SSAValueCodeGen(const IRSSAValue* ssa_value) {
-		return GetName(ssa_value->RegisterID);
+	llvm::Value* LLVMBackend::RegisterValueCodeGen(const IRRegisterValue* ir_register_value) {
+		return GetName(ir_register_value->RegisterID);
 	}
 
 
@@ -943,15 +941,8 @@ namespace Glass
 	{
 		IRNodeType type = op->GetType();
 
-		//CodeGen(op->SSA_A);
-		//CodeGen(op->SSA_B);
-
-		llvm::Value* lhs = GetName(op->SSA_A->RegisterID);
-		llvm::Value* rhs = GetName(op->SSA_B->RegisterID);
-		// 
-		// 		if (lhs->getType() != rhs->getType()) {
-		// 			__debugbreak();
-		// 		}
+		llvm::Value* lhs = GetName(op->RegisterA->RegisterID);
+		llvm::Value* rhs = GetName(op->RegisterB->RegisterID);
 
 		llvm::Value* result = nullptr;
 
@@ -1111,15 +1102,15 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::LoadCodeGen(const IRLoad* load)
 	{
-		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMType(load->Type), GetName(load->AddressSSA));
+		auto ld = m_LLVMBuilder->CreateLoad(GetLLVMType(load->Type), GetName(load->AddressRegister));
 		return ld;
 	}
 
 	llvm::Value* LLVMBackend::StoreCodeGen(const IRStore* store)
 	{
-		u64 data_ssa = 0;
-		data_ssa = ((IRSSAValue*)store->Data)->RegisterID;
-		auto st = m_LLVMBuilder->CreateStore(GetName(data_ssa), GetName(store->AddressSSA));
+		u64 data_register = 0;
+		data_register = ((IRRegisterValue*)store->Data)->RegisterID;
+		auto st = m_LLVMBuilder->CreateStore(GetName(data_register), GetName(store->AddressRegister));
 		return st;
 	}
 
@@ -1129,7 +1120,7 @@ namespace Glass
 		llvm::Type* llvm_Struct_Type = struct_type.LLVMType;
 		GS_CORE_ASSERT(llvm_Struct_Type, "llvm_Struct_Type can't be null at this point");
 
-		llvm::Value* llvm_Object = GetName(member_access->ObjectSSA);
+		llvm::Value* llvm_Object = GetName(member_access->ObjectRegister);
 		GS_CORE_ASSERT(llvm_Object, "llvm_Object can't be null at this point");
 
 		GS_CORE_ASSERT(member_access->MemberID < struct_type.LLVMMembers.size(), "Member Idx out of range");
@@ -1151,7 +1142,7 @@ namespace Glass
 
 		auto llvm_type = GetLLVMType(array_access->Type);
 		auto llvm_pointer = GetName(array_access->ArrayAddress);
-		auto llvm_index = GetName(array_access->ElementSSA);
+		auto llvm_index = GetName(array_access->ElementIndexRegister);
 
 		// 		llvm_type->print(llvm::errs(), true);
 		// 		llvm::errs() << "\n";
@@ -1192,24 +1183,24 @@ namespace Glass
 		std::vector<llvm::Value*> llvm_Arguments;
 
 		for (IRInstruction* arg : call->Arguments) {
-			GS_CORE_ASSERT(arg->GetType() == IRNodeType::SSAValue, "LLVM Function Must Exist At This Point");
+			GS_CORE_ASSERT(arg->GetType() == IRNodeType::RegisterValue, "LLVM Function Must Exist At This Point");
 
-			IRSSAValue* as_ssa_value = (IRSSAValue*)arg;
+			IRRegisterValue* as_register_value = (IRRegisterValue*)arg;
 
 			if (llvm_Func->isVarArg()) {
 
-				auto llvm_arg_Val = GetName(as_ssa_value->RegisterID);
+				auto llvm_arg_Val = GetName(as_register_value->RegisterID);
 
 				if (llvm_arg_Val->getType() == GetLLVMType(IR_f32)) {
 					llvm_Arguments.push_back(m_LLVMBuilder->CreateFPExt(llvm_arg_Val, GetLLVMType(IR_f64)));
 				}
 				else {
-					llvm_Arguments.push_back(GetName(as_ssa_value->RegisterID));
+					llvm_Arguments.push_back(GetName(as_register_value->RegisterID));
 				}
 			}
 			else
 			{
-				llvm_Arguments.push_back(GetName(as_ssa_value->RegisterID));
+				llvm_Arguments.push_back(GetName(as_register_value->RegisterID));
 			}
 		}
 
@@ -1270,7 +1261,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::CastCodeGen(const IRCast* ptr_cast)
 	{
-		llvm::Value* value = GetName(ptr_cast->SSA);
+		llvm::Value* value = GetName(ptr_cast->Register);
 		llvm::Type* cast_type = GetLLVMType(ptr_cast->Type);
 
 		switch (ptr_cast->GetType()) {
@@ -1313,11 +1304,6 @@ namespace Glass
 		GS_CORE_ASSERT(0, "Unknown Cast");
 	}
 
-	// 	llvm::Value* LLVMBackend::PointerCastCodeGen(const IRPointerCast* ptr_cast)
-	// 	{
-	// 		return m_LLVMBuilder->CreateBitCast(GetName(ptr_cast->PointerSSA), GetLLVMType(ptr_cast->Type));
-	// 	}
-
 	llvm::Value* LLVMBackend::NullPtrCodeGen(const IRNullPtr* null_ptr)
 	{
 		return llvm::ConstantPointerNull::get((llvm::PointerType*)GetLLVMTypeFull(null_ptr->TypeID, null_ptr->Indirection));
@@ -1330,7 +1316,7 @@ namespace Glass
 		llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*m_LLVMContext, "then", function);
 		llvm::BasicBlock* contBlock = llvm::BasicBlock::Create(*m_LLVMContext, "cont", function);
 
-		llvm::Value* condition = GetName(_if->SSA);
+		llvm::Value* condition = GetName(_if->ConditionRegister);
 
 		condition =
 			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, condition,
@@ -1377,7 +1363,7 @@ namespace Glass
 			CodeGen(inst);
 		}
 
-		llvm::Value* condition = GetName(_while->SSA);
+		llvm::Value* condition = GetName(_while->ConditionRegisterID);
 
 		condition =
 			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, condition,
@@ -1409,7 +1395,7 @@ namespace Glass
 		llvm::Type* llvm_AnyStructTy = GetLLVMStructType(m_Metadata->GetStructIDFromType(IR_any)).LLVMType;
 		GS_CORE_ASSERT(llvm_AnyStructTy);
 
-		llvm::Value* any_Data = m_LLVMBuilder->CreateBitCast(GetName(any->DataSSA), GetLLVMTypeFull(IR_void, 1));
+		llvm::Value* any_Data = m_LLVMBuilder->CreateBitCast(GetName(any->DataRegister), GetLLVMTypeFull(IR_void, 1));
 
 		llvm::Value* llvm_Struct = CreateEntryBlockAlloca(llvm_AnyStructTy);
 
@@ -1516,7 +1502,7 @@ namespace Glass
 
 		CodeGen(ret->Value);
 
-		return m_LLVMBuilder->CreateRet(GetName(((IRSSAValue*)ret->Value)->RegisterID));
+		return m_LLVMBuilder->CreateRet(GetName(((IRRegisterValue*)ret->Value)->RegisterID));
 	}
 
 	llvm::Value* LLVMBackend::BreakCodeGen(const IRBreak* brk)

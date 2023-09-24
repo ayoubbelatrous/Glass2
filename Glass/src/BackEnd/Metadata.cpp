@@ -169,7 +169,7 @@ namespace Glass {
 			return SymbolType::GlobVariable;
 		}
 
-		if (GetVariableMetadata(GetVariableSSA(symbol)) != nullptr) {
+		if (GetVariableMetadata(GetVariableRegister(symbol)) != nullptr) {
 			return SymbolType::Variable;
 		}
 

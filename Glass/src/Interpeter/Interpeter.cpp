@@ -30,9 +30,9 @@ namespace Glass
 	void* Interpeter::Exec(IRInstruction* instruction)
 	{
 		switch (instruction->GetType()) {
-		case IRNodeType::SSA:
+		case IRNodeType::Register:
 		{
-			IRSSA* ssa = (IRSSA*)instruction;
+			IRRegister* ssa = (IRRegister*)instruction;
 			void* value = Exec(ssa->Value);
 			*PushRegister() = *(u64*)value;
 		}
@@ -44,9 +44,9 @@ namespace Glass
 			memcpy(stack_location, &ssa->Data, 8);
 			return stack_location;
 		}
-		case IRNodeType::SSAValue:
+		case IRNodeType::RegisterValue:
 		{
-			IRSSAValue* ssa_val = (IRSSAValue*)instruction;
+			IRRegisterValue* ssa_val = (IRRegisterValue*)instruction;
 
 			return (void*)GetRegister(ssa_val->RegisterID);
 		}
@@ -55,8 +55,8 @@ namespace Glass
 		{
 			IRADD* add = (IRADD*)instruction;
 
-			void* a = Exec(add->SSA_A);
-			void* b = Exec(add->SSA_B);
+			void* a = Exec(add->RegisterA);
+			void* b = Exec(add->RegisterB);
 
 			u64* stack_location = (u64*)Push(1);
 

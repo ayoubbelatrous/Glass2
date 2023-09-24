@@ -23,8 +23,8 @@ namespace Glass {
 		llvm::Value* ReturnCodeGen(const IRReturn* ret);
 		llvm::Value* BreakCodeGen(const IRBreak* brk);
 
-		llvm::Value* SSACodeGen(const IRSSA* ssa);
-		llvm::Value* SSAValueCodeGen(const IRSSAValue* ssa_value);
+		llvm::Value* RegisterCodeGen(const IRRegister* ir_register);
+		llvm::Value* RegisterValueCodeGen(const IRRegisterValue* ir_register_value);
 
 		llvm::Value* GlobalAddrCodeGen(const IRGlobalAddress* global_address);
 

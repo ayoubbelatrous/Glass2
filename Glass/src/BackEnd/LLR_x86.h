@@ -266,8 +266,8 @@ namespace Glass
 
 		void AssembleLogicalOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
-		void AssembleIRRegister(IRSSA* inst, std::vector<X86_Inst*>& stream);
-		void AssembleIRRegisterValue(IRSSAValue* register_value, std::vector<X86_Inst*>& stream);
+		void AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream);
+		void AssembleIRRegisterValue(IRRegisterValue* register_value, std::vector<X86_Inst*>& stream);
 
 		TypeStorage* GetIRNodeType(IRInstruction* inst);
 
