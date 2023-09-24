@@ -48,7 +48,7 @@ namespace Glass
 		{
 			IRSSAValue* ssa_val = (IRSSAValue*)instruction;
 
-			return (void*)GetRegister(ssa_val->SSA);
+			return (void*)GetRegister(ssa_val->RegisterID);
 		}
 		break;
 		case IRNodeType::ADD:

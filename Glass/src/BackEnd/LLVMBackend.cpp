@@ -895,7 +895,7 @@ namespace Glass
 	}
 
 	llvm::Value* LLVMBackend::SSAValueCodeGen(const IRSSAValue* ssa_value) {
-		return GetName(ssa_value->SSA);
+		return GetName(ssa_value->RegisterID);
 	}
 
 
@@ -946,8 +946,8 @@ namespace Glass
 		//CodeGen(op->SSA_A);
 		//CodeGen(op->SSA_B);
 
-		llvm::Value* lhs = GetName(op->SSA_A->SSA);
-		llvm::Value* rhs = GetName(op->SSA_B->SSA);
+		llvm::Value* lhs = GetName(op->SSA_A->RegisterID);
+		llvm::Value* rhs = GetName(op->SSA_B->RegisterID);
 		// 
 		// 		if (lhs->getType() != rhs->getType()) {
 		// 			__debugbreak();
@@ -1118,7 +1118,7 @@ namespace Glass
 	llvm::Value* LLVMBackend::StoreCodeGen(const IRStore* store)
 	{
 		u64 data_ssa = 0;
-		data_ssa = ((IRSSAValue*)store->Data)->SSA;
+		data_ssa = ((IRSSAValue*)store->Data)->RegisterID;
 		auto st = m_LLVMBuilder->CreateStore(GetName(data_ssa), GetName(store->AddressSSA));
 		return st;
 	}
@@ -1198,18 +1198,18 @@ namespace Glass
 
 			if (llvm_Func->isVarArg()) {
 
-				auto llvm_arg_Val = GetName(as_ssa_value->SSA);
+				auto llvm_arg_Val = GetName(as_ssa_value->RegisterID);
 
 				if (llvm_arg_Val->getType() == GetLLVMType(IR_f32)) {
 					llvm_Arguments.push_back(m_LLVMBuilder->CreateFPExt(llvm_arg_Val, GetLLVMType(IR_f64)));
 				}
 				else {
-					llvm_Arguments.push_back(GetName(as_ssa_value->SSA));
+					llvm_Arguments.push_back(GetName(as_ssa_value->RegisterID));
 				}
 			}
 			else
 			{
-				llvm_Arguments.push_back(GetName(as_ssa_value->SSA));
+				llvm_Arguments.push_back(GetName(as_ssa_value->RegisterID));
 			}
 		}
 
@@ -1516,7 +1516,7 @@ namespace Glass
 
 		CodeGen(ret->Value);
 
-		return m_LLVMBuilder->CreateRet(GetName(((IRSSAValue*)ret->Value)->SSA));
+		return m_LLVMBuilder->CreateRet(GetName(((IRSSAValue*)ret->Value)->RegisterID));
 	}
 
 	llvm::Value* LLVMBackend::BreakCodeGen(const IRBreak* brk)

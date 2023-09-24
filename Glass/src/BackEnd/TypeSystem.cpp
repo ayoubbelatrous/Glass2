@@ -37,6 +37,8 @@ namespace Glass {
 
 	TypeStorage* TypeSystem::GetBasic(u64 type_id)
 	{
+		m_Instance->m_Metadata.GetType(type_id);
+
 		u64 hash = BasicTypeHash((u32)type_id);
 
 		auto it = m_Instance->m_Types.find(hash);

@@ -272,16 +272,16 @@ namespace Glass
 
 	struct IRSSAValue : public IRInstruction {
 		u64 ID = 0;
-		u64 SSA = 0;
+		u64 RegisterID = 0;
 
 		IRSSAValue() = default;
 		IRSSAValue(u64 ssa)
-			:SSA(ssa)
+			:RegisterID(ssa)
 		{
 		}
 
 		virtual std::string ToString() const override {
-			return 	"$" + std::to_string(SSA);
+			return 	"$" + std::to_string(RegisterID);
 		}
 
 		virtual IRNodeType GetType() const {
@@ -883,6 +883,7 @@ namespace Glass
 	struct IREQ : public IRInstruction {
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
+		u64 Type = -1;
 
 		IREQ() = default;
 		IREQ(IRSSAValue* A, IRSSAValue* B)
@@ -910,6 +911,7 @@ namespace Glass
 	struct IRNOTEQ : public IRInstruction {
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
+		u64 Type = -1;
 
 		IRNOTEQ() = default;
 		IRNOTEQ(IRSSAValue* A, IRSSAValue* B)
@@ -937,6 +939,7 @@ namespace Glass
 	struct IRGreater : public IRInstruction {
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
+		u64 Type = -1;
 
 		IRGreater() = default;
 		IRGreater(IRSSAValue* A, IRSSAValue* B)
@@ -964,6 +967,7 @@ namespace Glass
 	struct IRLesser : public IRInstruction {
 		IRSSAValue* SSA_A = nullptr;
 		IRSSAValue* SSA_B = nullptr;
+		u64 Type = -1;
 
 		IRLesser() = default;
 		IRLesser(IRSSAValue* A, IRSSAValue* B)

@@ -62,13 +62,12 @@ namespace Glass {
 	void MetaData::ComputeStructSizeAlignOffsets(StructMetadata* metadata)
 	{
 		u64 size = 0;
-		u64 alignment = 0;
+		u64 alignment = 1;
 
 		for (const MemberMetadata& member : metadata->Members) {
 
 			auto member_alignment = GetTypeAlignment(member.Type);
 
-			GS_CORE_ASSERT(member_alignment);
 			GS_CORE_ASSERT(member_alignment != -1);
 
 			if (member_alignment > alignment) {

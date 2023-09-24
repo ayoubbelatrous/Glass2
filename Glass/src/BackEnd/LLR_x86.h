@@ -40,6 +40,15 @@ namespace Glass
 		X86_CONSTANT_OFFSET, // [rsp + 16] for example
 
 		X86_DATA_STR_REF, // [hello_world_str]
+
+		X86_CMP,
+
+		X86_SETG,
+		X86_SETGE,
+		X86_SETL,
+		X86_SETLE,
+		X86_SETE,
+		X86_SETNE,
 	};
 
 	enum X86_REG_Overlap
@@ -78,6 +87,8 @@ namespace Glass
 
 	enum RegisterUsage
 	{
+		REG_I8,
+		REG_I16,
 		REG_I32,
 		REG_I64,
 	};
@@ -121,10 +132,16 @@ namespace Glass
 		u64 string_id;
 	};
 
+	enum X86_Constant_Offset_Type {
+		X86_CONSTANT_SUB,
+		X86_CONSTANT_ADD,
+	};
+
 	struct X86_Constant_Offset
 	{
 		X86_Inst* offset;
 		X86_Inst* from;
+		X86_Constant_Offset_Type offset_type;
 		X86_Word	size;
 	};
 
@@ -156,6 +173,17 @@ namespace Glass
 		X86_Inst* value;
 	};
 
+	struct X86_Cmp_Inst
+	{
+		X86_Inst* a;
+		X86_Inst* b;
+	};
+
+	struct X86_Cond_Set_Inst
+	{
+		X86_Inst* destination;
+	};
+
 	struct X86_Inst
 	{
 		X86_ASM type;
@@ -180,6 +208,8 @@ namespace Glass
 			X86_Pop_Inst				pop;
 
 			X86_BinOp_Inst				bin_op;
+			X86_Cmp_Inst				cmp;
+			X86_Cond_Set_Inst			cond_set;
 		} as;
 
 		const char* comment = nullptr;
@@ -188,6 +218,12 @@ namespace Glass
 	struct X86_BackEnd_Data
 	{
 		u64 CurrentFunction_StackFrameSize = 0;
+		u64 CurrentFunction_CallStackSize = 0;
+		u64 CurrentFunction_CallStackPointer = 0;
+
+		u64 CurrentFunction_InputCallStackPointer = 0;
+		u64 CurrentFunction_InputCallStackOffset = 0; // this will set too 8 if we do push rbp at function prologue
+
 		std::map<u64, X86_Inst*> IR_RegisterValues;
 		std::map<u64, X86_Inst*> IR_FunctionLabels;
 
@@ -227,6 +263,8 @@ namespace Glass
 		void AssembleReturn(IRReturn* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleBinOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
+
+		void AssembleLogicalOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleIRRegister(IRSSA* inst, std::vector<X86_Inst*>& stream);
 		void AssembleIRRegisterValue(IRSSAValue* register_value, std::vector<X86_Inst*>& stream);
@@ -278,9 +316,19 @@ namespace Glass
 		X86_Inst* AllocateStack(TypeStorage* type);
 		X86_Inst* AllocateStack(u64 allocation_size);
 
+		X86_Inst* Allocate_CallStack(u64 allocation_size);
+		void Reset_CallStackPointer();
+		void Reset_CallStackSize();
+
 		u32 GetRegisterID();
 
-		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream);
+		enum GetArgument_Location_Dir
+		{
+			ARG_DIR_IN = 0,
+			ARG_DIR_OUT = 1,
+		};
+
+		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction);
 		X86_Inst* GetReturnLocation(TypeStorage* type, std::vector<X86_Inst*>& spillage_stream);
 
 		u32 RegisterIDCounter = 0;
