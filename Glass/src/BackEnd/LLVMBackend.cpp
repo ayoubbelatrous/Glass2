@@ -15,8 +15,6 @@ namespace Glass
 
 		m_LLVMModule->print(outputFile, nullptr);
 
-		//m_LLVMModule->print(llvm::outs(), nullptr, true, true);
-
 		llvm::InitializeAllTargetInfos();
 		llvm::InitializeAllTargets();
 		llvm::InitializeAllTargetMCs();

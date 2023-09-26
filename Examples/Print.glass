@@ -154,7 +154,7 @@ fn print_any(Any any, i32 indent) : i32 {
 
 		printf("%s :: struct {\n", type_info_struct.name);
 
-		while member_it < type_info_struct.member_count {
+		while member_it < type_info_struct.members.count {
 
 			TypeInfo_Member member = type_info_struct.members[member_it];
 

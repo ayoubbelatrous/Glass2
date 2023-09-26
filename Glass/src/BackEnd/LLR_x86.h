@@ -7,6 +7,18 @@ namespace Glass
 {
 	enum X86_ASM
 	{
+		X86_INVALID,
+
+		X86_SECTION,
+
+		X86_DEFINE_QUAD,
+
+		X86_NAMED_OFFSET,
+
+		X86_QUAD_DATA_ARRAY,
+
+		X86_INST_ARRAY,
+
 		X86_LABEL,
 		X86_LABEL_REF,
 		X86_RET,
@@ -22,6 +34,8 @@ namespace Glass
 		X86_JMPNE,
 
 		X86_MOV,
+		X86_MOVZX,
+		X86_MOVSXD,
 		X86_MOVQ,
 		X86_LEA,
 
@@ -44,6 +58,8 @@ namespace Glass
 		X86_CONSTANT,
 
 		X86_CONSTANT_OFFSET, // [rsp + 16] for example
+
+		X86_DE_REF,
 
 		X86_ADDR_MUL, // '4 * edi' [rax + 4*edi] for example
 
@@ -198,12 +214,61 @@ namespace Glass
 		X86_Inst* destination;
 	};
 
+	struct X86_DeReference_Inst
+	{
+		X86_Inst* what;
+		X86_Word size;
+	};
+
+	enum Section_Type : u8 {
+		SEC_Code, SEC_Data
+	};
+
+	enum Section_Flags_Enum : u8 {
+		SEC_Readable = BIT(1),
+		SEC_Writable = BIT(2),
+		SEC_Executable = BIT(3),
+	};
+
+	typedef u8 Section_Flags;
+
+	struct X86_Section_Inst
+	{
+		Section_Flags flags;
+		Section_Type type;
+		const char* name;
+	};
+
+	struct X86_Named_Offset
+	{
+		X86_Inst* value;
+		const char* name;
+	};
+
+	struct X86_Data_Array
+	{
+		void* data;
+		u64  byte_size;
+	};
+
+	struct X86_Inst_Array_Inst
+	{
+		X86_Inst** data;
+		u64		   count;
+	};
+
 	struct X86_Inst
 	{
 		X86_ASM type;
 
 		union
 		{
+			X86_Named_Offset			named_offset;
+			X86_Data_Array				data_array;
+			X86_Inst_Array_Inst			inst_array; // lay any type of insturction in this format string, 0, 0x505 ...
+
+			X86_Section_Inst			section;
+
 			X86_Label_Inst				label;
 
 			X86_Reg_Name_Inst			reg_name;
@@ -226,9 +291,16 @@ namespace Glass
 			X86_Cond_Set_Inst			cond_set;
 
 			X86_Constant_Binop			const_binop;
+
+			X86_DeReference_Inst		de_ref;
 		} as;
 
 		const char* comment = nullptr;
+	};
+
+	struct RegisterFreeList {
+		u64 free_list[8];
+		u64 count;
 	};
 
 	struct X86_BackEnd_Data
@@ -240,10 +312,11 @@ namespace Glass
 		u64 CurrentFunction_InputCallStackPointer = 0;
 		u64 CurrentFunction_InputCallStackOffset = 0; // this will set too 8 if we do push rbp at function prologue
 
-		std::map<u64, X86_Inst*> IR_RegisterValues;
-		std::map<u64, X86_Inst*> IR_FunctionLabels;
+		std::unordered_map<u64, X86_Inst*> IR_RegisterValues;
+		std::unordered_map<u64, X86_Inst*> IR_FunctionLabels;
+		std::unordered_map<u64, RegisterFreeList> IR_RegisterFreeLists;
 
-		std::map<u64, TypeStorage*> IR_RegisterTypes;
+		std::unordered_map<u64, TypeStorage*> IR_RegisterTypes;
 	};
 
 	struct X86_Register_Allocation {
@@ -259,7 +332,10 @@ namespace Glass
 		std::vector<X86_Inst*> Assemble();
 		void Assemble(IRInstruction* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleTypeInfoTable(std::string& stream);
+
 		void AssembleData(IRData* inst, std::vector<X86_Inst*>& stream);
+		void AssembleTypeOf(IRTypeOf* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleDataValue(IRDataValue* inst, std::vector<X86_Inst*>& stream);
 
@@ -308,10 +384,13 @@ namespace Glass
 
 		void Make_LEA(X86_Inst* source, X86_Inst* destination, std::vector<X86_Inst*>& stream);
 
+		X86_Inst* Register_Zext(X86_Inst* reg, u64 size, std::vector<X86_Inst*>& stream);
+		X86_Inst* Register_Sext(X86_Inst* reg, u64 size, std::vector<X86_Inst*>& stream, bool free_register_after_use = true);
+
 		X86_Inst* Make_Register(X86_Register register_type);
 		X86_Inst* Make_Constant(i64 integer);
 
-		X86_Inst* GetIRRegister(u64 id);
+		X86_Inst* GetIRRegister(u64 id, bool free_allocated_registers = true);
 		TypeStorage* GetIRRegisterType(u64 id);
 
 		RegisterUsage RegisterUsageBySize(TypeStorage* type);
@@ -330,7 +409,7 @@ namespace Glass
 		void Free_Register(u32 id);
 		void Free_All_Register();
 
-		X86_Inst* Allocate_Register(RegisterUsage usage, u32 id, std::vector<X86_Inst*>& spillage_stream);
+		X86_Inst* Allocate_Register(RegisterUsage usage, u32 id, std::vector<X86_Inst*>& spillage_stream, bool free_register_after_use = true);
 		X86_Inst* Allocate_Specific_Register(X86_Register reg, u32 id, std::vector<X86_Inst*>& spillage_stream);
 
 		bool AreEqual(X86_Inst* a, X86_Inst* b);
@@ -350,12 +429,26 @@ namespace Glass
 			ARG_DIR_OUT = 1,
 		};
 
+		enum ArgumentLocationType {
+			ARG_LOC_PTR_IN_STACK,
+			ARG_LOC_REGISTER,
+			ARG_LOC_REGISTER_PTR,
+		};
+
+		struct ArgumentLocationInfo
+		{
+			ArgumentLocationType Type;
+		};
+
+		ArgumentLocationInfo GetArgumentLocationInfo(TypeStorage* type, u32 index, GetArgument_Location_Dir direction);
+
 		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction);
 		X86_Inst* GetReturnLocation(TypeStorage* type, std::vector<X86_Inst*>& spillage_stream);
 
 		u32 RegisterIDCounter = 0;
 
 		std::vector<std::pair<u64, std::vector<char>>> m_DataStrings;
+		std::vector<std::pair<u64, std::vector<char>>> m_TypeInfoStrings;
 		std::vector<std::string> m_Externals; // currently name is the linkage name
 
 		IRTranslationUnit* m_TranslationUnit;
@@ -376,6 +469,10 @@ namespace Glass
 			RegisterValue = register_value;
 		}
 
+		void SetRegisterFreeList(u64 ir_register_id, const RegisterFreeList& free_list) {
+			m_Data.IR_RegisterFreeLists[ir_register_id] = free_list;
+		}
+
 		X86_Inst* CurrentReturnTarget = nullptr;
 		X86_Inst* ReturnJmpTarget = nullptr;
 
@@ -383,6 +480,13 @@ namespace Glass
 
 		u64 FunctionCounter = 0;
 		u64 LabelCounter = 0;
+
+		u64 TypeInfoStringCounter = 0;
+
+		u64 GetStringID() {
+			TypeInfoStringCounter++;
+			return TypeInfoStringCounter;
+		}
 
 		IRRegister* CurrentRegister = nullptr;
 
@@ -399,6 +503,7 @@ namespace Glass
 		}
 
 		std::vector<X86_Inst*> CurrentFunctionArgumentAllocations;
+		X86_Inst* CurrentFunctionReturnAllocation = nullptr;
 
 		X86_BackEnd_Data m_Data;
 	};

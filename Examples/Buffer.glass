@@ -74,7 +74,7 @@ fn BufferLayout_Create(Type type, u64 type_size)
 
 	u32 offset = 0;
 
-	for 0..struct_info.member_count {
+	for 0..struct_info.members.count {
 
 		current := struct_info.members[it_index];
 
@@ -98,7 +98,7 @@ fn BufferLayout_Create(Type type, u64 type_size)
 		offset = offset + element_size;
 	}
 
-	layout.elements.count = struct_info.member_count;
+	layout.elements.count = struct_info.members.count;
 
 	layout.stride = offset;
 

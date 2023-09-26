@@ -590,6 +590,13 @@ namespace Glass
 				return_type = TypeExpressionGetType(fnNode->ReturnType);
 			}
 
+			if (return_type == nullptr) {
+				MSG_LOC(fnNode);
+				MSG_LOC(fnNode->ReturnType);
+				FMT_WARN("function '{}' has undefined return type", fnNode->Symbol.Symbol);
+				return;
+			}
+
 			for (const Statement* a : fnNode->GetArgList()->GetArguments())
 			{
 				const ArgumentNode* parameter = (ArgumentNode*)a;
@@ -874,6 +881,10 @@ namespace Glass
 
 		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
 		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
+
+
+		if (!metadata)
+			return nullptr;
 
 		m_Metadata.m_CurrentFunction = IRF->ID;
 
@@ -1281,6 +1292,7 @@ namespace Glass
 		}
 
 		ret.Value = expr;
+		ret.Type = expr_type;
 
 		return IR(ret);
 	}
@@ -1388,8 +1400,10 @@ namespace Glass
 	IRInstruction* Compiler::IfCodeGen(const IfNode* ifNode)
 	{
 		auto condition = GetExpressionByValue(ifNode->Condition);
+		UN_WRAP(condition);
 
 		auto condition_ir_register = m_Metadata.GetRegister(condition->RegisterID);
+		UN_WRAP(condition_ir_register);
 		auto condition_ir_node_type = condition_ir_register->Value->GetType();
 
 		//optimization to eliminate extra instruction on x86_64 backend llvm might be smart enough to detect that with no op enabled
@@ -1469,6 +1483,9 @@ namespace Glass
 		IRRegisterValue* condition = GetExpressionByValue(whileNode->Condition);
 		std::vector<IRRegister*> condition_registers = PoPIRRegisters();
 		PopScope();
+
+		if (!condition)
+			return nullptr;
 
 		auto condition_ir_register = m_Metadata.GetRegister(condition->RegisterID);
 		auto condition_ir_node_type = condition_ir_register->Value->GetType();
@@ -2394,7 +2411,7 @@ namespace Glass
 			{
 				store->Data = right_register;
 				store->AddressRegister = left_register->RegisterID;
-				store->Type = left_type_code_gen;
+				store->Type = left_type;
 			}
 			result = store;
 		}
@@ -3121,15 +3138,15 @@ namespace Glass
 
 		IRArrayAccess* ir_array_Access = IR(IRArrayAccess());
 
+		obj_expr_type = TypeSystem::ReduceIndirection((TSPtr*)obj_expr_type);
+		m_Metadata.RegExprType(array_access_register->ID, obj_expr_type);
+
 		ir_array_Access->ArrayAddress = object->RegisterID;
 		ir_array_Access->ElementIndexRegister = index->RegisterID;
-		ir_array_Access->Type = TypeSystem::GetBasic(obj_expr_type->BaseID);
+		ir_array_Access->Type = obj_expr_type;
 
 		array_access_register->Value = ir_array_Access;
 
-		obj_expr_type = TypeSystem::ReduceIndirection((TSPtr*)obj_expr_type);
-
-		m_Metadata.RegExprType(array_access_register->ID, obj_expr_type);
 
 		return IR(IRRegisterValue(array_access_register->ID));
 	}
@@ -3154,7 +3171,7 @@ namespace Glass
 
 			if (symbol_type == SymbolType::Type)
 			{
-				type_of_type = TypeSystem::GetBasic(type_ident->Symbol.Symbol);
+				type_of_type = TypeSystem::GetBasic(IR_type);
 			}
 
 			if (symbol_type == SymbolType::Variable)
@@ -3187,11 +3204,7 @@ namespace Glass
 
 		ir_register->Value = IR(type_of);
 
-		Type type;
-		type.ID = IR_typeinfo;
-		type.Pointer = 1;
-
-		m_Metadata.RegExprType(ir_register->ID, LegacyToTS(type));
+		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_typeinfo), 1));
 
 		return IR(IRRegisterValue(ir_register->ID));
 	}
@@ -3219,6 +3232,9 @@ namespace Glass
 	{
 		auto cast_expr_code = GetExpressionByValue(castNode->Expr);
 		auto cast_type = TypeExpressionGetType(castNode->Type);
+
+		if (!cast_expr_code || !cast_type)
+			return nullptr;
 
 		return CastCodeGen(cast_type, cast_expr_code, castNode);
 	}
@@ -3462,24 +3478,20 @@ namespace Glass
 			}
 
 			auto expr_type = m_Metadata.GetExprType(ir_address->RegisterID);
+			//expr_type = TypeSystem::ReduceIndirection((TSPtr*)expr_type);
 
-			if (!TypeSystem::IsPointer(expr_type) && !TypeSystem::IsArray(expr_type))
-			{
-				IRRegister* value_register = CreateIRRegister();
+			IRRegister* value_register = CreateIRRegister();
 
-				IRLoad load;
+			IRLoad load;
 
-				load.AddressRegister = ir_address->RegisterID;
-				load.Type = expr_type;
+			load.AddressRegister = ir_address->RegisterID;
+			load.Type = expr_type;
 
-				value_register->Value = IR(load);
+			value_register->Value = IR(load);
 
-				m_Metadata.RegExprType(value_register->ID, expr_type);
+			m_Metadata.RegExprType(value_register->ID, expr_type);
 
-				return IR(IRRegisterValue(value_register->ID));
-			}
-
-			return ir_address;
+			return IR(IRRegisterValue(value_register->ID));
 		}
 		break;
 		case NodeType::Identifier:

@@ -130,6 +130,9 @@ namespace Glass {
 
 	TypeStorage* TypeSystem::ReduceIndirection(TSPtr* pointer)
 	{
+
+		GS_CORE_ASSERT(pointer->Kind == TypeStorageKind::Pointer);
+
 		if (pointer->Indirection - 1 != 0) {
 			return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);
 		}

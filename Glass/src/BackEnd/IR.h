@@ -499,17 +499,12 @@ namespace Glass
 	};
 
 	struct IRReturn : public IRInstruction {
-		u64 Type = 0;
+
+		TypeStorage* Type = 0;
 		IRInstruction* Value = nullptr;
 
 		virtual std::string ToString() const override {
 			std::string str;
-
-			str += "ret ";
-			str += std::to_string(Type);
-			str += " : ";
-			str += Value->ToString();
-
 			return str;
 		}
 

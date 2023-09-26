@@ -34,6 +34,5 @@ struct TypeInfo_Member {
 struct TypeInfo_Struct {
 	u8* name					;
 	TypeInfo_Flags flags		;
-	TypeInfo_Member* members	;
-	u64 member_count			;
+	TypeInfo_Member[..] members;
 };
