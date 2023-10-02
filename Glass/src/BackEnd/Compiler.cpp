@@ -3260,10 +3260,10 @@ namespace Glass
 		auto castee_flags = m_Metadata.GetTypeFlags(castee_type->BaseID);
 		auto cast_flags = m_Metadata.GetTypeFlags(cast_type->BaseID);
 
-		if (cast_type == castee_type) {
-			m_Metadata.RegExprType(new_register->ID, cast_type);
-			return expr_value;
-		}
+		// 		if (cast_type == castee_type) {
+		// 			m_Metadata.RegExprType(new_register->ID, cast_type);
+		// 			return expr_value;
+		// 		}
 
 		IRCast* cast_ir_node = nullptr;
 

@@ -82,6 +82,8 @@ namespace Glass {
 
 		static void Init(const MetaData& metadata);
 
+		static TypeFlags GetTypeFlags(TypeStorage* type);
+
 		static TypeStorage* GetBasic(const std::string& type_name);
 		static TSPtr* GetPtr(TypeStorage* pointee, u32 indirection);
 		static TSDynArray* GetDynArray(TypeStorage* element);

@@ -35,6 +35,17 @@ namespace Glass {
 		m_Instance = new TypeSystem(metadata);
 	}
 
+	TypeFlags TypeSystem::GetTypeFlags(TypeStorage* type)
+	{
+		TypeFlags flags = 0;
+
+		if (type->Kind == TypeStorageKind::Base) {
+			flags |= m_Instance->m_Metadata.GetTypeFlags(type->BaseID);
+		}
+
+		return flags;
+	}
+
 	TypeStorage* TypeSystem::GetBasic(u64 type_id)
 	{
 		m_Instance->m_Metadata.GetType(type_id);
