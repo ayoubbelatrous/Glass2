@@ -292,7 +292,7 @@ namespace Glass
 	struct IRBinOp : public IRInstruction {
 		IRRegisterValue* RegisterA = nullptr;
 		IRRegisterValue* RegisterB = nullptr;
-		u64 Type;
+		TypeStorage* Type = nullptr;
 
 		virtual std::string ToString() const override {
 			return "";
@@ -306,14 +306,14 @@ namespace Glass
 	struct IRADD : public IRInstruction {
 		IRRegisterValue* RegisterA = nullptr;
 		IRRegisterValue* RegisterB = nullptr;
-		u64 Type;
+		TypeStorage* Type = nullptr;
 
 		IRADD() = default;
 		IRADD(IRRegisterValue* A, IRRegisterValue* B)
 			:RegisterA(A), RegisterB(B)
 		{
 		}
-		IRADD(IRRegisterValue* A, IRRegisterValue* B, u64 type)
+		IRADD(IRRegisterValue* A, IRRegisterValue* B, TypeStorage* type)
 			:RegisterA(A), RegisterB(B), Type(type)
 		{
 		}
@@ -338,11 +338,11 @@ namespace Glass
 	struct IRSUB : public IRInstruction {
 		IRRegisterValue* RegisterA = nullptr;
 		IRRegisterValue* RegisterB = nullptr;
-		u64 Type;
+		TypeStorage* Type = nullptr;
 
 		IRSUB() = default;
 
-		IRSUB(IRRegisterValue* a, IRRegisterValue* b, u64 type)
+		IRSUB(IRRegisterValue* a, IRRegisterValue* b, TypeStorage* type = nullptr)
 			: RegisterA(a), RegisterB(b), Type(type)
 		{
 		}
@@ -367,7 +367,7 @@ namespace Glass
 	struct IRMUL : public IRInstruction {
 		IRRegisterValue* RegisterA = nullptr;
 		IRRegisterValue* RegisterB = nullptr;
-		u64 Type;
+		TypeStorage* Type = nullptr;
 
 		IRMUL() = default;
 		IRMUL(IRRegisterValue* A, IRRegisterValue* B)
@@ -395,7 +395,7 @@ namespace Glass
 	struct IRDIV : public IRInstruction {
 		IRRegisterValue* RegisterA = nullptr;
 		IRRegisterValue* RegisterB = nullptr;
-		u64 Type;
+		TypeStorage* Type = nullptr;
 
 		virtual std::string ToString() const override {
 			std::string str;
@@ -411,6 +411,230 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::DIV;
+		}
+	};
+
+	struct IREQ : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IREQ() = default;
+		IREQ(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "EQ ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Equal;
+		}
+	};
+
+	struct IRNOTEQ : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRNOTEQ() = default;
+		IRNOTEQ(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "NOTEQ ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::NotEqual;
+		}
+	};
+
+	struct IRGreater : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRGreater() = default;
+		IRGreater(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Greater ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::GreaterThan;
+		}
+	};
+
+	struct IRLesser : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRLesser() = default;
+		IRLesser(IRRegisterValue* A, IRRegisterValue* B, TypeStorage* type_id = nullptr)
+			:RegisterA(A), RegisterB(B), Type(type_id)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Lesser ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::LesserThan;
+		}
+	};
+
+	struct IRBitAnd : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRBitAnd() = default;
+		IRBitAnd(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "BitAnd ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::BitAnd;
+		}
+	};
+
+	struct IRBitOr : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRBitOr() = default;
+		IRBitOr(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "BitOr ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::BitOr;
+		}
+	};
+
+	struct IRAnd : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRAnd() = default;
+		IRAnd(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "And ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::And;
+		}
+	};
+
+	struct IROr : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IROr() = default;
+		IROr(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "Or ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Or;
 		}
 	};
 
@@ -873,226 +1097,6 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::TypeInfo;
-		}
-	};
-
-	struct IREQ : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-		u64 Type = -1;
-
-		IREQ() = default;
-		IREQ(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "EQ ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::Equal;
-		}
-	};
-
-	struct IRNOTEQ : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-		u64 Type = -1;
-
-		IRNOTEQ() = default;
-		IRNOTEQ(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "NOTEQ ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::NotEqual;
-		}
-	};
-
-	struct IRGreater : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-		u64 Type = -1;
-
-		IRGreater() = default;
-		IRGreater(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "Greater ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::GreaterThan;
-		}
-	};
-
-	struct IRLesser : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-		u64 Type = -1;
-
-		IRLesser() = default;
-		IRLesser(IRRegisterValue* A, IRRegisterValue* B, u64 type_id = -1)
-			:RegisterA(A), RegisterB(B), Type(type_id)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "Lesser ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::LesserThan;
-		}
-	};
-
-	struct IRBitAnd : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-
-		IRBitAnd() = default;
-		IRBitAnd(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "BitAnd ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::BitAnd;
-		}
-	};
-
-	struct IRBitOr : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-
-		IRBitOr() = default;
-		IRBitOr(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "BitOr ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::BitOr;
-		}
-	};
-
-	struct IRAnd : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-
-		IRAnd() = default;
-		IRAnd(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "And ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::And;
-		}
-	};
-
-	struct IROr : public IRInstruction {
-		IRRegisterValue* RegisterA = nullptr;
-		IRRegisterValue* RegisterB = nullptr;
-
-		IROr() = default;
-		IROr(IRRegisterValue* A, IRRegisterValue* B)
-			:RegisterA(A), RegisterB(B)
-		{
-		}
-
-		virtual std::string ToString() const override {
-			std::string str;
-
-			str += "Or ";
-
-			str += RegisterA->ToString();
-			str += " : ";
-			str += RegisterB->ToString();
-
-			return str;
-		}
-
-		virtual IRNodeType GetType() const {
-			return IRNodeType::Or;
 		}
 	};
 

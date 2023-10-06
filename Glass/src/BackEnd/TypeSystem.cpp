@@ -15,7 +15,7 @@ namespace Glass {
 		auto it = m_Instance->m_Types.find(hash);
 
 		if (it != m_Instance->m_Types.end()) {
-			return (TSDynArray*)it->second;
+			return (TSDynArray*)m_Instance->m_OrderedTypeArray[it->second];
 		}
 
 		TSDynArray* new_type = TYPE(TSDynArray());
@@ -24,7 +24,7 @@ namespace Glass {
 		new_type->Hash = hash;
 		new_type->ElementType = element;
 
-		m_Instance->m_Types.emplace(hash, new_type);
+		Insert(hash, new_type);
 
 		return new_type;
 	}
@@ -55,7 +55,7 @@ namespace Glass {
 		auto it = m_Instance->m_Types.find(hash);
 
 		if (it != m_Instance->m_Types.end()) {
-			return it->second;
+			return m_Instance->m_OrderedTypeArray[it->second];
 		}
 
 		TypeStorage* new_type = TYPE(TypeStorage());
@@ -63,7 +63,7 @@ namespace Glass {
 		new_type->Kind = TypeStorageKind::Base;
 		new_type->Hash = hash;
 
-		m_Instance->m_Types.emplace(hash, new_type);
+		Insert(hash, new_type);
 
 		return new_type;
 	}
@@ -88,7 +88,7 @@ namespace Glass {
 		auto it = m_Instance->m_Types.find(hash);
 
 		if (it != m_Instance->m_Types.end()) {
-			return (TSPtr*)it->second;
+			return (TSPtr*)m_Instance->m_OrderedTypeArray[it->second];
 		}
 
 		TSPtr* new_type = TYPE(TSPtr());
@@ -98,7 +98,8 @@ namespace Glass {
 		new_type->Pointee = pointee;
 		new_type->Indirection = indirection;
 
-		m_Instance->m_Types.emplace(hash, new_type);
+		Insert(hash, new_type);
+
 		return new_type;
 	}
 
@@ -109,7 +110,7 @@ namespace Glass {
 		auto it = m_Instance->m_Types.find(hash);
 
 		if (it != m_Instance->m_Types.end()) {
-			return it->second;
+			return m_Instance->m_OrderedTypeArray[it->second];
 		}
 
 		TSFunc* new_type = TYPE(TSFunc());
@@ -119,7 +120,7 @@ namespace Glass {
 		new_type->Arguments = arguments;
 		new_type->ReturnType = return_type;
 
-		m_Instance->m_Types.emplace(hash, new_type);
+		Insert(hash, new_type);
 
 		return new_type;
 	}
@@ -127,6 +128,46 @@ namespace Glass {
 	TypeStorage* TypeSystem::GetVoid()
 	{
 		return GetBasic(IR_void);
+	}
+
+	TypeStorage* TypeSystem::GetBool()
+	{
+		return GetBasic(IR_bool);
+	}
+
+	TypeStorage* TypeSystem::GetU64()
+	{
+		return GetBasic(IR_u64);
+	}
+
+	TypeStorage* TypeSystem::GetU32()
+	{
+		return GetBasic(IR_u32);
+	}
+
+	TypeStorage* TypeSystem::GetU8()
+	{
+		return GetBasic(IR_u8);
+	}
+
+	TypeStorage* TypeSystem::GetI64()
+	{
+		return GetBasic(IR_i64);
+	}
+
+	TypeStorage* TypeSystem::GetI32()
+	{
+		return GetBasic(IR_i32);
+	}
+
+	TypeStorage* TypeSystem::GetI8()
+	{
+		return GetBasic(IR_i8);
+	}
+
+	TypeStorage* TypeSystem::GetVoidPtr()
+	{
+		return GetPtr(GetVoid(), 1);
 	}
 
 	TypeStorage* TypeSystem::IncreaseIndirection(TypeStorage* type)
@@ -181,14 +222,14 @@ namespace Glass {
 		return nullptr;
 	}
 
-	std::unordered_map<u64, TypeStorage*>& TypeSystem::GetTypeMap()
+	std::vector<TypeStorage*>& TypeSystem::GetTypeMap()
 	{
-		return m_Instance->m_Types;
+		return m_Instance->m_OrderedTypeArray;
 	}
 
 	u64 TypeSystem::GetTypeInfoIndex(TypeStorage* ts)
 	{
-		return std::distance(m_Instance->m_Types.begin(), m_Instance->m_Types.find(ts->Hash));
+		return m_Instance->m_Types.find(ts->Hash)->second;
 	}
 
 	bool TypeSystem::StrictPromotion(TypeStorage* A, TypeStorage* B)

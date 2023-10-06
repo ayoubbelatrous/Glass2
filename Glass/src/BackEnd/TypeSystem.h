@@ -89,7 +89,6 @@ namespace Glass {
 		static TSDynArray* GetDynArray(TypeStorage* element);
 		static TypeStorage* GetBasic(u64 type_id);
 		static TypeStorage* GetFunction(const std::vector<TypeStorage*>& arguments, TypeStorage* return_type);
-		static TypeStorage* GetVoid();
 
 		static TypeStorage* IncreaseIndirection(TypeStorage* type);
 		static TypeStorage* ReduceIndirection(TSPtr* pointer);
@@ -99,7 +98,7 @@ namespace Glass {
 		static bool IsArray(TypeStorage* type);
 		static TypeStorage* GetArrayElementTy(TypeStorage* type);
 
-		static std::unordered_map<u64, TypeStorage*>& GetTypeMap();
+		static std::vector<TypeStorage*>& GetTypeMap();
 		static u64 GetTypeInfoIndex(TypeStorage* ts);
 
 		static bool StrictPromotion(TypeStorage* A, TypeStorage* B);
@@ -108,11 +107,35 @@ namespace Glass {
 
 		static u64 GetTypeSize(TypeStorage* type);
 
+		static TypeStorage* GetVoid();
+
+		static TypeStorage* GetBool();
+
+		static TypeStorage* GetU64();
+		static TypeStorage* GetU32();
+		static TypeStorage* GetU8();
+
+		static TypeStorage* GetI64();
+		static TypeStorage* GetI32();
+		static TypeStorage* GetI8();
+
+		static TypeStorage* GetVoidPtr();
+
 	private:
+
+		static void Insert(u64 hash, TypeStorage* type) {
+			m_Instance->m_Types[hash] = m_Instance->m_OrderedTypeArray.size();
+			m_Instance->m_OrderedTypeArray.push_back(type);
+		}
+
+		static TypeStorage* Get(u64 hash) {
+			return m_Instance->m_OrderedTypeArray[m_Instance->m_Types.at(hash)];
+		}
 
 		const MetaData& m_Metadata;
 
-		std::unordered_map<u64, TypeStorage*> m_Types;
+		std::unordered_map<u64, u64> m_Types;
+		std::vector<TypeStorage*> m_OrderedTypeArray;
 
 		static TypeSystem* m_Instance;
 	};

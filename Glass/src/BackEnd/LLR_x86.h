@@ -34,11 +34,13 @@ namespace Glass
 		X86_JMPNE,
 
 		X86_MOV,
+		X86_MOVD,
+		X86_MOVQ,
+
 		X86_MOVZX,
 		X86_MOVSXD,
 		X86_MOVSS,
 		X86_MOVSD,
-		X86_MOVQ,
 		X86_LEA,
 
 		X86_CVTSS2SD,
@@ -57,6 +59,9 @@ namespace Glass
 
 		X86_IMUL,
 		X86_IDIV,
+
+		X86_AND,
+		X86_OR,
 
 		X86_REG_NAME,
 
@@ -163,6 +168,11 @@ namespace Glass
 	struct X86_Constant_Inst
 	{
 		u8 bytes[8];
+	};
+
+	struct X86_Constant_Float_Inst
+	{
+		u64 offset;
 	};
 
 	struct X86_Data_Str_Ref_Inst
@@ -291,6 +301,7 @@ namespace Glass
 			X86_Jmp_Inst				jmp;
 
 			X86_Constant_Inst			constant;
+			X86_Constant_Float_Inst		constant_float;
 			X86_Constant_Offset			constant_offset;
 			X86_Data_Str_Ref_Inst		data_str_ref;
 
@@ -430,6 +441,7 @@ namespace Glass
 		TypeStorage* GetIRRegisterType(u64 id);
 
 		RegisterUsage RegisterUsageByType(TypeStorage* type);
+		RegisterUsage RegisterUsageByTypeNoXMM(TypeStorage* type);
 		RegisterUsage RegisterUsageBySize(u64 type_size);
 
 		X86_Word InWords(TypeStorage* type);
@@ -485,12 +497,13 @@ namespace Glass
 
 		ArgumentLocationInfo GetArgumentLocationInfo(TypeStorage* type, u32 index, GetArgument_Location_Dir direction);
 
-		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction);
+		X86_Inst* GetArgumentLocation(TypeStorage* type, u32 index, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction, X86_Inst** secondary = nullptr);
 		X86_Inst* GetReturnLocation(TypeStorage* type, std::vector<X86_Inst*>& spillage_stream);
 
 		struct ArgumentAllocationInfo {
 			ArgumentLocationType LocationType;
 			X86_Inst* Location;
+			X86_Inst* SecondaryLocation;
 		};
 
 		struct ArgumentAllocation {
@@ -499,7 +512,7 @@ namespace Glass
 		};
 
 		//			locations	number of xmm registers used
-		ArgumentAllocation AllocateArgumentLocations(TSFunc* type, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction);
+		ArgumentAllocation AllocateArgumentLocations(TSFunc* type, std::vector<X86_Inst*>& spillage_stream, GetArgument_Location_Dir direction, bool variadic = false);
 
 		u32 RegisterIDCounter = 0;
 

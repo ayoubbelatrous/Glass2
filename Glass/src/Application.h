@@ -76,8 +76,6 @@ namespace Glass
 			m_Size += sizeof(T);
 
 			return result;
-
-			//return new T(d);
 		}
 
 	private:

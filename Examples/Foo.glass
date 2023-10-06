@@ -1,50 +1,28 @@
 
 #load "C.glass";
-//#load "Memory.glass";
+#load "Memory.glass";
+//#load "Print.glass";
+
+#foreign fn __debugbreak() : void {}
+#foreign fn raise(i32 sig) : i32 {}
 
 struct string {
 	u8* data;
 	u64 count;
 };
 
-struct SmallStruct {
+struct vec3
+{
 	i32 x;
 	i32 y;
 	i32 z;
-	i32 w;
-};
-
-struct BigStruct {
-	SmallStruct x;
-	SmallStruct y;
-	SmallStruct z;
-	SmallStruct w;
-};
-
-struct MassiveStruct {
-	BigStruct x;
-	BigStruct y;
-	BigStruct z;
-	BigStruct w;
-};
-
-struct InsaneStruct {
-	MassiveStruct x;
-	MassiveStruct y;
-	MassiveStruct z;
-	MassiveStruct w;
-};
-
-struct vec3
-{
-	f32 x;
-	f32 y;
-	f32 z;
 };
 
 struct Entity {
 	i32 id;
 	vec3 pos;
+	vec3 rot;
+	vec3 sca;
 };
 
 fn Take_Any(Any any) {
@@ -74,29 +52,147 @@ fn test_typeof() {
 	printf("TypeName: %s\n", type.name);
 }
 
+fn pointer_test() {
+
+	printf("Pointer Test:\n");
+
+	vec3* vp = xx malloc(sizeof(vec3));
+
+	vp.x = 100;
+	vp.y = 200;
+	vp.z = 300;
+
+	printf("	v.x : %i\n", vp.x);
+	printf("	v.y : %i\n", vp.y);
+	printf("	v.z : %i\n", vp.z);
+}
+
 fn array_test() : i32 {
 
-	i32* array = xx malloc(sizeof(i32) * 10);
-
-	array[0] = 10;
-	array[1] = 20;
-
-	printf("Pointer Array Test\n");
-
-	i32 a_0 = array[0];
-	printf("A0: %i\n", a_0);
+	i32* ptr_array = xx malloc(sizeof(i32) * 10);
 
 	for 0..10 {
-		printf("PtrArray[%i] :: %i\n", it_index, array[it_index]);
+		ptr_array[it_index] = it * 10;
+	}
+
+	printf("Pointer Array Test:\n");
+
+	for 0..10 {
+		printf("PtrArray[%i] :: %i\n", it_index, ptr_array[it_index]);
+	}
+
+	printf("[..] Array Test\n");
+
+	i32[..] array;
+	array.data = malloc(sizeof(i32) * 10);
+	array.count = 10;
+
+	for 0..10 {
+		array[it_index] = it * 10;
+	}
+
+	for array {
+		printf("PtrArray[%i] :: %i\n", it_index, it);
 	}
 
 	return 0;
 }
 
+fn Make_Entity(vec3 pos, vec3 rot , vec3 sca) : Entity {
+	Entity entity;
+	entity.pos = pos;
+	entity.rot = rot;
+	entity.sca = sca;
+	return entity;
+}
+
+fn Vec3(i32 x, i32 y, i32 z) : vec3 {
+	vec3 v;
+	v.x = x;
+	v.y = y;
+	v.z = z;
+	return v;
+}
+
+fn Vec3S(i32 s) : vec3 {
+	vec3 v;
+	v.x = s;
+	v.y = s;
+	v.z = s;
+	return v;
+}
+
+fn PrintVec3(vec3* v) {
+	printf("Vec: {%i, %i, %i}\n", v.x,v.y,v.z);
+}
+
+fn PrintEntity(Entity* e) {
+	printf("Entity:\n");
+	printf("Pos: ");
+	PrintVec3(&e.pos);
+	printf("Rot: ");
+	PrintVec3(&e.rot);
+	printf("Sca: ");
+	PrintVec3(&e.sca);
+}
+
+fn member_test() {
+	printf("Member Access Test:\n");
+	Entity e = Make_Entity(Vec3S(69), Vec3S(420), Vec3S(420 + 69));
+	PrintEntity(&e);
+}
+
+fn PassAsAny(Any any) {
+
+	u8* test = "str";
+
+
+	Type type = u8;
+
+	printf("Any.type :: %i\n", type);
+	printf("Any.type_name :: %s\n", type_info(type).name);
+
+}
+
+fn many_args(i32 x,i32 y,i32 z,i32 w, i32 v) {
+	printf("Value: %i\n", v);
+}
+
 fn main() : i32 {
 
-	array_test();
+	i32 a = 0;
+	i32 b = 1;
+	printf("a = %i, b = %i\n", a, b);
+	printf("a & b: %p\n", a & b);
+	printf("a | b: %p\n", a | b);
 
-	///printf("Hello World\n");
+	i64 big_int = 50;
+	i64 small_int = xx big_int;
+
+	PassAsAny(&small_int);
+
+	array_test();
+	pointer_test();
+	member_test();
+
+	i64 integer = -50;
+	f64 d = xx integer;
+
+	printf("Floats: %f, %f, %f, %f, %f\n", d, d, d, d, d);
+
+	printf("Random: %i\n", srand(time(xx null)));
+
+	test_floats();
+
 	return 0;
+}
+
+fn take_float(f32 r, f32 g, f32 b, f32 a, f32 opacity) {
+	f32 test = 10.33;
+
+	printf("Floats: %f, %f, %f, %f, %f", r, g, b, a, opacity);
+}
+
+fn test_floats() {
+	take_float(50.0,40.0,30.0,20.0,69.99);
 }

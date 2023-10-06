@@ -1591,7 +1591,7 @@ namespace Glass
 				iterator->ConditionBlock.push_back(end_inst);
 			}
 
-			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end, type->BaseID)));
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(CreateLoad(type, iterator->IteratorIndex->RegisterID), end, type)));
 
 			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
 			cmp_register->IsCondition = true;
@@ -1612,7 +1612,7 @@ namespace Glass
 			PushScope();
 
 			auto index_load = CreateIRRegister(CreateLoad(type, iterator->IteratorIndex->RegisterID));
-			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type->BaseID)));
+			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type)));
 			CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, index_addition));
 			CreateIRRegister(CreateStore(type, iterator->IteratorIt->RegisterID, index_addition));
 
@@ -1668,7 +1668,7 @@ namespace Glass
 			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->RegisterID)->RegisterID);
 
 			index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
-			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end, index_type->BaseID)));
+			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end, index_type)));
 
 			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
 			cmp_register->IsCondition = true;
@@ -1687,7 +1687,7 @@ namespace Glass
 			PushScope();
 
 			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
-			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type->BaseID)));
+			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type)));
 			CreateIRRegister(CreateStore(index_type, iterator->IteratorIndex->RegisterID, index_addition));
 
 			auto register_stack = PoPIRRegisters();
@@ -2132,7 +2132,7 @@ namespace Glass
 			}
 		}
 
-		u64 result_type = left_type->BaseID;
+		TypeStorage* result_type = left_type;
 
 		switch (binaryExpr->OPerator)
 		{
@@ -2179,37 +2179,37 @@ namespace Glass
 		case Operator::Equal:
 		{
 			ir_register->Value = IR(IREQ(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::NotEqual:
 		{
 			ir_register->Value = IR(IRNOTEQ(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::GreaterThan:
 		{
 			ir_register->Value = IR(IRGreater(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::LesserThan:
 		{
 			ir_register->Value = IR(IRLesser(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::GreaterThanEq:
 		{
 			ir_register->Value = IR(IRGreater(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::LesserThanEq:
 		{
 			ir_register->Value = IR(IRLesser(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::BitAnd:
@@ -2225,13 +2225,13 @@ namespace Glass
 		case Operator::And:
 		{
 			ir_register->Value = IR(IRAnd(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		case Operator::Or:
 		{
 			ir_register->Value = IR(IROr(A, B));
-			result_type = IR_bool;
+			result_type = TypeSystem::GetBool();
 		}
 		break;
 		default:
@@ -2246,7 +2246,7 @@ namespace Glass
 
 		register_value->RegisterID = ir_register->ID;
 
-		m_Metadata.RegExprType(register_value->RegisterID, TypeSystem::GetBasic(result_type));
+		m_Metadata.RegExprType(register_value->RegisterID, result_type);
 
 		return register_value;
 	}
@@ -2994,7 +2994,7 @@ namespace Glass
 		if (!what_code)
 			return nullptr;
 		auto what_type = m_Metadata.GetExprType(what_code->RegisterID);
-		return CreateIRRegister(IR(IRSUB(CreateConstant(what_type->BaseID, 0, 0.0), what_code, what_type->BaseID)), what_type);
+		return CreateIRRegister(IR(IRSUB(CreateConstant(what_type->BaseID, 0, 0.0), what_code, what_type)), what_type);
 	}
 
 	IRInstruction* Compiler::FunctionRefCodegen(const Identifier* func)
