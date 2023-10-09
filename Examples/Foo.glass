@@ -1,7 +1,7 @@
 
 #load "C.glass";
 #load "Memory.glass";
-//#load "Print.glass";
+#load "Print.glass";
 
 #foreign fn __debugbreak() : void {}
 #foreign fn raise(i32 sig) : i32 {}
@@ -31,9 +31,9 @@ fn Take_Any(Any any) {
 
 	Entity* data = cast(Entity*) any.data;
 	Entity i = *data;
+
 	*data = entity;
 }
-
 fn Take_Many(Entity e1, Entity e2, Entity e3, Entity e4, Entity e5) : Entity {
 	return e1;
 }
@@ -154,17 +154,47 @@ fn PassAsAny(Any any) {
 
 }
 
-fn many_args(i32 x,i32 y,i32 z,i32 w, i32 v) {
+fn many_args(i32 x, i32 y, i32 z, i32 w, i32 v) {
 	printf("Value: %i\n", v);
 }
 
+fn many_args(i32 x, i32 y, i32 z) {
+	printf("Value: %i\n", x);
+}
+
+fn var_args(Any... args) {
+	for args {
+		printf("IT: %s\n", type_info(it.type).name);
+		printf("var_args any.type: %i\n", it.type);
+		printf("var_args any.type_name: %s\n", type_info(it.type).name);
+	}
+}
+
+i32 data2;
+Entity* entity2;
+
 fn main() : i32 {
+
+	many_args(10,20,30);
+	many_args(10,20,30,40,50);
+
+	entity2 = xx malloc(sizeof(Entity));
+
+	entity2.id = 30*60;
+
+	print("Hello World from var_args print: %\n", entity2.id);
+
+	i32 pointee = 5;
+	i32* i32_ptr = &pointee;
 
 	i32 a = 0;
 	i32 b = 1;
+
 	printf("a = %i, b = %i\n", a, b);
 	printf("a & b: %p\n", a & b);
 	printf("a | b: %p\n", a | b);
+
+	var_args("Hello World", 50,50,50);
 
 	i64 big_int = 50;
 	i64 small_int = xx big_int;
@@ -189,7 +219,6 @@ fn main() : i32 {
 
 fn take_float(f32 r, f32 g, f32 b, f32 a, f32 opacity) {
 	f32 test = 10.33;
-
 	printf("Floats: %f, %f, %f, %f, %f", r, g, b, a, opacity);
 }
 

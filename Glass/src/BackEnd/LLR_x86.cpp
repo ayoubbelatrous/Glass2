@@ -212,7 +212,6 @@ namespace Glass
 
 		for (auto& [Id, func] : m_Metadata->m_Functions)
 		{
-
 			std::string mangled_name;
 
 			if (func.Foreign)
@@ -231,6 +230,17 @@ namespace Glass
 			X86_Inst* label = ASMA(X86_Inst());
 			label->type = X86_LABEL_REF;
 			label->as.label.name = ASMA(mangled_name)->c_str();
+
+			for (auto& [signature, overload] : func.Overloads)
+			{
+				mangled_name = MangleName(func.Symbol.Symbol, signature);
+
+				X86_Inst* label = ASMA(X86_Inst());
+				label->type = X86_LABEL_REF;
+				label->as.label.name = ASMA(mangled_name)->c_str();
+
+				m_Data.IR_FunctionOverloadsLabels[Id][signature] = label;
+			}
 
 			m_Data.IR_FunctionLabels[Id] = ASMA(*label);
 		}
@@ -354,10 +364,16 @@ namespace Glass
 			data_section += ", 0\n";
 		}
 
-		asm_out << "section '.data' data readable align 16\n";
+		std::string bss_section;
+		for (auto& [glob_id, size] : GlobalUnInitializedVariables) {
+			bss_section += "glb" + std::to_string(glob_id - 512000) + " rb " + std::to_string(size) + '\n';
+		}
+
+		asm_out << "section '.rdata' data readable align 16\n";
 		asm_out << data_section;
 
-		// GS_CORE_TRACE("ASM:\n{}", assem);
+		asm_out << "section '.bss' data readable writable align 16\n";
+		asm_out << bss_section;
 
 		return build_stream;
 	}
@@ -458,7 +474,15 @@ namespace Glass
 		}
 		break;
 		case IRNodeType::GlobDecl:
-			break;
+		{
+			AssembleGlobalDecl((IRGlobalDecl*)inst, stream);
+		}
+		break;
+		case IRNodeType::GlobAddress:
+		{
+			AssembleGlobalAddress((IRGlobalAddress*)inst, stream);
+		}
+		break;
 
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
@@ -483,6 +507,9 @@ namespace Glass
 		case IRNodeType::Any:
 			AssembleAny((IRAny*)inst, stream);
 			break;
+		case IRNodeType::AnyArray:
+			AssembleAnyArray((IRAnyArray*)inst, stream);
+			break;
 		case IRNodeType::LexicalBlock:
 			AssembleLexicalBlock((IRLexBlock*)inst, stream);
 			break;
@@ -501,6 +528,14 @@ namespace Glass
 			AssembleInt2FP((IRInt2FP*)inst, stream);
 		}
 		break;
+		case IRNodeType::Ptr2IntCast: {
+			auto ptr_2_int = (IRPtr2IntCast*)inst;
+
+			if (TypeSystem::GetTypeSize(ptr_2_int->Type) < TypeSystem::GetTypeSize(TypeSystem::GetVoidPtr())) {
+				AssembleIntTruncCast((IRIntTrunc*)inst, stream);
+			}
+		}
+									break;
 
 		default:
 			GS_CORE_ASSERT(0, "Unknown IR Instruction");
@@ -645,12 +680,16 @@ namespace Glass
 
 	void X86_BackEnd::AssembleFunction(IRFunction* func, std::vector<X86_Inst*>& stream)
 	{
-		GS_CORE_ASSERT(!func->Overload);
-
-		m_Metadata->m_CurrentFunction = func->ID;
 
 		FunctionMetadata* metadata = m_Metadata->GetFunctionMetadata(func->ID);
+
+		if (func->Overload) {
+			metadata = &metadata->GetOverload((TSFunc*)func->Overload);
+		}
+
 		GS_CORE_ASSERT(metadata);
+
+		m_Metadata->m_CurrentFunction = func->ID;
 
 		m_CurrentFunction = metadata;
 
@@ -857,6 +896,21 @@ namespace Glass
 		SetRegisterValue(ASMA(stack_frame_offset));
 	}
 
+	void X86_BackEnd::AssembleGlobalDecl(IRGlobalDecl* inst, std::vector<X86_Inst*>& stream)
+	{
+		GlobalUnInitializedVariables.push_back({ inst->GlobID, TypeSystem::GetTypeSize(inst->Type) });
+	}
+
+	void X86_BackEnd::AssembleGlobalAddress(IRGlobalAddress* inst, std::vector<X86_Inst*>& stream)
+	{
+		X86_Inst* glob = ASMA(X86_Inst());
+		glob->type = X86_GLOB_DE_REF;
+		glob->as.global.global_id = inst->GlobID;
+		glob->as.global.size = InWords(m_Metadata->GetVariableMetadata(inst->GlobID)->Tipe);
+
+		SetRegisterValue(glob);
+	}
+
 	void X86_BackEnd::AssembleStore(IRStore* inst, std::vector<X86_Inst*>& stream)
 	{
 		GS_CORE_ASSERT(inst->Data->GetType() == IRNodeType::RegisterValue);
@@ -943,7 +997,7 @@ namespace Glass
 			auto location = GetIRRegister(inst->AddressRegister);
 			auto data_location = GetIRRegister(data_as_register_ref->RegisterID);
 
-			u64 intermediate_register_id = 0;
+			u64 intermediate_register_id = -1;
 
 			if (data_location->type == X86_DATA_STR_REF)
 			{
@@ -952,8 +1006,10 @@ namespace Glass
 				data_location = Make_Move(data_location, intermediate_register, stream, inst->Type);
 			}
 
-			if (location->type == X86_CONSTANT_OFFSET)
+			if (location->type == X86_CONSTANT_OFFSET || location->type == X86_GLOB_DE_REF)
 			{
+				auto data_ir_register = m_Metadata->GetRegister(data_as_register_ref->RegisterID);
+				//auto data_ir_register_type = data_ir_register->Value->GetType();;
 
 				X86_ASM move_type = X86_MOV;
 
@@ -968,6 +1024,7 @@ namespace Glass
 				move.as.move.destination = location;
 				move.comment = "store";
 				stream.push_back(ASMA(move));
+				//}
 			}
 			else
 			{
@@ -985,7 +1042,7 @@ namespace Glass
 				stream.push_back(ASMA(move));
 			}
 
-			if (location->type == X86_DATA_STR_REF)
+			if (intermediate_register_id != -1)
 			{
 				Free_Register(intermediate_register_id);
 			}
@@ -1020,7 +1077,7 @@ namespace Glass
 			auto loaded_value_location = Allocate_Register(RegisterUsageByType(inst->Type), GetRegisterID(), stream);
 			SetRegisterValue(loaded_value_location);
 
-			if (value_ptr->type == X86_CONSTANT_OFFSET)
+			if (value_ptr->type == X86_CONSTANT_OFFSET || value_ptr->type == X86_GLOB_DE_REF)
 			{
 				X86_Inst move = {};
 				move.type = MovByType(inst->Type);
@@ -1084,8 +1141,24 @@ namespace Glass
 		}
 		else
 		{
+			if (struct_location->type == X86_GLOB_DE_REF)
+			{
+				X86_Inst* glob_location = ASMA(X86_Inst());
+				glob_location->type = X86_LABEL_REF;
+				glob_location->as.label.name = ASMA(fmt::format("glb{}", struct_location->as.global.global_id - 512000))->c_str();
 
-			if (struct_location->type == X86_CONSTANT_OFFSET)
+				X86_Inst* member_location = ASMA(X86_Inst());
+				member_location->type = X86_CONSTANT_OFFSET;
+				member_location->as.constant_offset.offset = Make_Constant(member.Offset);
+				member_location->as.constant_offset.from = glob_location;
+				member_location->as.constant_offset.size = InWords(member.Type);
+				member_location->as.constant_offset.offset_type = X86_CONSTANT_ADD;
+
+				member_location->comment = ASMA("." + member.Name.Symbol)->c_str();
+
+				SetRegisterValue(member_location);
+			}
+			else if (struct_location->type == X86_CONSTANT_OFFSET)
 			{
 
 				X86_Inst* member_location = ASMA(X86_Inst(*struct_location));
@@ -1108,7 +1181,7 @@ namespace Glass
 				member_location->as.constant_offset.from = struct_location;
 				member_location->as.constant_offset.offset = Make_Constant(member.Offset);
 				member_location->as.constant_offset.offset_type = X86_CONSTANT_ADD;
-				member_location->as.constant_offset.size = InWords(member.Type);
+				//member_location->as.constant_offset.size = InWords(member.Type);
 
 				member_location->comment = ASMA("." + member.Name.Symbol)->c_str();
 
@@ -1277,6 +1350,13 @@ namespace Glass
 		const FunctionMetadata* metadata = m_Metadata->GetFunctionMetadata(inst->FuncID);
 		GS_CORE_ASSERT(metadata);
 
+		X86_Inst* label_ref = m_Data.IR_FunctionLabels.at(inst->FuncID);
+
+		if (inst->Overload) {
+			metadata = &metadata->GetOverload((TSFunc*)inst->Overload);
+			label_ref = m_Data.IR_FunctionOverloadsLabels.at(inst->FuncID).at(inst->Overload);
+		}
+
 		u64 return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
 
 		if (metadata->Variadic)
@@ -1285,10 +1365,6 @@ namespace Glass
 		}
 
 		Reset_CallStackPointer();
-
-		X86_Inst* label_ref = m_Data.IR_FunctionLabels.at(inst->FuncID);
-
-		GS_CORE_ASSERT(!inst->Overload, "overloads not supported yet");
 
 		auto return_location = GetReturnLocation(metadata->ReturnType, stream);
 
@@ -1594,8 +1670,10 @@ namespace Glass
 		auto compare_size = TypeSystem::GetTypeSize(compare_type);
 		GS_CORE_ASSERT(compare_size);
 
-		auto register_a = GetIRRegister(inst->RegisterA->RegisterID); // we are freeing before allocation there is a very high chance that we will pick a tmp register that is the same as the operand that will cause for example mov al, al which will be removed if the option is set
-		auto destination_register = Allocate_Register(RegisterUsageByType(compare_type), GetRegisterID(), stream);
+		auto compared_register = GetRegisterID();
+
+		auto register_a = GetIRRegister(inst->RegisterA->RegisterID);
+		auto destination_register = Allocate_Register(RegisterUsageByType(compare_type), compared_register, stream);
 
 		Make_Move(register_a, destination_register, stream, compare_size, "compare move");
 
@@ -1786,6 +1864,76 @@ namespace Glass
 		}
 	}
 
+	void X86_BackEnd::AssembleAnyArray(IRAnyArray* ir_any_array, std::vector<X86_Inst*>& stream)
+	{
+		X86_Inst* any_array = AllocateStack(TypeSystem::GetArray());
+		X86_Inst* any_array_data = AllocateStack(TypeSystem::GetTypeSize(TypeSystem::GetAny()) * ir_any_array->Arguments.size());
+
+		auto array_struct_info = m_Metadata->GetStructFromType(TypeSystem::GetArray()->BaseID);
+
+		auto tmp_reg_id = GetRegisterID();
+		auto tmp_reg = Allocate_Register(RegisterUsage::REG_I64, tmp_reg_id, stream);
+
+		{
+			auto& data_member_info = array_struct_info->Members[array_struct_info->FindMember("data")];
+			auto& count_member_info = array_struct_info->Members[array_struct_info->FindMember("count")];
+
+			X86_Inst* count_member = ASMA(*any_array);
+			count_member->as.constant_offset.offset = ASMA(*any_array->as.constant_offset.offset);
+			count_member->as.constant_offset.from = ASMA(*any_array->as.constant_offset.from);
+			count_member->as.constant_offset.size = InWords(8);
+			i64& count_member_offset = *(i64*)(&count_member->as.constant_offset.offset->as.constant.bytes);
+			count_member_offset -= count_member_info.Offset;
+
+			X86_Inst* data_member = ASMA(*any_array);
+			data_member->as.constant_offset.offset = ASMA(*any_array->as.constant_offset.offset);
+			data_member->as.constant_offset.from = ASMA(*any_array->as.constant_offset.from);
+			data_member->as.constant_offset.size = InWords(8);
+			i64& data_member_offset = *(i64*)(&data_member->as.constant_offset.offset->as.constant.bytes);
+			data_member_offset -= data_member_info.Offset;
+
+			Make_LEA(any_array_data, tmp_reg, stream);
+			Make_Move(tmp_reg, data_member, stream, data_member_info.Type, "var_args array data set");
+
+			Make_Move(Make_Constant(ir_any_array->Arguments.size()), count_member, stream, count_member_info.Type, "var_args array count set");
+		}
+
+		u64 offset = 0;
+
+		auto any_struct_info = m_Metadata->GetStructFromType(TypeSystem::GetAny()->BaseID);
+
+		auto& data_member_info = any_struct_info->Members[any_struct_info->FindMember("data")];
+		auto& type_member_info = any_struct_info->Members[any_struct_info->FindMember("type")];
+
+		for (IRAny& any_arg : ir_any_array->Arguments) {
+
+			X86_Inst* type_member = ASMA(*any_array);
+			type_member->as.constant_offset.offset = ASMA(*any_array_data->as.constant_offset.offset);
+			type_member->as.constant_offset.from = ASMA(*any_array_data->as.constant_offset.from);
+			type_member->as.constant_offset.size = InWords(8);
+			i64& type_member_offset = *(i64*)(&type_member->as.constant_offset.offset->as.constant.bytes);
+			type_member_offset -= offset + type_member_info.Offset;
+
+			X86_Inst* data_member = ASMA(*any_array);
+			data_member->as.constant_offset.offset = ASMA(*any_array_data->as.constant_offset.offset);
+			data_member->as.constant_offset.from = ASMA(*any_array_data->as.constant_offset.from);
+			data_member->as.constant_offset.size = InWords(8);
+			i64& data_member_offset = *(i64*)(&data_member->as.constant_offset.offset->as.constant.bytes);
+			data_member_offset -= offset + data_member_info.Offset;
+
+			Make_LEA(GetIRRegister(any_arg.DataRegister), tmp_reg, stream);
+			Make_Move(tmp_reg, data_member, stream, data_member_info.Type, "var_args argument data set");
+
+			Make_Move(Make_Constant(TypeSystem::GetTypeInfoIndex(any_arg.Type)), type_member, stream, type_member_info.Type, "var_args argument type set");
+
+			offset += 16;
+		}
+
+		Free_Register(tmp_reg_id);
+
+		SetRegisterValue(any_array);
+	}
+
 	void X86_BackEnd::AssembleLexicalBlock(IRLexBlock* lexical_block, std::vector<X86_Inst*>& stream)
 	{
 		for (auto inst : lexical_block->Instructions)
@@ -1808,19 +1956,25 @@ namespace Glass
 		else
 		{
 
-			auto castee_type = m_Data.IR_RegisterTypes.at(ir_int_trunc->IntegerRegister);
-			auto reg = register_trunc_map.at({ register_overlap.at(integer_register->as.reg_alloc.Register), RegisterUsageByType(castee_type) });
+			if (integer_register->type == X86_CONSTANT) {
+				SetRegisterValue(integer_register);
+			}
+			else
+			{
+				auto castee_type = m_Data.IR_RegisterTypes.at(ir_int_trunc->IntegerRegister);
+				auto reg = register_trunc_map.at({ register_overlap.at(integer_register->as.reg_alloc.Register), RegisterUsageByType(castee_type) });
 
-			auto temprary_reg_id = GetRegisterID();
-			auto temprary_reg = Allocate_Register(RegisterUsageByType(castee_type), temprary_reg_id, stream);
+				auto temprary_reg_id = GetRegisterID();
+				auto temprary_reg = Allocate_Register(RegisterUsageByType(castee_type), temprary_reg_id, stream);
 
-			Make_Move(integer_register, temprary_reg, stream, castee_type);
-			Free_Register(temprary_reg_id);
+				Make_Move(integer_register, temprary_reg, stream, castee_type);
+				Free_Register(temprary_reg_id);
 
-			X86_Inst* truncated_reg = ASMA(*temprary_reg);
-			truncated_reg->as.reg_alloc.Register = reg;
+				X86_Inst* truncated_reg = ASMA(*temprary_reg);
+				truncated_reg->as.reg_alloc.Register = reg;
 
-			SetRegisterValue(truncated_reg);
+				SetRegisterValue(truncated_reg);
+			}
 		}
 	}
 
@@ -1882,7 +2036,7 @@ namespace Glass
 	{
 		IRRegister* Register = m_Metadata->GetRegister(register_value->RegisterID);
 
-		if (Register->Value->GetType() == IRNodeType::Alloca || Register->Value->GetType() == IRNodeType::Argument || Register->Value->GetType() == IRNodeType::MemberAccess)
+		if (Register->Value->GetType() == IRNodeType::Alloca || Register->Value->GetType() == IRNodeType::Argument || Register->Value->GetType() == IRNodeType::MemberAccess || Register->Value->GetType() == IRNodeType::ArrayAccess)
 		{
 
 			auto address_register = Allocate_Register(REG_I64, GetRegisterID(), stream);
@@ -1981,6 +2135,11 @@ namespace Glass
 			type = m_Data.IR_RegisterTypes.at(((IRRegisterValue*)inst)->RegisterID);
 		}
 		break;
+		case IRNodeType::GlobAddress:
+		{
+			type = m_Metadata->GetVariableMetadata(((IRGlobalAddress*)inst)->GlobID)->Tipe;
+		}
+		break;
 		case IRNodeType::NullPtr:
 		{
 			type = TypeSystem::GetPtr(TypeSystem::GetBasic(((IRNullPtr*)inst)->TypeID), 1);
@@ -1992,6 +2151,8 @@ namespace Glass
 		}
 		break;
 		case IRNodeType::IntTrunc:
+		case IRNodeType::Int2PtrCast:
+		case IRNodeType::Ptr2IntCast:
 		{
 			type = ((IRIntTrunc*)inst)->Type;
 		}
@@ -2026,6 +2187,10 @@ namespace Glass
 		case IRNodeType::Any:
 		{
 			return TypeSystem::GetBasic(IR_any);
+		}
+		case IRNodeType::AnyArray:
+		{
+			return TypeSystem::GetDynArray(TypeSystem::GetAny());
 		}
 		break;
 
@@ -2090,6 +2255,8 @@ namespace Glass
 
 	void X86_BackEnd::Print(X86_Inst inst, std::string& stream, std::string& comments)
 	{
+		static std::vector<const char*> words = { "", "byte ", "word ", "dword ", "qword " };
+
 		switch (inst.type)
 		{
 		case X86_LABEL_REF:
@@ -2278,7 +2445,6 @@ namespace Glass
 
 		case X86_CONSTANT_OFFSET:
 		{
-			static std::vector<const char*> words = { "", "byte ", "word ", "dword ", "qword " };
 			stream += words.at(inst.as.constant_offset.size);
 			stream += "[";
 			Print(*inst.as.constant_offset.from, stream, comments);
@@ -2287,10 +2453,16 @@ namespace Glass
 			stream += "]";
 			break;
 		}
-
+		case X86_GLOB_DE_REF:
+		{
+			stream += words.at(inst.as.de_ref.size);
+			stream += "[";
+			stream += "glb" + std::to_string(inst.as.global.global_id - 512000);
+			stream += "]";
+			break;
+		}
 		case X86_DE_REF:
 		{
-			static std::vector<const char*> words = { "", "byte ", "word ", "dword ", "qword " };
 			stream += words.at(inst.as.de_ref.size);
 			stream += "[";
 			Print(*inst.as.de_ref.what, stream, comments);
@@ -3083,7 +3255,9 @@ namespace Glass
 	void X86_BackEnd::Free_All_Register()
 	{
 		RegisterOccupations.clear();
+		RegisterAllocations.clear();
 		RegisterAllocationIDs.clear();
+		RegisterAllocationTypes.clear();
 	}
 
 	X86_Inst* X86_BackEnd::Allocate_Register(RegisterUsage usage, u32 id, std::vector<X86_Inst*>& spillage_stream, bool free_register_after_use /*= true*/)
@@ -3195,12 +3369,14 @@ namespace Glass
 
 	X86_Inst* X86_BackEnd::AllocateStack(u64 allocation_size)
 	{
-		if (allocation_size < 4)
+		u64 actual_allocation_size = allocation_size;
+
+		if (actual_allocation_size < 4)
 		{
-			allocation_size = 4;
+			actual_allocation_size = 4;
 		}
 
-		m_Data.CurrentFunction_StackFrameSize += allocation_size;
+		m_Data.CurrentFunction_StackFrameSize += actual_allocation_size;
 
 		X86_Inst stack_frame_offset = {};
 		stack_frame_offset.type = X86_CONSTANT_OFFSET;
@@ -3330,7 +3506,7 @@ namespace Glass
 			if (type_size <= 8)
 			{
 
-				if (direction == ARG_DIR_OUT && secondary)
+				if (direction == ARG_DIR_OUT && secondary && type_flags & FLAG_FLOATING_TYPE)
 				{
 					auto needed_register = scalar_registers.at({ index, type_size });
 					*secondary = Allocate_Specific_Register(needed_register, GetRegisterID(), spillage_stream);

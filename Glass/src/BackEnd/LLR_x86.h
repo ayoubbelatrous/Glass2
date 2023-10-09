@@ -76,7 +76,9 @@ namespace Glass
 
 		X86_ADDR_MUL, // '4 * edi' [rax + 4*edi] for example
 
-		X86_DATA_STR_REF, // [hello_world_str]
+		X86_DATA_STR_REF,
+
+		X86_GLOB_DE_REF,
 
 		X86_CMP,
 
@@ -244,6 +246,12 @@ namespace Glass
 		X86_Word size;
 	};
 
+	struct X86_Global_De_Ref_Inst
+	{
+		u64 global_id;
+		X86_Word size;
+	};
+
 	enum Section_Type : u8 {
 		SEC_Code, SEC_Data
 	};
@@ -295,6 +303,8 @@ namespace Glass
 
 			X86_Label_Inst				label;
 
+			X86_Global_De_Ref_Inst		global;
+
 			X86_Reg_Name_Inst			reg_name;
 			X86_Reg_Allocation_Inst		reg_alloc;
 			X86_Call_Inst				call;
@@ -345,6 +355,7 @@ namespace Glass
 
 		std::unordered_map<u64, X86_Inst*> IR_RegisterValues;
 		std::unordered_map<u64, X86_Inst*> IR_FunctionLabels;
+		std::unordered_map<u64, std::map<TypeStorage*, X86_Inst*>> IR_FunctionOverloadsLabels;
 		std::unordered_map<u64, RegisterFreeList> IR_RegisterFreeLists;
 
 		std::unordered_map<u64, TypeStorage*> IR_RegisterTypes;
@@ -382,6 +393,9 @@ namespace Glass
 		void AssembleFunction(IRFunction* inst, std::vector<X86_Inst*>& stream);
 		void AssembleAlloca(IRAlloca* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleGlobalDecl(IRGlobalDecl* inst, std::vector<X86_Inst*>& stream);
+		void AssembleGlobalAddress(IRGlobalAddress* inst, std::vector<X86_Inst*>& stream);
+
 		void AssembleStore(IRStore* inst, std::vector<X86_Inst*>& stream);
 		void AssembleLoad(IRLoad* inst, std::vector<X86_Inst*>& stream);
 
@@ -401,6 +415,7 @@ namespace Glass
 		void AssembleWhile(IRWhile* ir_while, std::vector<X86_Inst*>& stream);
 
 		void AssembleAny(IRAny* ir_any, std::vector<X86_Inst*>& stream);
+		void AssembleAnyArray(IRAnyArray* ir_any_array, std::vector<X86_Inst*>& stream);
 
 		void AssembleLexicalBlock(IRLexBlock* lexical_block, std::vector<X86_Inst*>& stream);
 
@@ -519,6 +534,8 @@ namespace Glass
 		std::vector<std::pair<u64, std::vector<char>>> m_DataStrings;
 		std::vector<std::pair<u64, std::vector<char>>> m_TypeInfoStrings;
 		std::vector<std::string> m_Externals; // currently name is the linkage name
+
+		std::vector<std::pair<u64, u64>> GlobalUnInitializedVariables;
 
 		IRTranslationUnit* m_TranslationUnit;
 		MetaData* m_Metadata;

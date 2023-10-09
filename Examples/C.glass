@@ -28,3 +28,5 @@
 
 #foreign fn exit(i32 status) 											: void;
 #foreign fn rand() 														: i32;
+#foreign fn srand(i32 seed) 														: i32;
+#foreign fn time(i32* t) 														: i32;

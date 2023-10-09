@@ -121,6 +121,10 @@ namespace Glass {
 
 		static TypeStorage* GetVoidPtr();
 
+		static TypeStorage* GetAny();
+		static TypeStorage* GetType();
+		static TypeStorage* GetArray();
+
 	private:
 
 		static void Insert(u64 hash, TypeStorage* type) {

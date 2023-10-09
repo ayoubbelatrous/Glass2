@@ -1,30 +1,6 @@
 
 #load "C.glass"
 
-fn ansi_red() {
-	printf("\e[1;31m");
-}
-
-fn ansi_yellow() {
-	printf("\e[1;33m");
-}
-
-fn ansi_green() {
-	printf("\e[1;32m");
-}
-
-fn ansi_green_u() {
-	printf("\e[1;32m");
-}
-
-fn ansi_c_u() {
-	printf("\e[1;36m");
-}
-
-fn ansi_clear() {
-	printf("\e[0m");
-}
-
 fn print_s_int(i64 signed, u64 bit_size) {
 
 	if bit_size == 8 {

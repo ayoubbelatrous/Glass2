@@ -170,6 +170,21 @@ namespace Glass {
 		return GetPtr(GetVoid(), 1);
 	}
 
+	TypeStorage* TypeSystem::GetAny()
+	{
+		return GetBasic(IR_any);
+	}
+
+	TypeStorage* TypeSystem::GetType()
+	{
+		return GetBasic(IR_type);
+	}
+
+	TypeStorage* TypeSystem::GetArray()
+	{
+		return GetBasic(IR_array);
+	}
+
 	TypeStorage* TypeSystem::IncreaseIndirection(TypeStorage* type)
 	{
 		if (type->Kind == TypeStorageKind::Pointer) {

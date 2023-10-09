@@ -937,7 +937,7 @@ namespace Glass
 				argument_variable_type = argument_type;
 			}
 			else {
-				argument_variable_type = TypeSystem::GetBasic(IR_array);
+				argument_variable_type = TypeSystem::GetDynArray(argument_type);
 			}
 
 			VariableMetadata var_metadata = {
@@ -2133,6 +2133,7 @@ namespace Glass
 		}
 
 		TypeStorage* result_type = left_type;
+		TypeStorage* op_type = left_type;
 
 		switch (binaryExpr->OPerator)
 		{
@@ -2240,7 +2241,7 @@ namespace Glass
 			break;
 		}
 
-		((IRBinOp*)ir_register->Value)->Type = result_type;
+		((IRBinOp*)ir_register->Value)->Type = op_type;
 
 		IRRegisterValue* register_value = IR(IRRegisterValue());
 
