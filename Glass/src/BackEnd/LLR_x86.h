@@ -48,6 +48,10 @@ namespace Glass
 		X86_CVTSI2SS,
 		X86_CVTSI2SD,
 
+		X86_CVTSD2SS,
+
+		X86_TEST,
+
 		X86_PUSH,
 		X86_PUSHQ,
 
@@ -411,6 +415,8 @@ namespace Glass
 
 		void AssembleLogicalOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
 
+		void AssembleLogicalCompare(IRBinOp* inst, std::vector<X86_Inst*>& stream);
+
 		void AssembleIf(IRIf* ir_if, std::vector<X86_Inst*>& stream);
 		void AssembleWhile(IRWhile* ir_while, std::vector<X86_Inst*>& stream);
 
@@ -421,6 +427,13 @@ namespace Glass
 
 		void AssembleIntTruncCast(IRIntTrunc* ir_int_trunc, std::vector<X86_Inst*>& stream);
 		void AssembleInt2FP(IRInt2FP* ir_int_trunc, std::vector<X86_Inst*>& stream);
+
+		void AssembleFPTrunc(IRFPTrunc* ir_fp_trunc, std::vector<X86_Inst*>& stream);
+
+		void AssembleSExt(IRSExtCast* ir_sext_cast, std::vector<X86_Inst*>& stream);
+
+
+		void AssembleFuncRef(IRFuncRef* ir_func_ref, std::vector<X86_Inst*>& stream);
 
 		void AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream);
 		void AssembleIRRegisterValue(IRRegisterValue* register_value, std::vector<X86_Inst*>& stream);

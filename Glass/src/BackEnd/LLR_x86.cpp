@@ -498,6 +498,10 @@ namespace Glass
 		case IRNodeType::NotEqual:
 			AssembleLogicalOp((IRBinOp*)inst, stream);
 			break;
+		case IRNodeType::And:
+		case IRNodeType::Or:
+			AssembleLogicalCompare((IRBinOp*)inst, stream);
+			break;
 		case IRNodeType::If:
 			AssembleIf((IRIf*)inst, stream);
 			break;
@@ -528,6 +532,16 @@ namespace Glass
 			AssembleInt2FP((IRInt2FP*)inst, stream);
 		}
 		break;
+		case IRNodeType::SExtCast:
+		{
+			AssembleSExt((IRSExtCast*)inst, stream);
+		}
+		break;
+		case IRNodeType::FPTrunc:
+		{
+			AssembleFPTrunc((IRFPTrunc*)inst, stream);
+		}
+		break;
 		case IRNodeType::Ptr2IntCast: {
 			auto ptr_2_int = (IRPtr2IntCast*)inst;
 
@@ -536,6 +550,11 @@ namespace Glass
 			}
 		}
 									break;
+		case IRNodeType::FuncRef:
+		{
+			AssembleFuncRef((IRFuncRef*)inst, stream);
+		}
+		break;
 
 		default:
 			GS_CORE_ASSERT(0, "Unknown IR Instruction");
@@ -1703,6 +1722,72 @@ namespace Glass
 		}
 	}
 
+	void X86_BackEnd::AssembleLogicalCompare(IRBinOp* inst, std::vector<X86_Inst*>& stream)
+	{
+		auto cont_label_name = GetContLabelName();
+
+		X86_Inst* continue_label_ref = ASMA(X86_Inst());
+		continue_label_ref->type = X86_LABEL_REF;
+		continue_label_ref->as.label.name = cont_label_name;
+
+		auto result_register_id = GetRegisterID();
+		auto result_register = Allocate_Register(RegisterUsageByType(inst->Type), result_register_id, stream);
+
+		if (inst->GetType() == IRNodeType::Or) {
+			Make_Move(Make_Constant(1), result_register, stream, inst->Type);
+		}
+		else {
+			Make_Move(Make_Constant(0), result_register, stream, inst->Type);
+		}
+
+		auto compare_register_id = GetRegisterID();
+		auto compare_register = Allocate_Register(RegisterUsageByType(inst->Type), compare_register_id, stream);
+
+		Make_Move(GetIRRegister(inst->RegisterA->RegisterID), compare_register, stream, inst->Type);
+
+		X86_Inst* first_compare = ASMA(X86_Inst());
+		first_compare->type = X86_CMP;
+		first_compare->as.cmp.a = compare_register;
+		first_compare->as.cmp.b = Make_Constant(0);
+		stream.push_back(first_compare);
+
+		X86_ASM cond_jump_type = (X86_ASM)0;
+
+		if (inst->GetType() == IRNodeType::Or) {
+			cond_jump_type = X86_JMPNE;
+		}
+		else {
+			cond_jump_type = X86_JMPE;
+		}
+
+		X86_Inst* cond_jump = ASMA(X86_Inst());
+		cond_jump->type = cond_jump_type;
+		cond_jump->as.jmp.Where = continue_label_ref;
+		stream.push_back(cond_jump);
+
+		Make_Move(GetIRRegister(inst->RegisterA->RegisterID), compare_register, stream, inst->Type);
+
+		X86_Inst* second_compare = ASMA(X86_Inst());
+		second_compare->type = X86_CMP;
+		second_compare->as.cmp.a = compare_register;
+		second_compare->as.cmp.b = Make_Constant(0);
+		stream.push_back(second_compare);
+
+		X86_Inst* conditional_set = ASMA(X86_Inst());
+		conditional_set->type = X86_SETNE;
+		conditional_set->as.cond_set.destination = result_register;
+		stream.push_back(conditional_set);
+
+		X86_Inst* continue_label = ASMA(X86_Inst());
+		continue_label->type = X86_LABEL;
+		continue_label->as.label.name = cont_label_name;
+		stream.push_back(continue_label);
+
+		Free_Register(compare_register_id);
+
+		SetRegisterValue(result_register);
+	}
+
 	void X86_BackEnd::AssembleIf(IRIf* ir_if, std::vector<X86_Inst*>& stream)
 	{
 		auto cont_label_name = GetContLabelName();
@@ -2006,9 +2091,67 @@ namespace Glass
 		SetRegisterValue(cvt_register);
 	}
 
+	void X86_BackEnd::AssembleFPTrunc(IRFPTrunc* ir_fp_trunc, std::vector<X86_Inst*>& stream)
+	{
+		u64 fp_size = TypeSystem::GetTypeSize(ir_fp_trunc->Type);
+
+		if (fp_size <= TypeSystem::GetTypeSize(m_Data.IR_RegisterTypes.at(ir_fp_trunc->FloatRegister))) {
+			SetRegisterValue(GetIRRegister(ir_fp_trunc->FloatRegister, false));
+			return;
+		}
+
+		X86_ASM cvt_type = (X86_ASM)0;
+
+		cvt_type = X86_CVTSD2SS;
+
+		auto floating = GetIRRegister(ir_fp_trunc->FloatRegister);
+		auto cvt_register = Allocate_Register(RegisterUsage::REG_F64, GetRegisterID(), stream);
+
+		X86_Inst* cvt = ASMA(X86_Inst());
+		cvt->type = cvt_type;
+		cvt->as.bin_op.destination = cvt_register;
+		cvt->as.bin_op.value = floating;
+
+		stream.push_back(cvt);
+
+		SetRegisterValue(cvt_register);
+	}
+
+	void X86_BackEnd::AssembleSExt(IRSExtCast* ir_sext_cast, std::vector<X86_Inst*>& stream)
+	{
+		auto destination = Allocate_Register(RegisterUsageByType(ir_sext_cast->Type), GetRegisterID(), stream);
+
+		X86_ASM sext_type = X86_MOVSXD;
+
+		X86_Inst* sext = ASMA(X86_Inst());
+		sext->type = sext_type;
+		sext->as.move.source = GetIRRegister(ir_sext_cast->IntegerRegister);
+		sext->as.move.destination = destination;
+
+		stream.push_back(sext);
+
+		SetRegisterValue(destination);
+	}
+
+	void X86_BackEnd::AssembleFuncRef(IRFuncRef* ir_func_ref, std::vector<X86_Inst*>& stream)
+	{
+		auto destination = Allocate_Register(RegisterUsage::REG_I64, GetRegisterID(), stream);
+
+		X86_Inst* move = ASMA(X86_Inst());
+		move->type = X86_MOV;
+		move->as.move.source = m_Data.IR_FunctionLabels.at(ir_func_ref->FunctionID);
+		move->as.move.destination = destination;
+
+		stream.push_back(move);
+
+		SetRegisterValue(destination);
+	}
+
 	void X86_BackEnd::AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream)
 	{
-		GS_CORE_ASSERT(inst->Value);
+		if (!inst->Value) {
+			return;
+		}
 
 		IsRegisterValue = true;
 		CurrentRegister = inst;
@@ -2153,6 +2296,8 @@ namespace Glass
 		case IRNodeType::IntTrunc:
 		case IRNodeType::Int2PtrCast:
 		case IRNodeType::Ptr2IntCast:
+		case IRNodeType::SExtCast:
+		case IRNodeType::FPTrunc:
 		{
 			type = ((IRIntTrunc*)inst)->Type;
 		}
@@ -2168,6 +2313,8 @@ namespace Glass
 		case IRNodeType::NotEqual:
 		case IRNodeType::BitAnd:
 		case IRNodeType::BitOr:
+		case IRNodeType::And:
+		case IRNodeType::Or:
 		{
 			type = ((IRBinOp*)inst)->Type;
 		}
@@ -2191,6 +2338,11 @@ namespace Glass
 		case IRNodeType::AnyArray:
 		{
 			return TypeSystem::GetDynArray(TypeSystem::GetAny());
+		}
+		break;
+		case IRNodeType::FuncRef:
+		{
+			type = m_Metadata->GetFunctionMetadata(((IRFuncRef*)inst)->FunctionID)->Signature;
 		}
 		break;
 
