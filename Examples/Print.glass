@@ -28,7 +28,7 @@ fn print_u_int(u64 unsigned, u64 bit_size) {
 
 	if bit_size < 32 {
 		u32 u_32 = cast(u32) unsigned;
-		printf("%u", u_32);
+		printf("%lu", u_32);
 	}
 
 	if bit_size > 32 {

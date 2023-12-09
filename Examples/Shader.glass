@@ -12,15 +12,20 @@ struct Shader {
 };
 
 fn Shader_Create(u8* path) : Shader {
+
     assert(cast(i32) path ," :: Shader_Create() :: path was null");
-    print("[INFO] Loading Shader :: '%' \n", path);
+    printf("[INFO] Loading Shader :: '%s' \n", path);
 
     Shader s;
+
+    printf("Shader :: Reading File\n", path);
 
     f := open_file(path, File_Open_Mode.Read);
     u64 shader_source_size = 0;
     shader_source := read_entire_file(f, &shader_source_size);
     close_file(f);
+
+    printf("Shader :: Read File\n", path)
 
     u8[..] vertex_source;
     u8[..] fragment_source;
@@ -111,20 +116,43 @@ fn Shader_Create(u8* path) : Shader {
 
 	s.renderer_id = glCreateProgram();
 
-	glAttachShader(s.renderer_id, Compile_GL_Shader(vertex_source, GL_VERTEX_SHADER));
-	glAttachShader(s.renderer_id, Compile_GL_Shader(fragment_source, GL_FRAGMENT_SHADER));
+    vtx_result := Compile_GL_Shader(GL_VERTEX_SHADER, vertex_source);
+    frg_result := Compile_GL_Shader(GL_FRAGMENT_SHADER, fragment_source);
+
+	glAttachShader(s.renderer_id, vtx_result);
+	glAttachShader(s.renderer_id, frg_result);
 
 	glLinkProgram(s.renderer_id);
+
+    i32 link_status = 0;
+    glGetProgramiv(s.renderer_id, GL_LINK_STATUS, &link_status);
+
+    if link_status == GL_FALSE {
+        print("Failed to link program\n");
+    }
 
 	free(shader_source.data);
 
 	return s;
 }
 
-fn Compile_GL_Shader(u8[..] src, i32 type) : u32 {
+fn Compile_GL_Shader(i32 type, u8[..] src) : u32 {
+
 	sh := glCreateShader(type);
-	glShaderSource(sh, 1, cast(u8**) &src.data, cast(i32*) &src.count);
+
+    i32 len = xx src.count;
+    len = len - 1;
+
+	glShaderSource(sh, 1, cast(u8**) &src.data, &len);
 	glCompileShader(sh);
+
+    i32 compile_status = 0;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &compile_status);
+
+    if compile_status == GL_FALSE {
+        print("Failed to compile shader\n");
+    }
+
 	return sh;
 }
 

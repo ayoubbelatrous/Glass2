@@ -15,6 +15,16 @@ namespace Glass {
 		m_FunctionNames[metadata.Symbol.Symbol] = ID;
 	}
 
+	void MetaData::RegisterType(u64 ID, const std::string& name, u64 size, u64 alignment)
+	{
+		m_Types[ID] = name;
+		m_TypeNames[name] = ID;
+		m_TypeSizes[ID] = size;
+		m_TypeFlags[ID] = 0;
+		m_TypeAlignments[ID] = alignment;
+		TypeSystem::GetBasic(ID);
+	}
+
 	const u64 MetaData::GetTypeSize(TypeStorage* type) const
 	{
 		if (type->Kind == TypeStorageKind::Pointer) {
@@ -77,25 +87,36 @@ namespace Glass {
 
 		i64 remainder = 0;
 
+		u64 offset = 0;
+
 		for (MemberMetadata& member : metadata->Members) {
 			auto member_size = (i64)GetTypeSize(member.Type);
 
-			member.Offset = size;
-
 			if (member_size >= alignment) {
+				size += remainder;
+				offset += remainder;
 				remainder = member_size % alignment;
 				size += member_size;
+				offset += member_size;
 			}
 			else {
 				if (remainder - member_size >= 0) {
-					size += remainder = remainder - member_size;
+					offset += (remainder - member_size) + member_size;
+					remainder = remainder - member_size;
+					size += member_size;
 				}
 				else {
-					remainder = member_size % alignment;
-					size += (member_size % alignment) + remainder;
+					size += remainder;
+					remainder = (alignment - (member_size % alignment)) % alignment;
+					size += member_size;
+					offset += member_size;
 				}
 			}
+
+			member.Offset = offset - member_size;
 		}
+
+		size += remainder;
 
 		if (size != 0 && alignment != 0) {
 			size_t finalPadding = (alignment - (size % alignment)) % alignment;
@@ -190,6 +211,37 @@ namespace Glass {
 		}
 
 		return SymbolType::None;
+	}
+
+	IRFunction* FunctionMetadata::FindPolymorphicOverload(const PolymorphicOverload& query)
+	{
+		for (auto& [overload, func] : PolyMorphicInstantiations) {
+
+			bool equal = true;
+
+			if (overload.Arguments.size() != query.Arguments.size()) {
+				equal = false;
+			}
+
+			for (auto& [name, value] : overload.Arguments)
+			{
+				auto this_type = TypeSystem::TypeExpressionGetType((TypeExpression*)value);
+				auto other_type = TypeSystem::TypeExpressionGetType((TypeExpression*)query.Arguments.at(name));
+
+				if (this_type != other_type) {
+					equal = false;
+				}
+			}
+
+			if (equal) {
+				return func;
+			}
+			else {
+				continue;
+			}
+		}
+
+		return nullptr;
 	}
 
 	bool FunctionMetadata::IsOverloaded() const

@@ -2,26 +2,41 @@
 #load "Texture.glass";
 #load "Buffer.glass";
 
-u64 R2D_QUAD_COUNT			= 10000;
-u64 R2D_VERTECIS_PER_QUAD	= 4;
+u64 R2D_QUAD_COUNT			:: 10000;
+u64 R2D_VERTECIS_PER_QUAD	:: 4;
 
 #foreign fn sqrt(f64 x) : f64 {};
 
 fn Renderer2D_init_batch(Renderer2D* r, Renderer2DBatch* batch, Type vertex_type, u64 vertex_size, u8* shader_file_name) {
 
 	u64 quad_buffer_size = R2D_VERTECIS_PER_QUAD * vertex_size;
+
 	quad_buffer_size = quad_buffer_size * R2D_QUAD_COUNT;
+
+	print("Batch v buffer size :: %\n", quad_buffer_size);
 
 	batch.vertex_base = malloc(quad_buffer_size);
 	batch.vertex_pointer = batch.vertex_base;
 	batch.vertex_count = 0;
 
+	printf("creating vertex layout!\n");
 	vertex_layout := BufferLayout_Create(vertex_type, vertex_size);
+
+	printf("creating vertex buffer!\n");
 	batch.vertex_buffer = VertexBuffer_Create(null, quad_buffer_size);
-	batch.vertex_array = VertexArray_Create();
 
+	printf("creating vertex array!\n");
+	va := VertexArray_Create();
+
+	batch.vertex_array = va;
+
+	printf("batch.vertex_array.renderer_id = %i\n", batch.vertex_array.renderer_id);
+
+	printf("VertexArray_AddVertexBuffer\n");
 	VertexArray_AddVertexBuffer(&batch.vertex_array, &batch.vertex_buffer, &vertex_layout);
+	printf("After VertexArray_AddVertexBuffer\n");
 
+	printf("Shader_Create\n");
 	batch.shader = Shader_Create(shader_file_name);
 }
 
@@ -32,8 +47,12 @@ struct TextVertex {
 
 fn Renderer2D_init(Renderer2D* r) {
 
+	print("Renderer2D_init()\n");
+
 	Renderer2D_init_batch(r, &r.text, Vertex, sizeof(Vertex), "Examples/quad.glsl");
 	Renderer2D_init_batch(r, &r.quad, TextVertex, sizeof(TextVertex), "Examples/quad.glsl");
+
+	printf("finished init batches!\n");
 
 	R2D_INDICES_COUNT := R2D_QUAD_COUNT * 6;
 	u32[..] quadIndices = NewArray(u32, R2D_INDICES_COUNT);
@@ -56,6 +75,8 @@ fn Renderer2D_init(Renderer2D* r) {
 
 	r.index_buffer = IndexBuffer_Create(quadIndices);
 
+	printf("Making Vertices\n");
+
 	//@Vertices
 	r.quad_vertices.data 	= malloc(R2D_VERTECIS_PER_QUAD * sizeof(vec4));
 	r.quad_vertices.count 	= R2D_VERTECIS_PER_QUAD;
@@ -64,22 +85,33 @@ fn Renderer2D_init(Renderer2D* r) {
 	r.quad_vertices[2] = Vec4(0.5, 		0.5, 	0.0, 	1.0);
 	r.quad_vertices[3] = Vec4(-0.5, 	0.5, 	0.0, 	1.0);
 
+	printf("Allocating UVs\n");
 	//@UVs
 	r.texture_coords.data 	= malloc(R2D_VERTECIS_PER_QUAD * sizeof(vec2));
 	r.texture_coords.count 	= R2D_VERTECIS_PER_QUAD;
+
+	printf("Making UVs\n");
 
 	r.texture_coords[0] = Vec2(0.0, 0.0);
 	r.texture_coords[1] = Vec2(1.0, 0.0);
 	r.texture_coords[2] = Vec2(1.0, 1.0);
 	r.texture_coords[3] = Vec2(0.0, 1.0);
+
+	printf("Renderer2D_init :: Finsihed\n");
 }
 
-fn Renderer2D_quad_flush(Renderer2DBatch* batch, mat4 projection) {
+fn Renderer2D_quad_flush(Renderer2DBatch* batch, mat4* projection) {
+
+	printf("Vertex Array Bind\n");
+
+	printf("Renderer2D_quad_flush :: batch.vertex_array.renderer_id = %i\n", batch.vertex_array.renderer_id);
+	printf("Renderer2D_quad_flush :: batch.vertex_array.vertex_buffer.renderer_id = %i\n", batch.vertex_array.vertex_buffer.renderer_id);
 
 	VertexArray_Bind(&batch.vertex_array);
 
 	u64 buffer_size = batch.vertex_count * sizeof(Vertex);
 
+	printf("glBufferSubData\n");
 	glBufferSubData(
 		GL_ARRAY_BUFFER,
 		0,
@@ -87,10 +119,12 @@ fn Renderer2D_quad_flush(Renderer2DBatch* batch, mat4 projection) {
 		batch.vertex_base
 	);
 
+	printf("Shader Bind\n");
 	Shader_Bind(&batch.shader);
-	Shader_SetMat4(&batch.shader, "u_ViewProjection", &projection);
+	Shader_SetMat4(&batch.shader, "u_ViewProjection", projection);
 	Shader_SetInt(&batch.shader, "u_Tex", 0);
 
+	printf("glDrawElements\n");
 	glDrawElements(GL_TRIANGLES, cast(u32) batch.index_count, GL_UNSIGNED_INT, null);
 
 	batch.vertex_pointer = batch.vertex_base;
@@ -102,11 +136,19 @@ fn Renderer2D_quad_flush(Renderer2DBatch* batch, mat4 projection) {
 fn Renderer2D_flush(Renderer2D* r) {
 	//Draw
 
+	printf("Index Buffer Bind\n");
 	IndexBuffer_Bind(&r.index_buffer);
 
-	Renderer2D_quad_flush(&r.quad, r.projection);
+
+	printf("Quad Flush\n");
+	printf("r.quad.vertex_array.renderer_id = %i\n", r.quad.vertex_array.renderer_id);
+	Renderer2D_quad_flush(&r.quad, &r.projection);
+
+	printf("Texture Bind\n");
 	Texture_Bind(&r.default_font.atlas_texture);
-	Renderer2D_quad_flush(&r.text, r.projection);
+
+	printf("Text Flush\n");
+	Renderer2D_quad_flush(&r.text, &r.projection);
 }
 
 fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size, vec2[..] uvs) {
@@ -115,14 +157,19 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size, vec2[..] uvs) {
 
 	for 0..R2D_VERTECIS_PER_QUAD
 	{
-		t := translation(Vec3(position.x + size.x * 0.5, -position.y - size.y * 0.5, 0.0));
-		s := scaling(Vec3(size.x, size.y, 1.0));
+		vec3 tr = Vec3(position.x + size.x * 0.5, -position.y - size.y * 0.5, 0.0);
+		sc := Vec3(size.x, size.y, 1.0);
+
+		t := translation(tr);
+		s := scaling(sc);
 
 		ts := s * t;
 
 		vec4 p = ts * r.quad_vertices[it_index];
 
-		vertex := _Vertex(Vec3(p.x, p.y, p.z), uvs[it_index]);
+		vec3 p3 = Vec3(p.x, p.y, p.z);
+
+		vertex := _Vertex(p3, uvs[it_index]);
 
 		*qvp = vertex;
 		qvp = &qvp[1];
@@ -140,11 +187,14 @@ fn Renderer2D_draw_quad(Renderer2D* r, vec2 position, vec2 size) {
 
 fn Renderer2D_draw_text(Renderer2D* r, vec2 position, u8[..] text, f32 pixel_size) {
 
-	Vertex* qvp = cast(Vertex*) r.text.vertex_pointer;
-
 	metrics := r.default_font.metrics;
 
 	fsScale := cast(f32) (1.0 / (metrics.ascender - metrics.descenderY)) * cast(f64) pixel_size;
+
+	Vertex* qvp;
+
+	v_ptr := r.text.vertex_pointer;
+	qvp = xx v_ptr;
 
 	space_glyph := Atlas_Font_GetGlyph(&r.default_font, cast(u32) " "[0]);
 	spaceGlyphAdvance := cast(f32) space_glyph.Advance;
@@ -222,10 +272,16 @@ fn Renderer2D_draw_text(Renderer2D* r, vec2 position, u8[..] text, f32 pixel_siz
 
 			cursor.x = cursor.x + fsScale * cast(f32) glyph.Advance;
 
-			qvp[0] = _Vertex(Vec3(quadMin), texCoordMin);
-			qvp[1] = _Vertex(Vec3(quadMin.x, quadMax.y), Vec2(texCoordMin.x, texCoordMax.y));
-			qvp[2] = _Vertex(Vec3(quadMax), texCoordMax);
-			qvp[3] = _Vertex(Vec3(quadMax.x, quadMin.y), Vec2(texCoordMax.x, texCoordMin.y));
+			pos := Vec3(quadMin);
+			qvp[0] = _Vertex(pos, texCoordMin);
+			pos = Vec3(quadMin.x, quadMax.y);
+			uvs := Vec2(texCoordMin.x, texCoordMax.y);
+			qvp[1] = _Vertex(pos, uvs);
+			pos = Vec3(quadMax);
+			qvp[2] = _Vertex(pos, texCoordMax);
+			pos = Vec3(quadMax.x, quadMin.y);
+			uvs = Vec2(texCoordMax.x, texCoordMin.y);
+			qvp[3] = _Vertex(pos, uvs);
 
 			qvp = &qvp[4];
 
@@ -271,7 +327,7 @@ struct Renderer2D
 
 	mat4 			projection;
 
-	Atlas_Font default_font;
+	Atlas_Font 		default_font;
 };
 
 fn _Vertex(vec3 pos, vec2 uv) : Vertex {

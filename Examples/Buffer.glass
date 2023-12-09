@@ -113,17 +113,21 @@ fn BufferLayout_Free(BufferLayout layout) {
 
 fn VertexArray_Create() : VertexArray {
 
+	u64 data = sizeof(VertexArray);
+
 	VertexArray va;
 
 	va.vertex_buffer_index 		= 0;
-	va.renderer_id				= 0;
+	va.renderer_id				= 50;
 
+	printf("VertexArray_Create ::  glGenVertexArrays()\n");
 	glGenVertexArrays(1, &va.renderer_id);
 
 	if va.renderer_id == 0 {
 		assert(0, " :: VertexArray_Create() :: Failed to create gl VertexArray")
 	}
 
+	printf("VertexArray_Create ::  Finsihed\n");
 	return va;
 }
 
@@ -141,19 +145,33 @@ fn VertexBuffer_Create(void* data, u64 size) : VertexBuffer {
 		assert(0, " :: VertexBuffer_Create() :: Failed to create gl vertex buffer");
 	}
 
+	printf("VertexBuffer_Create :: glNamedBufferData\n", vb.size);
+
 	glNamedBufferData(vb.renderer_id, size, data, GL_DYNAMIC_DRAW);
+
+	printf("VertexBuffer_Create :: Finished\n", vb.size);
 
 	return vb;
 }
 
 fn VertexArray_AddVertexBuffer(VertexArray* va, VertexBuffer* vb, BufferLayout* ly) {
 
+	printf("VertexArray_AddVertexBuffer Begin\n");
+
+	printf("vb.renderer_id: %i\n", vb.renderer_id);
+
 	glBindVertexArray(va.renderer_id);
 	glBindBuffer(GL_ARRAY_BUFFER, vb.renderer_id);
+
+	printf("va.renderer_id = %i\n", va.renderer_id);
+
+	printf("VertexArray_AddVertexBuffer :: Loop \n");
 
 	u64 i = 0;
 
 	while i < ly.elements.count {
+
+		printf("VertexArray_AddVertexBuffer :: Loop \n");
 
 		element := ly.elements[i];
 
@@ -161,11 +179,15 @@ fn VertexArray_AddVertexBuffer(VertexArray* va, VertexBuffer* vb, BufferLayout* 
 
 		glEnableVertexAttribArray(va.vertex_buffer_index);
 
+		printf("VertexArray_AddVertexBuffer :: Enable Attrib Array \n");
+
 		print("Test");
+
+		comp_count := GetComponentCount(element.type);
 
 		glVertexAttribPointer(
 			va.vertex_buffer_index,
-			GetComponentCount(element.type),
+			comp_count,
 			GL_FLOAT,
 			normalized,
 			ly.stride,
@@ -179,10 +201,18 @@ fn VertexArray_AddVertexBuffer(VertexArray* va, VertexBuffer* vb, BufferLayout* 
 	}
 
 	va.vertex_buffer = *vb;
+
+	//memcpy(xx &va.vertex_buffer, xx vb, sizeof(VertexBuffer));
+
+	printf("VertexArray_AddVertexBuffer :: va.vertex_buffer.renderer_id: %i\n", va.vertex_buffer.renderer_id);
+
+	printf("VertexArray_AddVertexBuffer :: End!\n");
 }
 
 fn VertexArray_Bind(VertexArray* va) {
+	printf("glBindVertexArray: %i\n", va.renderer_id);
 	glBindVertexArray(va.renderer_id);
+	printf("glBindBuffer: %i\n", va.vertex_buffer.renderer_id);
 	glBindBuffer(GL_ARRAY_BUFFER, va.vertex_buffer.renderer_id);
 }
 
@@ -193,6 +223,8 @@ struct IndexBuffer {
 
 fn IndexBuffer_Create(u32[..] elements) : IndexBuffer {
 
+	printf("IndexBuffer_Create :: Begin\n");
+
 	IndexBuffer ib;
 
 	glGenBuffers(1, &ib.renderer_id);
@@ -200,6 +232,8 @@ fn IndexBuffer_Create(u32[..] elements) : IndexBuffer {
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.count * sizeof(u32), cast(void*) elements.data, GL_STATIC_DRAW);
 
 	ib.count = cast(u32) elements.count;
+
+	printf("IndexBuffer_Create :: End\n");
 
 	return ib;
 }

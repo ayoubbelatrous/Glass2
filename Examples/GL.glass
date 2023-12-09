@@ -1992,6 +1992,18 @@ fn glTexParameteri(i32 target,i32 pname,i32 param) : void {}
 
 (u32,u8*):i32 glGetUniformLocation;
 
+//void glGetProgramiv(	GLuint program,
+//	GLenum pname,
+//	GLint *params);
+
+(u32,i32,i32*):void glGetProgramiv;
+
+//void glGetShaderiv(	GLuint shader,
+//	GLenum pname,
+//	GLint *params);
+
+(u32,i32,i32*):void glGetShaderiv;
+
 (u32) glUseProgram;
 
 (i32) glGenerateMipmap;
@@ -2006,8 +2018,8 @@ fn OpenGLMessageCallback(
 	void* userParam)
 	: void
 {
-	print(
-		"[OpenGL] :: [ERROR] % :::: % :: % :: % :: % \n",
+	printf(
+		"[OpenGL] :: [ERROR] %s :::: %i :: %i :: %i :: %i \n",
 		message,
 		severity,
 		type,
@@ -2071,5 +2083,10 @@ fn InitGL() : void {
 
 	GL_load_Func(cast(void**) &glGenerateMipmap, 			"glGenerateMipmap");
 
+	GL_load_Func(cast(void**) &glGetProgramiv, 				"glGetProgramiv");
+	GL_load_Func(cast(void**) &glGetShaderiv, 				"glGetShaderiv");
+
 	InitOpenGLDebugging();
+
+	printf("initilized Gl!\n");
 }

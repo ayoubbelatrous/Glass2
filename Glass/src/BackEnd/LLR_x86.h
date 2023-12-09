@@ -39,6 +39,7 @@ namespace Glass
 
 		X86_MOVZX,
 		X86_MOVSXD,
+		X86_MOVSX,
 		X86_MOVSS,
 		X86_MOVSD,
 		X86_LEA,
@@ -64,6 +65,18 @@ namespace Glass
 		X86_IMUL,
 		X86_IDIV,
 
+		X86_ADDSS,
+		X86_ADDSD,
+
+		X86_SUBSS,
+		X86_SUBSD,
+
+		X86_MULSS,
+		X86_MULSD,
+
+		X86_DIVSS,
+		X86_DIVSD,
+
 		X86_AND,
 		X86_OR,
 
@@ -83,6 +96,8 @@ namespace Glass
 		X86_DATA_STR_REF,
 
 		X86_GLOB_DE_REF,
+
+		X86_DATA_FLOAT,
 
 		X86_CMP,
 
@@ -256,6 +271,12 @@ namespace Glass
 		X86_Word size;
 	};
 
+	struct X86_Data_Float_Inst
+	{
+		u64 index;
+		X86_Word size;
+	};
+
 	enum Section_Type : u8 {
 		SEC_Code, SEC_Data
 	};
@@ -332,6 +353,8 @@ namespace Glass
 			X86_Constant_Binop			const_binop;
 
 			X86_DeReference_Inst		de_ref;
+
+			X86_Data_Float_Inst			data_float;
 		} as;
 
 		const char* comment = nullptr;
@@ -368,6 +391,17 @@ namespace Glass
 	struct X86_Register_Allocation {
 		X86_Register Register;
 		bool free_after_use = false;
+	};
+
+	enum Float_Type {
+		Float, Double
+	};
+
+	struct Data_Section_Float {
+
+		u64 index;
+		Float_Type type;
+		double data;
 	};
 
 	class X86_BackEnd
@@ -408,7 +442,6 @@ namespace Glass
 
 		void AssembleArgument(IRArgumentAllocation* inst, std::vector<X86_Inst*>& stream);
 
-		void AssembleCall(IRFunctionCall* inst, std::vector<X86_Inst*>& stream);
 		void AssembleReturn(IRReturn* inst, std::vector<X86_Inst*>& stream);
 
 		void AssembleBinOp(IRBinOp* inst, std::vector<X86_Inst*>& stream);
@@ -432,18 +465,25 @@ namespace Glass
 
 		void AssembleSExt(IRSExtCast* ir_sext_cast, std::vector<X86_Inst*>& stream);
 
+		void AssembleZExt(IRZExtCast* ir_zext_cast, std::vector<X86_Inst*>& stream);
+
+		void AssembleFPExt(IRFPExt* ir_fpext, std::vector<X86_Inst*>& stream);
 
 		void AssembleFuncRef(IRFuncRef* ir_func_ref, std::vector<X86_Inst*>& stream);
 
 		void AssembleIRRegister(IRRegister* inst, std::vector<X86_Inst*>& stream);
 		void AssembleIRRegisterValue(IRRegisterValue* register_value, std::vector<X86_Inst*>& stream);
 
+		void AssembleCall(IRFunctionCall* inst, std::vector<X86_Inst*>& stream);
+		void AssembleRefCall(IRCallFuncRef* inst, std::vector<X86_Inst*>& stream);
+		void Make_Call(X86_Inst* location, std::vector<IRRegisterValue*> arguments, TSFunc* signature, bool variadic, std::vector<X86_Inst*>& stream);
+
 		TypeStorage* GetIRNodeType(IRInstruction* inst);
 
 		std::string Print(const std::vector<X86_Inst*>& assm);
 		void Print(X86_Inst inst, std::string& stream, std::string& comments);
 
-		std::string MangleName(const std::string& name, TSFunc* signature);
+		std::string MangleName(std::string name, TSFunc* signature);
 
 		std::string RegisterToString(X86_Register reg);
 
@@ -464,6 +504,8 @@ namespace Glass
 		X86_Inst* Make_DeRef(X86_Inst* what);
 
 		X86_Inst* Make_Constant_Float(double floating);
+
+		X86_Inst* Make_Constant_Data_Float(double floating, Float_Type type);
 
 		X86_Inst* GetIRRegister(u64 id, bool free_allocated_registers = true);
 		TypeStorage* GetIRRegisterType(u64 id);
@@ -547,6 +589,8 @@ namespace Glass
 		std::vector<std::pair<u64, std::vector<char>>> m_DataStrings;
 		std::vector<std::pair<u64, std::vector<char>>> m_TypeInfoStrings;
 		std::vector<std::string> m_Externals; // currently name is the linkage name
+
+		std::vector<Data_Section_Float> m_DataFloats; // currently name is the linkage name
 
 		std::vector<std::pair<u64, u64>> GlobalUnInitializedVariables;
 

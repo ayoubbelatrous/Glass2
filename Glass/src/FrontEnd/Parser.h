@@ -45,6 +45,7 @@ namespace Glass
 
 		Statement* ParsePrimaryExpr();
 
+		Expression* ParseRefExpr();
 		Expression* ParseDeRefExpr();
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
@@ -74,6 +75,9 @@ namespace Glass
 				break;
 			case TokenType::Multiply:
 				return Operator::Multiply;
+				break;
+			case TokenType::Modulo:
+				return Operator::Modulo;
 				break;
 			case TokenType::Divide:
 				return Operator::Divide;

@@ -103,6 +103,7 @@ namespace Glass
 			{'+',TokenType::Add},
 			{'-',TokenType::Subtract},
 			{'*',TokenType::Multiply},
+			{'%',TokenType::Modulo},
 			{'/',TokenType::Divide},
 
 			{'=',TokenType::Assign},

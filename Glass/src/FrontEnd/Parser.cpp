@@ -449,7 +449,12 @@ namespace Glass
 
 		Node.RetSymbol = Consume();
 
-		Node.Expr = ParseExpression();
+		if (At().Type != TokenType::SemiColon) {
+			Node.Expr = ParseExpression();
+		}
+		else {
+			Consume();
+		}
 
 		return Application::AllocateAstNode(Node);
 	}
@@ -893,7 +898,7 @@ namespace Glass
 		auto is_multiplicative_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
 				return false;
-			if (op == Operator::Multiply || op == Operator::Divide)
+			if (op == Operator::Multiply || op == Operator::Divide || op == Operator::Modulo)
 				return true;
 
 			return false;
@@ -927,7 +932,7 @@ namespace Glass
 
 			Consume();
 
-			what = ParseArrayAccessExpr();
+			what = ParseRefExpr();
 
 			NegateExpr Node;
 			Node.What = what;
@@ -935,54 +940,32 @@ namespace Glass
 			what = (Expression*)AST(Node);
 		}
 		else {
-			what = ParseArrayAccessExpr();
+			what = ParseRefExpr();
 		}
 
 		return what;
 	}
 
-	Expression* Parser::ParseArrayAccessExpr()
+	Expression* Parser::ParseRefExpr()
 	{
-		Expression* object = ParseMemberExpr();
+		Expression* right = nullptr;
 
-		if (At().Type == TokenType::OpenBracket) {
+		if (At().Type == TokenType::Ampersand) {
 
-			Token bracket = Consume();
+			Consume();
 
-			Expression* index = ParseMemberExpr();
+			right = ParseDeRefExpr();
 
-			Token close_bracket = Consume();
+			RefNode Node;
+			Node.What = right;
 
-			ArrayAccess Node;
-
-			Node.Object = object;
-			Node.Index = index;
-
-			object = Application::AllocateAstNode(Node);
+			right = (Expression*)AST(Node);
+		}
+		else {
+			right = ParseDeRefExpr();
 		}
 
-		return object;
-	}
-
-	Expression* Parser::ParseMemberExpr()
-	{
-		Expression* left = ParseDeRefExpr();
-
-		while (At().Type == TokenType::Period && At(1).Type != TokenType::Period) {
-
-			Token period = Consume();
-
-			Expression* right = ParseDeRefExpr();
-
-			MemberAccess Node;
-
-			Node.Object = left;
-			Node.Member = right;
-
-			left = Application::AllocateAstNode(Node);
-		}
-
-		return left;
+		return right;
 	}
 
 	Expression* Parser::ParseDeRefExpr()
@@ -993,7 +976,7 @@ namespace Glass
 
 			Consume();
 
-			right = ParseCallExpr();
+			right = ParseMemberExpr();
 
 			DeRefNode Node;
 			Node.What = right;
@@ -1001,10 +984,90 @@ namespace Glass
 			right = (Expression*)AST(Node);
 		}
 		else {
-			right = ParseCallExpr();
+			right = ParseMemberExpr();
 		}
 
 		return right;
+	}
+
+	Expression* Parser::ParseMemberExpr()
+	{
+		Expression* left = ParseCallExpr();
+
+		while (At().Type == TokenType::Period && At(1).Type != TokenType::Period || At().Type == TokenType::OpenBracket) {
+
+			Token period = Consume();
+
+			if (period.Type == TokenType::Period) {
+
+				Expression* right = ParseCallExpr();
+
+				if (right->GetType() != NodeType::Identifier) {
+					Abort("Expected identifier after '.' , Instead Got: ");
+				}
+
+				MemberAccess Node;
+
+				Node.Object = left;
+				Node.Member = right;
+
+				left = Application::AllocateAstNode(Node);
+			}
+			else {
+
+				Expression* index = ParseExpression();
+
+				Token close_bracket = Consume();
+
+				if (!index) {
+					Abort("Expected an expression after '[', Instead Got: ");
+				}
+
+				if (close_bracket.Type != TokenType::CloseBracket) {
+					Abort("Expected ']', Instead Got: ");
+				}
+
+				ArrayAccess Node;
+
+				Node.Object = left;
+				Node.Index = index;
+
+				left = Application::AllocateAstNode(Node);
+			}
+		}
+
+		return left;
+	}
+
+	Expression* Parser::ParseArrayAccessExpr()
+	{
+		Expression* object = ParseCallExpr();
+
+		while (At().Type == TokenType::OpenBracket) {
+
+			Token bracket = Consume();
+
+			Expression* index = ParseCallExpr();
+
+			Token close_bracket = Consume();
+
+			if (!index) {
+				Abort("Expected an expression after '[', Instead Got: ");
+			}
+
+			if (close_bracket.Type != TokenType::CloseBracket) {
+				Abort("Expected ']', Instead Got: ");
+			}
+
+			ArrayAccess Node;
+
+			Node.Object = object;
+			Node.Index = index;
+
+			object = Application::AllocateAstNode(Node);
+		}
+
+		return object;
 	}
 
 	Expression* Parser::ParseCallExpr()
@@ -1148,7 +1211,7 @@ namespace Glass
 					third_type != TokenType::OpenParen;
 
 				if (
-					At(1).Type == TokenType::Multiply &&
+					(At(1).Type == TokenType::Multiply || (At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::Period)) &&
 					third_correct
 					) {
 
@@ -1189,17 +1252,6 @@ namespace Glass
 			}
 
 			return Application::AllocateAstNode(num_lit);
-		}
-		break;
-		case TokenType::Ampersand:
-		{
-			Consume();
-
-			RefNode Node;
-
-			Node.What = ParseExpression();
-
-			return Application::AllocateAstNode(Node);
 		}
 		break;
 		case TokenType::Multiply:

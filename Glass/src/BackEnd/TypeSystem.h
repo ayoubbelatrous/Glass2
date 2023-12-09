@@ -125,6 +125,8 @@ namespace Glass {
 		static TypeStorage* GetType();
 		static TypeStorage* GetArray();
 
+		static std::string PrintType(TypeStorage* type);
+
 	private:
 
 		static void Insert(u64 hash, TypeStorage* type) {

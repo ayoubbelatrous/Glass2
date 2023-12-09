@@ -110,6 +110,9 @@ namespace Glass
 		case NodeType::NumericLiteral:
 		case NodeType::StringLiteral:
 			return;
+		case NodeType::Reference:
+		case NodeType::DeReference:
+			return;
 		}
 
 		GS_CORE_ASSERT(0);

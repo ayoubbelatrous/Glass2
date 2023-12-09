@@ -60,6 +60,7 @@ namespace Glass
 		IRInstruction* EnumCodeGen(const EnumNode* enumNode, u64 type_id = (u64)-1);
 
 		IRInstruction* IfCodeGen(const IfNode* ifNode);
+		IRInstruction* ElseCodeGen(ElseNode* elseNode);
 		IRInstruction* WhileCodeGen(const WhileNode* ifNode);
 
 		IRInstruction* ForCodeGen(const ForNode* forNode);
@@ -89,7 +90,7 @@ namespace Glass
 		IRInstruction* FunctionRefCodegen(const Identifier* func);
 		IRInstruction* FuncRefCallCodeGen(const FunctionCall* call);
 
-		std::vector<IRInstruction*> ScopeCodeGen(const ScopeNode* scope);
+		IRInstruction* ScopeCodeGen(const ScopeNode* scope);
 
 		IRInstruction* ArrayAccessCodeGen(const ArrayAccess* arrayAccess);
 		IRInstruction* TypeofCodeGen(const TypeOfNode* typeof);

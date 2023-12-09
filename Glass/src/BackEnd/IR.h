@@ -41,6 +41,15 @@ namespace Glass
 
 		IR_typeinfo_member,
 		IR_typeinfo_struct,
+		IR_typeinfo_pointer,
+		IR_typeinfo_function,
+		IR_typeinfo_dyn_array,
+
+		IR_typeinfo_enum,
+		IR_typeinfo_enum_member,
+
+		IR_typeinfo_func_param,
+		IR_globaldef_function,
 
 		IR_typeinfo,
 	};
@@ -77,6 +86,15 @@ namespace Glass
 
 		IR_typeinfo_member,
 		IR_typeinfo_struct,
+		IR_typeinfo_pointer,
+		IR_typeinfo_function,
+		IR_typeinfo_dyn_array,
+
+		IR_typeinfo_enum,
+		IR_typeinfo_enum_member,
+
+		IR_typeinfo_func_param,
+		IR_globaldef_function,
 
 		IR_typeinfo,
 	};
@@ -98,6 +116,7 @@ namespace Glass
 		ADD,
 		SUB,
 		MUL,
+		SREM,
 		DIV,
 
 		Equal,
@@ -111,6 +130,7 @@ namespace Glass
 		Or,
 
 		If,
+		Else,
 		While,
 		Return,
 		Break,
@@ -389,6 +409,34 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::MUL;
+		}
+	};
+
+	struct IRSREM : public IRInstruction {
+		IRRegisterValue* RegisterA = nullptr;
+		IRRegisterValue* RegisterB = nullptr;
+		TypeStorage* Type = nullptr;
+
+		IRSREM() = default;
+		IRSREM(IRRegisterValue* A, IRRegisterValue* B)
+			:RegisterA(A), RegisterB(B)
+		{
+		}
+
+		virtual std::string ToString() const override {
+			std::string str;
+
+			str += "SREM ";
+
+			str += RegisterA->ToString();
+			str += " : ";
+			str += RegisterB->ToString();
+
+			return str;
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::SREM;
 		}
 	};
 
@@ -965,25 +1013,31 @@ namespace Glass
 		}
 	};
 
+	struct IRElse : public IRInstruction {
+		u64 ID = 0;
+		std::vector<IRInstruction*> Instructions;
+		IRInstruction* ElseBlock;
+
+		virtual std::string ToString() const override
+		{
+			return "else";
+		}
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Else;
+		}
+	};
+
 	//To be changed to branch
 	struct IRIf : public IRInstruction {
 		u64 ID = 0;
 		u64 ConditionRegister = 0;
 		std::vector<IRInstruction*> Instructions;
+		IRInstruction* ElseBlock = nullptr;
 
 		virtual std::string ToString() const override
 		{
-			std::string str = "if";
-
-			str += "{\n";
-
-			for (auto inst : Instructions) {
-				//str += inst->ToString() + '\n';
-			}
-
-			str += "}\n";
-
-			return str;
+			return "if";
 		}
 
 		virtual IRNodeType GetType() const {

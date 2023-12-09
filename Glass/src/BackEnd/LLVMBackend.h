@@ -88,7 +88,11 @@ namespace Glass {
 		llvm::StructType* m_TypeInfoElemTy = nullptr;
 		/////////////////////
 		bool break_encountered = false;
+		bool return_encountered = false;
 		std::vector<llvm::BasicBlock*> m_BreakTargets;
+
+		llvm::Value* m_ReturnRegister;
+		llvm::BasicBlock* m_ReturnBlock;
 
 		void GenerateObjFile();
 

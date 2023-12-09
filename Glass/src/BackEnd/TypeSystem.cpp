@@ -185,6 +185,49 @@ namespace Glass {
 		return GetBasic(IR_array);
 	}
 
+	std::string TypeSystem::PrintType(TypeStorage* type)
+	{
+		if (type->Kind == TypeStorageKind::Pointer) {
+			auto as_pointer = (TSPtr*)type;
+			std::string stars;
+
+			for (size_t i = 0; i < as_pointer->Indirection; i++) {
+				stars.push_back('*');
+			}
+
+			return fmt::format("{}{}", PrintType(as_pointer->Pointee), stars);
+		}
+
+		if (type->Kind == TypeStorageKind::DynArray) {
+			auto as_array = (TSDynArray*)type;
+			return fmt::format("{}[..]", PrintType(as_array->ElementType));
+		}
+
+		if (type->Kind == TypeStorageKind::Base) {
+			return m_Instance->m_Metadata.GetType(type->BaseID);
+		}
+
+		if (type->Kind == TypeStorageKind::Function) {
+			auto as_func = (TSFunc*)type;
+
+			std::string arguments;
+			std::string return_type;
+
+			for (size_t i = 0; i < as_func->Arguments.size(); i++) {
+				if (i != 0) {
+					arguments.append(",");
+				}
+				arguments.append(PrintType(as_func->Arguments[i]));
+			}
+
+			if (as_func->ReturnType) {
+				return_type = ": " + PrintType(as_func->ReturnType);
+			}
+
+			return fmt::format("({}){}", arguments, return_type);
+		}
+	}
+
 	TypeStorage* TypeSystem::IncreaseIndirection(TypeStorage* type)
 	{
 		if (type->Kind == TypeStorageKind::Pointer) {

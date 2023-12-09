@@ -30,6 +30,8 @@ namespace Glass
 
 	void Compiler::InitTypeSystem()
 	{
+		TypeSystem::Init(m_Metadata);
+
 		m_Metadata.RegisterType(IR_void, "void", 0, 0);
 
 		m_Metadata.RegisterType(IR_float, "float", 4, 4);
@@ -97,8 +99,6 @@ namespace Glass
 
 			m_Metadata.GetTypeFlags(IR_bool) |= FLAG_NUMERIC_TYPE | FLAG_UNSIGNED_TYPE;
 		}
-
-		TypeSystem::Init(m_Metadata);
 
 		const fs_path base_file_path = "Library/Base.glass";
 
@@ -168,11 +168,32 @@ namespace Glass
 				if (stmt_Struct->Name.Symbol == "TypeInfo") {
 					generate_base_struct(stmt_Struct, IR_typeinfo, GetStructID());
 				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Enum") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_enum, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Enum_Member") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_enum_member, GetStructID());
+				}
 				if (stmt_Struct->Name.Symbol == "TypeInfo_Member") {
 					generate_base_struct(stmt_Struct, IR_typeinfo_member, GetStructID());
 				}
 				if (stmt_Struct->Name.Symbol == "TypeInfo_Struct") {
 					generate_base_struct(stmt_Struct, IR_typeinfo_struct, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Pointer") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_pointer, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Function") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_function, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Dyn_Array") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_dyn_array, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "TypeInfo_Func_Param") {
+					generate_base_struct(stmt_Struct, IR_typeinfo_func_param, GetStructID());
+				}
+				if (stmt_Struct->Name.Symbol == "GlobalDef_Function") {
+					generate_base_struct(stmt_Struct, IR_globaldef_function, GetStructID());
 				}
 			}
 			if (node_type == NodeType::Enum) {
@@ -632,6 +653,8 @@ namespace Glass
 		metadata.ASTArguments = ASTArguments;
 		metadata.ASTReturnType = fnNode->ReturnType;
 
+		metadata.FileID = m_CurrentFile;
+
 		if (previous == nullptr) {
 			m_Metadata.RegisterFunction(GetFunctionID(), metadata);
 			return;
@@ -726,6 +749,14 @@ namespace Glass
 						// 			break;
 		case NodeType::If:
 			return IfCodeGen((IfNode*)statement);
+			break;
+
+		case NodeType::Else:
+			return ElseCodeGen((ElseNode*)statement);
+			break;
+
+		case NodeType::Scope:
+			return ScopeCodeGen((ScopeNode*)statement);
 			break;
 		case NodeType::While:
 			return WhileCodeGen((WhileNode*)statement);
@@ -1007,14 +1038,6 @@ namespace Glass
 					IRF->Instructions.push_back(code);
 				}
 			}
-
-			if (stmt->GetType() == NodeType::Scope) {
-				std::vector<IRInstruction*> scope_code_stack = ScopeCodeGen((ScopeNode*)stmt);
-
-				for (auto scope_code : scope_code_stack) {
-					IRF->Instructions.push_back(scope_code);
-				}
-			}
 		}
 
 		//////////////////////////////////////////////////////////////////////////
@@ -1159,6 +1182,10 @@ namespace Glass
 			MSG_LOC(variableNode);
 			FMT_WARN("expected constant '{}' to be assigned", variableNode->Symbol.Symbol);
 		}
+		TypeStorage* constant_type = TypeExpressionGetType(variableNode->Type);
+
+		SetLikelyConstantType(constant_type->BaseID);
+		m_AutoCastTargetType = constant_type;
 
 		IRInstruction* assignment = GetExpressionByValue(variableNode->Assignment);
 		UN_WRAP(assignment);
@@ -1175,8 +1202,6 @@ namespace Glass
 
 			assignment = assignment_register->Value;
 		}
-
-		TypeStorage* constant_type = TypeExpressionGetType(variableNode->Type);
 
 		if (!constant_type) {
 			MSG_LOC(variableNode->Assignment);
@@ -1277,18 +1302,30 @@ namespace Glass
 	{
 		IRReturn ret;
 
-		SetLikelyConstantType(GetExpectedReturnType()->BaseID);
-		auto expr = (IRRegisterValue*)GetExpressionByValue(returnNode->Expr);
-		UN_WRAP(expr);
-		ResetLikelyConstantType();
+		IRRegisterValue* expr = nullptr;
+		TypeStorage* expr_type = nullptr;
 
-		auto expr_type = m_Metadata.GetExprType(expr->RegisterID);
+		if (returnNode->Expr) {
+			SetLikelyConstantType(GetExpectedReturnType()->BaseID);
 
-		GS_CORE_ASSERT(m_ExpectedReturnType);
+			expr = (IRRegisterValue*)GetExpressionByValue(returnNode->Expr);
+			UN_WRAP(expr);
 
-		if (!TypeSystem::StrictPromotion(expr_type, m_ExpectedReturnType)) {
+			expr_type = m_Metadata.GetExprType(expr->RegisterID);
+
+			GS_CORE_ASSERT(m_ExpectedReturnType);
+
+			if (!TypeSystem::StrictPromotion(expr_type, m_ExpectedReturnType)) {
+				MSG_LOC(returnNode->Expr);
+				FMT_WARN("return type doesn't match function type: {} => {}", PrintType(expr_type), PrintType(m_ExpectedReturnType));
+			}
+
+			ResetLikelyConstantType();
+		}
+
+		if (expr_type && m_ExpectedReturnType == TypeSystem::GetVoid()) {
 			MSG_LOC(returnNode->Expr);
-			FMT_WARN("return type doesn't match function type: {} => {}", PrintType(expr_type), PrintType(m_ExpectedReturnType));
+			FMT_WARN("functions with void return type cannot return a value");
 		}
 
 		ret.Value = expr;
@@ -1406,22 +1443,6 @@ namespace Glass
 		UN_WRAP(condition_ir_register);
 		auto condition_ir_node_type = condition_ir_register->Value->GetType();
 
-		//optimization to eliminate extra instruction on x86_64 backend llvm might be smart enough to detect that with no op enabled
-
-		//without
-		//	mov		al, 1
-		//	cmp		al, 0
-		//	setl	ah, 1
-		//	cmp		ah,	0
-		//	jge		false_case
-		//	... inside if struff
-
-		//with
-		//	mov		al, 1
-		//	cmp		al, 0
-		//	jge		false_case
-		//	... inside if struff
-
 		switch (condition_ir_node_type) {
 		case IRNodeType::GreaterThan:
 		case IRNodeType::LesserThan:
@@ -1474,7 +1495,17 @@ namespace Glass
 
 		IF.Instructions.push_back(IR(lexical_block));
 
+		if (ifNode->Else) {
+			IF.ElseBlock = StatementCodeGen(ifNode->Else);
+		}
+
+
 		return IR(IF);
+	}
+
+	IRInstruction* Compiler::ElseCodeGen(ElseNode* elseNode)
+	{
+		return StatementCodeGen(elseNode->Scope);
 	}
 
 	IRInstruction* Compiler::WhileCodeGen(const WhileNode* whileNode)
@@ -2033,6 +2064,9 @@ namespace Glass
 				case Operator::Multiply:
 					return "Multiplications";
 					break;
+				case Operator::Modulo:
+					return "Modulo Divisions";
+					break;
 				case Operator::Divide:
 					return "Divisions";
 					break;
@@ -2101,29 +2135,18 @@ namespace Glass
 				}
 
 				{
-					//@TODO: Generate Proper Call
-
 					const auto op_func_metadata = m_Metadata.GetFunctionMetadata(op_func_id);
 
 					Expression* lhs = binaryExpr->Left;
 					Expression* rhs = binaryExpr->Right;
 
-					FunctionCall call;
+					IRFunctionCall* call = IR(IRFunctionCall());
 
-					if (!flipped)
-					{
-						call.Arguments.push_back(lhs);
-						call.Arguments.push_back(rhs);
-					}
-					else
-					{
-						call.Arguments.push_back(rhs);
-						call.Arguments.push_back(lhs);
-					}
+					call->FuncID = op_func_id;
+					call->Arguments.push_back(A);
+					call->Arguments.push_back(B);
 
-					call.Function.Symbol = op_func_metadata->Symbol.Symbol;
-
-					IRRegisterValue* op_result = (IRRegisterValue*)ExpressionCodeGen(AST(call));
+					IRRegisterValue* op_result = CreateIRRegister(call, op_func_metadata->ReturnType);
 
 					m_Metadata.RegExprType(op_result->RegisterID, op_func_metadata->ReturnType);
 
@@ -2160,6 +2183,16 @@ namespace Glass
 		case Operator::Multiply:
 		{
 			IRMUL IROp;
+
+			IROp.RegisterA = A;
+			IROp.RegisterB = B;
+
+			ir_register->Value = IR(IROp);
+		}
+		break;
+		case Operator::Modulo:
+		{
+			IRSREM IROp;
 
 			IROp.RegisterA = A;
 			IROp.RegisterB = B;
@@ -2338,7 +2371,10 @@ namespace Glass
 		}
 		if (left->GetType() == NodeType::MemberAccess)
 		{
+			PushScope();
 			IRRegisterValue* member_access = (IRRegisterValue*)ExpressionCodeGen(left);
+			auto left_registers = PoPIRRegisters();
+			PopScope();
 
 			if (!member_access)
 				return nullptr;
@@ -2361,6 +2397,10 @@ namespace Glass
 				return nullptr;
 			}
 
+			for (auto lft : left_registers) {
+				PushIRRegister(lft);
+			}
+
 			IRStore* store = IR(IRStore());
 			{
 				store->Data = right_register;
@@ -2374,8 +2414,8 @@ namespace Glass
 		}
 		if (left->GetType() == NodeType::ArrayAccess)
 		{
-			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
 			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
+			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
 
 			if (!right_register)
 				return nullptr;
@@ -2427,7 +2467,7 @@ namespace Glass
 			return nullptr;
 		}
 
-		return result;
+		return CreateIRRegister(result);
 	}
 
 	IRInstruction* Compiler::FunctionCallCodeGen(const FunctionCall* call)
@@ -2739,13 +2779,13 @@ namespace Glass
 
 		//LookUp
 
-		auto cached = metadata->PolyMorphicInstantiations.find(PolymorphicOverload{ replacements });
+		auto cached = metadata->FindPolymorphicOverload(PolymorphicOverload{ replacements });
 
-		if (cached != metadata->PolyMorphicInstantiations.end()) {
+		if (cached != nullptr) {
 
 			//Calling
 
-			auto ir_func = cached->second;
+			auto ir_func = cached;
 
 			auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
@@ -2787,9 +2827,15 @@ namespace Glass
 
 		m_Metadata.PopContext();
 
+		u64 current_file = m_CurrentFile;
+
+		m_CurrentFile = metadata->FileID;
+
 		PushScope();
 		IRFunction* ir_func = (IRFunction*)FunctionCodeGen(ast_copy_as_function);
 		PopScope();
+
+		m_CurrentFile = current_file;
 
 		SetExpectedReturnType(calling_function_return_type);
 
@@ -2814,6 +2860,10 @@ namespace Glass
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
 	{
+		// 		if (!memberAccess->Object) {
+		// 			return nullptr;
+		// 		}
+
 		if (memberAccess->Object->GetType() == NodeType::Identifier) {
 
 			SymbolType symbol_type = m_Metadata.GetSymbolType(((Identifier*)memberAccess->Object)->Symbol.Symbol);
@@ -2846,6 +2896,7 @@ namespace Glass
 			if (memberAccess->Object->GetType() == NodeType::Identifier) {
 				reference_access = obj_expr_type.Pointer;
 			}
+
 			else if (memberAccess->Object->GetType() != NodeType::MemberAccess) {
 				//Handle temporaries that are not pointers
 				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
@@ -2904,6 +2955,10 @@ namespace Glass
 			ir_mem_access.ObjectRegister = object_register_id;
 			ir_mem_access.MemberID = member_id;
 			ir_mem_access.ReferenceAccess = reference_access;
+
+			if (ir_mem_access.ObjectRegister == 214) {
+				__debugbreak();
+			}
 
 			auto address_register = CreateIRRegister();
 
@@ -3054,9 +3109,16 @@ namespace Glass
 		}
 	}
 
-	std::vector<IRInstruction*> Compiler::ScopeCodeGen(const ScopeNode* scope)
+	IRInstruction* Compiler::ScopeCodeGen(const ScopeNode* scope)
 	{
 		m_Metadata.PushContext(ContextScopeType::FUNC);
+
+		PushScope();
+
+		IRLexBlock lexical_block;
+
+		lexical_block.Begin = scope->OpenCurly;
+		lexical_block.End = scope->CloseCurly;
 
 		std::vector<IRInstruction*> Instructions;
 
@@ -3068,25 +3130,18 @@ namespace Glass
 
 			for (auto ir_register : Registers)
 			{
-				Instructions.push_back(ir_register);
+				lexical_block.Instructions.push_back(ir_register);
 			}
 
 			if (code != nullptr) {
-				Instructions.push_back(code);
-			}
-			else {
-				if (stmt->GetType() == NodeType::Scope) {
-					std::vector<IRInstruction*> scope_code_stack = ScopeCodeGen((ScopeNode*)stmt);
-					for (auto scope_code : scope_code_stack) {
-						Instructions.push_back(scope_code);
-					}
-				}
+				lexical_block.Instructions.push_back(code);
 			}
 		}
 
+		PopScope();
 		m_Metadata.PopContext();
 
-		return Instructions;
+		return IR(lexical_block);
 	}
 
 	IRInstruction* Compiler::ArrayAccessCodeGen(const ArrayAccess* arrayAccess)
@@ -3234,6 +3289,12 @@ namespace Glass
 		auto cast_expr_code = GetExpressionByValue(castNode->Expr);
 		auto cast_type = TypeExpressionGetType(castNode->Type);
 
+		if (!cast_type) {
+			MSG_LOC(castNode);
+			FMT_WARN("unknown cast type");
+			return nullptr;
+		}
+
 		if (!cast_expr_code || !cast_type)
 			return nullptr;
 
@@ -3260,11 +3321,6 @@ namespace Glass
 
 		auto castee_flags = m_Metadata.GetTypeFlags(castee_type->BaseID);
 		auto cast_flags = m_Metadata.GetTypeFlags(cast_type->BaseID);
-
-		// 		if (cast_type == castee_type) {
-		// 			m_Metadata.RegExprType(new_register->ID, cast_type);
-		// 			return expr_value;
-		// 		}
 
 		IRCast* cast_ir_node = nullptr;
 

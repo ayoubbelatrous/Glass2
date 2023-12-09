@@ -27,6 +27,7 @@ namespace Glass {
 		TI_STRUCT_MEMBER = BIT(5),
 		TI_ENUM = BIT(6),
 		TI_FUNCTION = BIT(7),
+		TI_POINTER = BIT(8),
 	};
 
 	enum TypeFlag {
@@ -81,7 +82,7 @@ namespace Glass {
 	struct EnumMetadata
 	{
 		Token Name;
-
+		u64 EnumID;
 		std::unordered_map<std::string, u64> MemberIndices;
 		std::vector<EnumMemberMetadata> Members;
 
@@ -191,6 +192,7 @@ namespace Glass {
 	struct FunctionMetadata
 	{
 		Token Symbol;
+		u64 FileID = 0;
 		std::vector<ArgumentMetadata> Arguments;
 		TypeStorage* Signature = nullptr;
 		TypeStorage* ReturnType = nullptr;
@@ -204,6 +206,8 @@ namespace Glass {
 		TypeExpression* ASTReturnType = nullptr;
 
 		std::map<PolymorphicOverload, IRFunction*> PolyMorphicInstantiations;
+
+		IRFunction* FindPolymorphicOverload(const PolymorphicOverload& query);
 
 		FunctionNode* Ast = nullptr;
 
@@ -642,13 +646,7 @@ namespace Glass {
 			return (u64)-1;
 		}
 
-		void RegisterType(u64 ID, const std::string& name, u64 size, u64 alignment) {
-			m_Types[ID] = name;
-			m_TypeNames[name] = ID;
-			m_TypeSizes[ID] = size;
-			m_TypeFlags[ID] = 0;
-			m_TypeAlignments[ID] = alignment;
-		}
+		void RegisterType(u64 ID, const std::string& name, u64 size, u64 alignment);
 
 		const u64 GetTypeSize(TypeStorage* type) const;
 		const u64 GetTypeAlignment(TypeStorage* type) const;
@@ -688,6 +686,8 @@ namespace Glass {
 			}
 
 			RegisterType(TypeID, metadata.Name.Symbol, type_size, type_alignment);
+
+			GetTypeFlags(TypeID) |= FLAG_STRUCT_TYPE;
 		}
 
 		const StructMetadata* GetStructMetadata(u64 ID) const
@@ -724,6 +724,7 @@ namespace Glass {
 		{
 			m_EnumNames[metadata.Name.Symbol] = ID;
 			m_Enums[ID] = metadata;
+			m_Enums[ID].EnumID = ID;
 			m_TypeToEnum[TypeID] = ID;
 
 			//@TODO: Set correct enum size

@@ -141,11 +141,11 @@ namespace Glass
 		std::chrono::steady_clock::time_point m_LinkerStart;
 		std::chrono::steady_clock::time_point m_LinkerEnd;
 
-		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
+		//		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
 
-		m_X86Start = std::chrono::high_resolution_clock::now();
-		x86_backend.Assemble();
-		m_X86End = std::chrono::high_resolution_clock::now();
+		// 		m_X86Start = std::chrono::high_resolution_clock::now();
+		// 		x86_backend.Assemble();
+		// 		m_X86End = std::chrono::high_resolution_clock::now();
 
 		if (llvm && compilation_successful)
 		{
@@ -171,13 +171,20 @@ namespace Glass
 
 			std::string input_name = "output.obj";
 			std::string exe_name = "a.exe";
+			std::string output_type = "";
+			std::string output_name = "a.exe";
 
 			std::string linker_cmd;
 
-			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
-			linker_cmd = fmt::format("clang.exe -g {} {} -o a.exe", input_name, libraries_cmd);
+			if (m_Options.OutputDll) {
+				output_type = "-shared";
+				output_name = "a.dll";
+			}
 
-			if (!m_Options.NoLink)
+			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
+			linker_cmd = fmt::format("clang.exe -g {} {} {} -o {}", output_type, input_name, libraries_cmd, output_name);
+
+			if (!m_Options.NoLink && llvm)
 			{
 				GS_CORE_WARN("Running: {}", linker_cmd);
 
@@ -282,6 +289,10 @@ namespace Glass
 
 				if (arg == "-run") {
 					options.Run = true;
+					modal = false;
+				}
+				if (arg == "-dll") {
+					options.OutputDll = true;
 					modal = false;
 				}
 				if (arg == "-ir") {

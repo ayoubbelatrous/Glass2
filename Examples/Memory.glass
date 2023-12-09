@@ -1,3 +1,5 @@
+#load "C.glass";
+
 fn NewArray(Type $T, u64 size) : T[..] {
 	T[..] array;
 	array.data = malloc(size * sizeof(T));

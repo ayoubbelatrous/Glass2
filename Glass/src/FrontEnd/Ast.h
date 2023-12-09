@@ -63,6 +63,7 @@ namespace Glass
 		Subtract,
 
 		Multiply,
+		Modulo,
 		Divide,
 
 		Assign,
@@ -772,7 +773,7 @@ namespace Glass
 
 		Expression* Condition = nullptr;
 		ScopeNode* Scope = nullptr;
-		ElseNode* Else;
+		ElseNode* Else = nullptr;
 
 		virtual NodeType GetType() const override
 		{

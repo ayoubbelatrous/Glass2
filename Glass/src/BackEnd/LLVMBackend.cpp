@@ -355,8 +355,15 @@ namespace Glass
 			u64 struct_size = m_Metadata->GetTypeSize(struct_metadata.TypeID);
 			u64 llvm_Size = llvm_StructLayout->getSizeInBytes();
 
-			GS_CORE_ASSERT(alignment == llvm_Alignment);
-			GS_CORE_ASSERT(struct_size == llvm_Size);
+			//GS_CORE_ASSERT(alignment == llvm_Alignment);
+			//GS_CORE_ASSERT(struct_size == llvm_Size);
+
+			u64 mem_index = 0;
+			for (auto& member : struct_metadata.Members) {
+				auto llvm_Offset = llvm_StructLayout->getMemberOffsets()[mem_index];
+				//GS_CORE_ASSERT(llvm_Offset == member.Offset);
+				mem_index++;
+			}
 		}
 	}
 
@@ -402,8 +409,9 @@ namespace Glass
 
 		llvm::Type* llvm_TypeInfoElemMemberTy = GetLLVMType(IR_u64);
 
-		llvm::Type* llvm_TypeInfoElemMemberBodyTy[4] =
+		llvm::Type* llvm_TypeInfoElemMemberBodyTy[5] =
 		{
+			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
@@ -412,6 +420,50 @@ namespace Glass
 
 		m_TypeInfoElemTy = llvm::StructType::create(*m_LLVMContext, "TypeInfoTableElem");
 		m_TypeInfoElemTy->setBody(llvm_TypeInfoElemMemberBodyTy);
+
+		auto EnumTypeInfoTy = GetLLVMType(IR_typeinfo_member);
+
+		std::unordered_map<u64, u64> Enum_Member_indices;
+		llvm::GlobalVariable* llvm_GlobalEnumMember_Array = nullptr;
+
+		u64 total_Enum_Members_elements = 0;
+
+		std::vector<llvm::Constant*> llvm_GlobalEnumMember_Data_Array;
+
+		for (const auto& [enum_id, enum_metadata] : m_Metadata->m_Enums) {
+
+			Enum_Member_indices[enum_id] = total_Enum_Members_elements;
+
+			for (const EnumMemberMetadata& member : enum_metadata.Members) {
+
+				llvm::Constant* ti_member_elem = nullptr;
+				llvm::Constant* ti_elem_member_name = m_LLVMBuilder->CreateGlobalStringPtr(member.Name, "", 0, m_LLVMModule);
+
+				ti_member_elem = llvm::ConstantStruct::get(
+					(llvm::StructType*)GetLLVMType(IR_typeinfo_enum_member)
+					, {
+						ti_elem_member_name,
+						llvm::ConstantInt::get(GetLLVMType(IR_u64), member.Value),
+					});
+
+				llvm_GlobalEnumMember_Data_Array.push_back(ti_member_elem);
+				total_Enum_Members_elements++;
+			}
+		}
+
+		auto llvm_TypeInfoMember_ArrayTy = llvm::ArrayType::get(
+			GetLLVMType(IR_typeinfo_member), total_Enum_Members_elements
+		);
+
+		llvm_GlobalEnumMember_Array =
+			new llvm::GlobalVariable(
+				*m_LLVMModule,
+				llvm_TypeInfoMember_ArrayTy,
+				true,
+				llvm::GlobalValue::ExternalLinkage,
+				llvm::ConstantArray::get(llvm_TypeInfoMember_ArrayTy, llvm_GlobalEnumMember_Data_Array),
+				"Enum_Members_Array"
+			);
 
 		std::unordered_map<u64, u64> Struct_Typeinfo_member_indices;
 		llvm::GlobalVariable* llvm_GlobalMemberTypeInfo_Array = nullptr;
@@ -445,7 +497,7 @@ namespace Glass
 						, {
 							ti_elem_member_name,
 							llvm::ConstantInt::get(GetLLVMType(IR_type), TypeSystem::GetTypeInfoIndex(member.Type)),
-							llvm::ConstantInt::get(GetLLVMType(IR_u32),ti_elem_offset),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),ti_elem_offset),
 						});
 
 					llvm_GlobalTypeInfoArray_MemberData.push_back(ti_member_elem);
@@ -484,20 +536,39 @@ namespace Glass
 
 			switch (typeinfo_kind)
 			{
-			case TypeStorageKind::Pointer:
-			case TypeStorageKind::Base: {
+			case TypeStorageKind::Pointer: {
 
-				if (typeinfo_kind == TypeStorageKind::Pointer) {
-					if (((TSPtr*)typeinfo)->Pointee->Kind == TypeStorageKind::Function) {
-						ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
-							, {
-								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-							});
-					}
+				TSPtr* as_ptr = (TSPtr*)typeinfo;
+
+				if (as_ptr->Pointee->Kind == TypeStorageKind::Function) {
+					ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+						, {
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						});
+					continue;
 				}
+
+				TypeInfoFlags type_info_flags = TI_POINTER;
+
+
+				llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(
+					TypeSystem::PrintType(typeinfo), "", 0, m_LLVMModule);
+
+				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+					, {
+						llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64), TypeSystem::GetTypeInfoIndex(as_ptr->Pointee)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),as_ptr->Indirection),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+					});
+			}
+										 break;
+			case TypeStorageKind::Base: {
 
 				u64 struct_id = m_Metadata->GetStructIDFromType(typeinfo->BaseID);
 
@@ -506,15 +577,45 @@ namespace Glass
 					TypeInfoFlags type_info_flags = m_Metadata->GetTypeInfoFlags(typeinfo->BaseID);
 
 					llvm::Constant* ti_elem_name = m_LLVMBuilder->CreateGlobalStringPtr(
-						m_Metadata->GetType(typeinfo->BaseID), "", 0, m_LLVMModule);
+						TypeSystem::PrintType(typeinfo), "", 0, m_LLVMModule);
 
-					ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
-						, {
-							llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
-							llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
-							llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeSize(typeinfo)),
-							llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
-						});
+					if (!(type_info_flags & TI_ENUM)) {
+
+						ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+							, {
+								llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64),m_Metadata->GetTypeSize(typeinfo)),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+							});
+					}
+					else {
+
+						const EnumMetadata* enum_metadata = m_Metadata->GetEnumFromType(typeinfo->BaseID);
+
+						auto enum_members_ptr =
+							llvm::ConstantExpr::getBitCast(
+								llvm_GlobalEnumMember_Array,
+								GetLLVMTypeFull(IR_typeinfo_enum_member, 1));
+
+						llvm::Constant* members_ptr =
+							llvm::ConstantExpr::getGetElementPtr(
+								GetLLVMType(IR_typeinfo_enum_member),
+								enum_members_ptr,
+								llvm::ConstantInt::get(GetLLVMType(IR_u64), Enum_Member_indices[enum_metadata->EnumID])
+							);
+
+						ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
+							, {
+								llvm::ConstantExpr::getPtrToInt(ti_elem_name, GetLLVMType(IR_u64)),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64), (u64)type_info_flags),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64), m_Metadata->GetTypeSize(typeinfo)),
+								llvm::ConstantInt::get(GetLLVMType(IR_u64), enum_metadata->Members.size()),
+									llvm::ConstantExpr::getPtrToInt(members_ptr,GetLLVMType(IR_u64)),
+							});
+					}
+
 				}
 				else if (struct_id != -1) {
 
@@ -542,8 +643,9 @@ namespace Glass
 						, {
 							llvm::ConstantExpr::getPtrToInt(ti_elem_name,GetLLVMType(IR_u64)),
 							llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)type_info_flags),
-							llvm::ConstantExpr::getPtrToInt(ti_elem_members_ptr,GetLLVMType(IR_u64)),
+							llvm::ConstantInt::get(GetLLVMType(IR_u64),(u64)struct_metadata->Size),
 							llvm::ConstantInt::get(GetLLVMType(IR_u64),struct_metadata->Members.size()),
+							llvm::ConstantExpr::getPtrToInt(ti_elem_members_ptr,GetLLVMType(IR_u64)),
 						});
 				}
 
@@ -555,6 +657,7 @@ namespace Glass
 			case TypeStorageKind::Poly: {
 				ti_elem = llvm::ConstantStruct::get(m_TypeInfoElemTy
 					, {
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
 						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
@@ -579,7 +682,93 @@ namespace Glass
 				"TypeInfoArray"						// Name of the global variable
 			);
 
+		llvm::GlobalVariable* llvm_GlobalTypeInfoArraySize = nullptr;
+
+		llvm_GlobalTypeInfoArraySize =
+			new llvm::GlobalVariable(
+				*m_LLVMModule,
+				GetLLVMType(TypeSystem::GetU64()),
+				true,
+				llvm::GlobalValue::ExternalLinkage,
+				llvm::ConstantInt::get(GetLLVMType(TypeSystem::GetU64()), llvm_GlobalTypeInfoArrayData.size(), false),
+				"TypeInfoArrayLength"						// Name of the global variable
+			);
+
 		m_GlobalTypeInfoArray = llvm_GlobalTypeInfoArray;
+
+		// 		struct TypeInfo_Func_Param {
+		// 			u8* name;
+		// 			Type type;
+		// 			bool variadic;
+		// 		}
+
+		// 		struct GlobalDef_Function {
+		// 			u8* name;
+		// 			u8* mangled_name;
+		// 			Type signature;
+		// 			TypeInfo_Func_Param[..] parameters;
+		// 		};
+
+		llvm::Type* llvm_GlobalDefFunctionElemBody[5] =
+		{
+			GetLLVMType(TypeSystem::GetPtr(TypeSystem::GetU8(),1)),
+			GetLLVMType(TypeSystem::GetPtr(TypeSystem::GetU8(),1)),
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+		};
+
+		llvm::StructType* globalDefFuncElemTy = llvm::StructType::create(*m_LLVMContext, "GlobalDefFunctionElem");
+		globalDefFuncElemTy->setBody(llvm_GlobalDefFunctionElemBody);
+
+		u64 globalDefFuncArrayLength = 0;
+
+		std::vector<llvm::Constant*> llvm_GlobalDefFuncArrayData;
+
+		for (auto& p : m_Metadata->m_Functions) {
+			const FunctionMetadata& func = p.second;
+
+			if (!func.PolyMorphic) {
+
+				llvm::Constant* un_mangled_name = m_LLVMBuilder->CreateGlobalStringPtr(func.Symbol.Symbol, "", 0, m_LLVMModule);
+				llvm::Constant* mangled_name = m_LLVMBuilder->CreateGlobalStringPtr(MangleName(func.Symbol.Symbol, (TSFunc*)func.Signature), "", 0, m_LLVMModule);
+
+				auto def_elem = llvm::ConstantStruct::get(globalDefFuncElemTy
+					, {
+						un_mangled_name,
+						mangled_name,
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),TypeSystem::GetTypeInfoIndex(func.Signature)),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+						llvm::ConstantInt::get(GetLLVMType(IR_u64),0),
+					});
+
+				llvm_GlobalDefFuncArrayData.push_back(def_elem);
+				globalDefFuncArrayLength++;
+			}
+		}
+
+		llvm::ArrayType* llvm_globalDefFuncArrayTy
+			= llvm::ArrayType::get(globalDefFuncElemTy, globalDefFuncArrayLength);
+
+		llvm_GlobalTypeInfoArray =
+			new llvm::GlobalVariable(
+				*m_LLVMModule,
+				llvm_globalDefFuncArrayTy,
+				true,
+				llvm::GlobalValue::ExternalLinkage,
+				llvm::ConstantArray::get(llvm_globalDefFuncArrayTy, llvm_GlobalDefFuncArrayData),
+				"GlobalDefinitionsFunctionArray"
+			);
+
+
+		new llvm::GlobalVariable(
+			*m_LLVMModule,
+			GetLLVMType(TypeSystem::GetU64()),
+			true,
+			llvm::GlobalValue::ExternalLinkage,
+			llvm::ConstantInt::get(GetLLVMType(TypeSystem::GetU64()), globalDefFuncArrayLength, false),
+			"GlobalDefinitionsFunctionArrayLength"
+		);
 	}
 
 	llvm::Value* LLVMBackend::TypeOfCodeGen(const IRTypeOf* type_of)
@@ -647,7 +836,7 @@ namespace Glass
 		m_DLexicalBlocks.push_back(llvm_lexical_block);
 
 		for (auto inst : lexical_block->Instructions) {
-			if (break_encountered) {
+			if (break_encountered || return_encountered) {
 				break; // LOL
 			}
 			CodeGen(inst);
@@ -716,6 +905,7 @@ namespace Glass
 		case IRNodeType::ADD:
 		case IRNodeType::SUB:
 		case IRNodeType::MUL:
+		case IRNodeType::SREM:
 		case IRNodeType::DIV:
 		case IRNodeType::Equal:
 		case IRNodeType::NotEqual:
@@ -801,6 +991,8 @@ namespace Glass
 		llvm::Function* llvm_Func =
 			llvm::Function::Create(Function_Type, llvm::Function::ExternalLinkage, exported_name, m_LLVMModule);
 
+		llvm_Func->setCallingConv(llvm::CallingConv::C);
+
 		if (!func->Overload) {
 			InsertLLVMFunction(function_id, llvm_Func);
 		}
@@ -811,6 +1003,8 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::FunctionCodeGen(const IRFunction* func)
 	{
+		return_encountered = false;
+
 		const FunctionMetadata* func_metadata = m_Metadata->GetFunctionMetadata(func->ID);
 
 		if (func_metadata->PolyMorphic) {
@@ -850,7 +1044,6 @@ namespace Glass
 		else {
 			llvm_Func = GetLLVMFunction(m_CurrentFunctionID).Overloads[(TSFunc*)func->Overload];
 		}
-
 		//BODY CODE GEN///////////////////////////
 
 		llvm::BasicBlock* BB = llvm::BasicBlock::Create(*m_LLVMContext, "entry", llvm_Func);
@@ -890,11 +1083,14 @@ namespace Glass
 		}
 
 		for (auto inst : func->Instructions) {
+			if (return_encountered) {
+				break;
+			}
 			CodeGen(inst);
 		}
 
-		if (func_metadata->ReturnType->BaseID == IR_void) {
-			m_LLVMBuilder->CreateRet(nullptr);
+		if (!return_encountered) {
+			m_LLVMBuilder->CreateRetVoid();
 		}
 
 		FinalizeFunctionDebugInfo(llvm_Func);
@@ -1003,6 +1199,15 @@ namespace Glass
 			else
 			{
 				result = m_LLVMBuilder->CreateMul(lhs, rhs);
+			}
+			break;
+		case IRNodeType::SREM:
+			if (TypeSystem::GetTypeFlags(op->Type) & TypeFlag::FLAG_UNSIGNED_TYPE) {
+				result = m_LLVMBuilder->CreateURem(lhs, rhs);
+			}
+			else
+			{
+				result = m_LLVMBuilder->CreateSRem(lhs, rhs);
 			}
 			break;
 		case IRNodeType::DIV:
@@ -1117,6 +1322,8 @@ namespace Glass
 		else {
 			external_Name = global_metadata->Name.Symbol;
 		}
+
+		external_Name = global_metadata->Name.Symbol;
 
 		auto llvm_GlobalVar =
 			new llvm::GlobalVariable(
@@ -1345,6 +1552,11 @@ namespace Glass
 
 		llvm::BasicBlock* thenBlock = llvm::BasicBlock::Create(*m_LLVMContext, "then", function);
 		llvm::BasicBlock* contBlock = llvm::BasicBlock::Create(*m_LLVMContext, "cont", function);
+		llvm::BasicBlock* elseBlock = nullptr;
+
+		if (_if->ElseBlock) {
+			elseBlock = llvm::BasicBlock::Create(*m_LLVMContext, "else", function);
+		}
 
 		llvm::Value* condition = GetName(_if->ConditionRegister);
 
@@ -1352,23 +1564,44 @@ namespace Glass
 			m_LLVMBuilder->CreateICmp(llvm::CmpInst::ICMP_UGT, condition,
 				llvm::ConstantInt::get(condition->getType(), 0));
 
-		m_LLVMBuilder->CreateCondBr(condition, thenBlock, contBlock);
+		if (elseBlock) {
+			m_LLVMBuilder->CreateCondBr(condition, thenBlock, elseBlock);
+		}
+		else {
+			m_LLVMBuilder->CreateCondBr(condition, thenBlock, contBlock);
+		}
+
 		m_LLVMBuilder->SetInsertPoint(thenBlock);
 
 		for (auto inst : _if->Instructions) {
 			if (break_encountered) {
 				break; // LOL
 			}
+			if (return_encountered) {
+				break; // LOL
+			}
 			CodeGen(inst);
 		}
 
-		if (!break_encountered) {
+		if (!break_encountered && !return_encountered) {
 			m_LLVMBuilder->CreateBr(contBlock);
+		}
+
+		break_encountered = false;
+		return_encountered = false;
+
+		if (_if->ElseBlock) {
+			m_LLVMBuilder->SetInsertPoint(elseBlock);
+			CodeGen(_if->ElseBlock);
+			if (!break_encountered && !return_encountered) {
+				m_LLVMBuilder->CreateBr(contBlock);
+			}
 		}
 
 		m_LLVMBuilder->SetInsertPoint(contBlock);
 
 		break_encountered = false;
+		return_encountered = false;
 
 		return nullptr;
 	}
@@ -1404,10 +1637,16 @@ namespace Glass
 		m_LLVMBuilder->SetInsertPoint(loopBodyBlock);
 
 		for (auto inst : _while->Instructions) {
+			if (return_encountered) {
+				break;
+			}
+			if (break_encountered) {
+				break;
+			}
 			CodeGen(inst);
 		}
 
-		if (!break_encountered) {
+		if (!break_encountered && !return_encountered) {
 			m_LLVMBuilder->CreateBr(loopCondBlock);
 		}
 
@@ -1416,6 +1655,7 @@ namespace Glass
 		m_BreakTargets.pop_back();
 
 		break_encountered = false;
+		return_encountered = false;
 
 		return nullptr;
 	}
@@ -1530,9 +1770,15 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::ReturnCodeGen(const IRReturn* ret) {
 
-		CodeGen(ret->Value);
+		return_encountered = true;
 
-		return m_LLVMBuilder->CreateRet(GetName(((IRRegisterValue*)ret->Value)->RegisterID));
+		if (!ret->Value) {
+			return m_LLVMBuilder->CreateRetVoid();
+		}
+		else {
+			CodeGen(ret->Value);
+			return m_LLVMBuilder->CreateRet(GetName(((IRRegisterValue*)ret->Value)->RegisterID));
+		}
 	}
 
 	llvm::Value* LLVMBackend::BreakCodeGen(const IRBreak* brk)

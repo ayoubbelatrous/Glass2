@@ -31,6 +31,8 @@ namespace Glass
 
 		bool Run = false;
 
+		bool OutputDll = false;
+
 		std::vector<std::string> CIncludes;
 		std::vector<std::string> CLibs;
 	};

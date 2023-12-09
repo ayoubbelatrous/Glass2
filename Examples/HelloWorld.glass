@@ -78,7 +78,7 @@ MSDF_FreetypeHandle* msdf_ft_handle;
 
 fn init_font() {
 
-	font_handle := MSDF_loadFont(msdf_ft_handle, "JetBrainsMono-Bold.ttf");
+	font_handle := MSDF_loadFont(msdf_ft_handle, "Examples/Fonts/JetBrainsMono-Bold.ttf");
 	assert(font_handle, "Failed to open font");
 
 	ascii_charset := MSDF_CreateASCIICharset();
@@ -115,14 +115,19 @@ fn init_font() {
 	glyph_metrics := NewArray(MSDF_Glyph, glyph_count * 2);
 	MSDF_FontGeometry_Get_Glyphs(&font_geom, cast(MSDF_Glyph*) glyph_metrics.data);
 
+	print("Gettting Metrics\n");
+
 	u8[..] pixels;
 
 	if file_exists("./atlas.bin") {
 		file := open_file("./atlas.bin", File_Open_Mode.Read |File_Open_Mode.Write | File_Open_Mode.Binary);
 		pixels = read_entire_file(file);
+		print("Reading atlas.bin\n");
 	}
 
 	if file_exists("./atlas.bin") == 0 {
+
+		print("Making atlas.bin\n");
 
 		generator := cast(MSDF_4FLOAT_GEN*) null;
 		generated_atlas := MSDF_Generate_MTSDF_4_FLOAT(cast(i64) atlas_width, cast(i64) atlas_height, 1, glyphs, glyph_count, &generator);
@@ -136,6 +141,7 @@ fn init_font() {
 		close_file(file);
 	}
 
+	print("Making atlas texture\n");
 	atlas_texture := Texture_Create(cast(u32) atlas_width, cast(u32) atlas_height, pixels, TextureFormat.RGBA8);
 
 	Atlas_Font font;
@@ -144,12 +150,16 @@ fn init_font() {
 	font.atlas_texture = atlas_texture;
 
 	a.r.default_font = font;
+
+	print("Finished Making Font\n");
 }
 
 vec2 texture_size;
 f32 pixel_size;
 
 fn start() {
+
+	printf("Starting!\n");
 
 	pixel_size = 16.0;
 	texture_size = Vec2(1024.0, 1024.0);
@@ -160,11 +170,17 @@ fn start() {
 	assert(msdf_ft_handle, "[Error] :: Failed To Initialize FreeType\n");
 	init_font();
 
+	printf("init renderer_2d!\n");
+
 	Renderer2D_init(&a.r);
+
+	printf("opening file!\n");
 
 	file := open_file("Examples/HelloWorld.glass",  File_Open_Mode.Read);
 	editor.buffer = read_entire_file(file);
 	close_file(file);
+
+	printf("Finished start()!\n");
 }
 
 fn update() {
@@ -184,11 +200,17 @@ fn update() {
 	f32 posx = 0.1;
 	f32 posy = 0.1;
 
-	//Renderer2D_draw_quad(&a.r,Vec2(256.0,256.0), texture_size);
-
 	vec2 padding = Vec2(20.0);
 
-	Renderer2D_draw_text(&a.r, Vec2(padding.x + editor.scrollX, padding.y + editor.scrollY * pixel_size), editor.buffer, pixel_size);
+	position := Vec2(padding.x + editor.scrollX, padding.y + editor.scrollY * pixel_size);
+
+	vec2 pos = Vec2(10.0, 20.0);
+
+	Renderer2D_draw_quad(&a.r, pos, pos);
+
+	//Renderer2D_draw_text(&a.r, position, editor.buffer, pixel_size);
+
+	printf("update :: a.r.quad.vertex_array.renderer_id = %i\n", a.r.quad.vertex_array.renderer_id);
 
 	Renderer2D_flush(&a.r);
 }
@@ -252,7 +274,14 @@ struct Kerning_Matrix {
 
 fn main() : i32 {
 
+	Application* app = xx malloc(sizeof(Application));
+	Renderer2D* renderer = xx malloc(sizeof(Renderer2D));
+
+	app.r = *renderer;
+
 	a.running = 1;
+
+	metrics := a.r.default_font.metrics;
 
 	i32 init_result = glfwInit();
 

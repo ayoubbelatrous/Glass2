@@ -17,6 +17,7 @@ enum #flags TypeInfo_Flags {
 	STRUCT_MEMBER				;
 	ENUM						;
 	FUNCTION					;
+	POINTER						;
 };
 
 struct TypeInfo {
@@ -25,14 +26,33 @@ struct TypeInfo {
 	u64 size					;
 };
 
+struct TypeInfo_Pointer {
+	u8* name					;
+	TypeInfo_Flags flags		;
+	Type type				    ;
+	u64 indirection				;
+};
+
+struct TypeInfo_Dyn_Array {
+	u8* name					;
+	TypeInfo_Flags flags		;
+	Type type				    ;
+};
+
+struct TypeInfo_Function {
+	u8* name						;
+	TypeInfo_Flags flags			;
+	Type[..] parameters				;
+};
+
 struct TypeInfo_Member {
 	u8* name					;
 	Type type					;
-	u32 offset					;
+	u64 offset					;
 };
 
 struct TypeInfo_Struct {
 	u8* name					;
 	TypeInfo_Flags flags		;
-	TypeInfo_Member[..] members;
+	TypeInfo_Member[..] members ;
 };

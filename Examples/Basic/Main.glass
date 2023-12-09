@@ -1,0 +1,37 @@
+
+#load "../C.glass"
+
+struct vec2 {
+	f32 x;
+	f32 y;
+};
+
+struct vec3 {
+	f32 x;
+	f32 y;
+	f32 z;
+};
+
+struct vec4 {
+	f32 x;
+	f32 y;
+	f32 z;
+	f32 w;
+};
+
+struct quat {
+	f32 x;
+	f32 y;
+	f32 z;
+	f32 w;
+};
+
+struct Transform {
+	vec3 position;
+	quat rotation;
+	vec3 scale;
+};
+
+fn test(u8* data) {
+	printf("From Glass Data is: %s\n", data);
+}

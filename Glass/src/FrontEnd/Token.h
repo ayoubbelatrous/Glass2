@@ -51,6 +51,7 @@ namespace Glass
 		Add,			// '+'
 		Subtract,		// '-'
 		Multiply,		// '*'
+		Modulo,			// '%'
 		Divide,			// '/'
 
 		Assign,			// '='
