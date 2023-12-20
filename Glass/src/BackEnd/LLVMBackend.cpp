@@ -1231,13 +1231,43 @@ namespace Glass
 			break;
 
 		case IRNodeType::LesserThan:
-			result = m_LLVMBuilder->CreateICmpULT(lhs, rhs);
-			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+
+			if (TypeSystem::GetTypeFlags(op->Type) & FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFCmpULT(lhs, rhs);
+				result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+			}
+			else
+			{
+				if (TypeSystem::GetTypeFlags(op->Type) & FLAG_UNSIGNED_TYPE) {
+					result = m_LLVMBuilder->CreateICmpULT(lhs, rhs);
+				}
+				else
+				{
+					result = m_LLVMBuilder->CreateICmpSLT(lhs, rhs);
+				}
+
+				result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+			}
+
 			break;
 
 		case IRNodeType::GreaterThan:
-			result = m_LLVMBuilder->CreateICmpUGT(lhs, rhs);
-			result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+			if (TypeSystem::GetTypeFlags(op->Type) & FLAG_FLOATING_TYPE) {
+				result = m_LLVMBuilder->CreateFCmpUGT(lhs, rhs);
+				result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+			}
+			else
+			{
+				if (TypeSystem::GetTypeFlags(op->Type) & FLAG_UNSIGNED_TYPE) {
+					result = m_LLVMBuilder->CreateICmpUGT(lhs, rhs);
+				}
+				else
+				{
+					result = m_LLVMBuilder->CreateICmpSGT(lhs, rhs);
+				}
+
+				result = m_LLVMBuilder->CreateZExt(result, GetLLVMType(IR_bool));
+			}
 			break;
 
 		case IRNodeType::BitAnd:

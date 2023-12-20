@@ -1942,29 +1942,71 @@ namespace Glass
 
 		IRCONSTValue* Constant = (IRCONSTValue*)ir_register->Value;
 
-		if (numericLiteral->type == NumericLiteral::Type::Float)
-		{
-			Constant->Type = GetLikelyConstantFloatType();
-			memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
-		}
-		else if (numericLiteral->type == NumericLiteral::Type::Int)
-		{
-			u64 likely_integer = GetLikelyConstantIntegerType();
-			Constant->Type = likely_integer;
-			memcpy(&Constant->Data, &numericLiteral->Val.Int, sizeof(i64));
+		u64 likely_constant_type = GetLikelyConstantType();
+
+		if (likely_constant_type == -1) {
+			if (numericLiteral->type == NumericLiteral::Type::Float)
+			{
+				likely_constant_type = GetLikelyConstantFloatType();
+				memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
+			}
+			else if (numericLiteral->type == NumericLiteral::Type::Int)
+			{
+				likely_constant_type = GetLikelyConstantIntegerType();
+				memcpy(&Constant->Data, &numericLiteral->Val.Int, sizeof(double));
+			}
+			else {
+				GS_CORE_ASSERT(nullptr);
+			}
 		}
 		else {
-			GS_CORE_ASSERT(0);
+			auto type_flags = m_Metadata.GetTypeFlags(likely_constant_type);
+
+			if (type_flags & TypeFlag::FLAG_FLOATING_TYPE) {
+
+				if (numericLiteral->type == NumericLiteral::Type::Float)
+				{
+					memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
+				}
+				else if (numericLiteral->type == NumericLiteral::Type::Int)
+				{
+					double as_double = (double)numericLiteral->Val.Int;
+					memcpy(&Constant->Data, &as_double, sizeof(double));
+				}
+			}
+			else {
+				if (numericLiteral->type == NumericLiteral::Type::Float)
+				{
+					likely_constant_type = GetLikelyConstantFloatType();
+					memcpy(&Constant->Data, &numericLiteral->Val.Float, sizeof(double));
+				}
+				else if (numericLiteral->type == NumericLiteral::Type::Int)
+				{
+					memcpy(&Constant->Data, &numericLiteral->Val.Int, sizeof(double));
+				}
+			}
 		}
 
-		if (GetLikelyConstantIntegerType() == IR_void) {
-			__debugbreak();
-		}
+		Constant->Type = likely_constant_type;
+
 
 		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetBasic(Constant->Type));
 
 		return IR(IRRegisterValue(ir_register->ID));
 	}
+
+	// 	IRInstruction* Compiler::NumericLiteralCodeGen(const NumericLiteral* numericLiteral)
+	// 	{
+	// 		IRRegister* ir_register = CreateIRRegister();
+	// 
+	// 		ir_register->Value = IR(IRCONSTValue());
+	// 
+	// 		IRCONSTValue* Constant = (IRCONSTValue*)ir_register->Value;
+
+	// 		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetBasic(Constant->Type));
+	// 
+	// 		return IR(IRRegisterValue(ir_register->ID));
+	// 	}
 
 	IRInstruction* Compiler::StringLiteralCodeGen(const StringLiteral* stringLiteral)
 	{
@@ -2890,32 +2932,39 @@ namespace Glass
 		{
 			object_register_id = obj_register_value->RegisterID;
 
-			const Glass::Type& obj_expr_type = TSToLegacy(m_Metadata.GetExprType(obj_register_value->RegisterID));
+			TypeStorage* obj_expr_type = m_Metadata.GetExprType(obj_register_value->RegisterID);
 
-			//@Note this is here because variables are unique in the sense that they always are a pointer or a double pointer as int
-			if (memberAccess->Object->GetType() == NodeType::Identifier) {
-				reference_access = obj_expr_type.Pointer;
+			if (TypeSystem::IndirectionCount(obj_expr_type) > 1) {
+				MSG_LOC(memberAccess->Object);
+				FMT_WARN("The type '{}' is not a struct and does not support members", PrintType(obj_expr_type));
 			}
 
-			else if (memberAccess->Object->GetType() != NodeType::MemberAccess) {
-				//Handle temporaries that are not pointers
-				//Normally they are not modifiable however if they are pointers they can be, so if want to read the temporary value so we do need to reference it
-				if (obj_expr_type.Pointer == 0) {
+			bool l_value = false;
 
-					auto temporary_reference = CreateIRRegister();
+			if (memberAccess->Object->GetType() == NodeType::Identifier) {
+				l_value = true;
+			}
 
-					object_register_id = temporary_reference->ID;
+			if (l_value) {
+				if (TypeSystem::IndirectionCount(obj_expr_type) == 1) {
+					reference_access = true;
 				}
 			}
 
-			struct_id = m_Metadata.GetStructIDFromType(obj_expr_type.ID);
+			struct_id = m_Metadata.GetStructIDFromType(obj_expr_type->BaseID);
 
-			if (obj_expr_type.Array) {
+			if (TypeSystem::IsArray(obj_expr_type)) {
 				struct_id = m_Metadata.GetStructIDFromType(IR_array);
 			}
 
+			if (TypeSystem::IsPointer(obj_expr_type)) {
+				if (TypeSystem::IsArray(((TSPtr*)obj_expr_type)->Pointee)) {
+					struct_id = m_Metadata.GetStructIDFromType(IR_array);
+				}
+			}
+
 			if (struct_id == NULL_ID) {
-				MSG_LOC(memberAccess->Member);
+				MSG_LOC(memberAccess->Object);
 				FMT_WARN("The type '{}' is not a struct and does not support members", PrintType(obj_expr_type));
 				return nullptr;
 			}

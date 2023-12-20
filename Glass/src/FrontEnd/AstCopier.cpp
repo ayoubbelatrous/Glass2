@@ -32,6 +32,7 @@ namespace Glass
 		case NodeType::DeReference:
 		case NodeType::Call:
 		case NodeType::Cast:
+		case NodeType::AutoCast:
 			return CopyExpression((Expression*)stmt);
 			break;
 		case NodeType::TypeOf:
@@ -234,6 +235,9 @@ namespace Glass
 		case NodeType::Cast:
 			return CopyCast((CastNode*)expr);
 			break;
+		case NodeType::AutoCast:
+			return CopyAutoCast((AutoCastNode*)expr);
+			break;
 		}
 
 		GS_CORE_ASSERT(0);
@@ -358,6 +362,13 @@ namespace Glass
 		CastNode* new_cast = AST(CastNode());
 		new_cast->Expr = (Expression*)CopyExpression(cast->Expr);
 		new_cast->Type = (TypeExpression*)CopyTypeExpr(cast->Type);
+		return new_cast;
+	}
+
+	Statement* ASTCopier::CopyAutoCast(AutoCastNode* cast)
+	{
+		AutoCastNode* new_cast = AST(AutoCastNode());
+		new_cast->Expr = (Expression*)CopyExpression(cast->Expr);
 		return new_cast;
 	}
 

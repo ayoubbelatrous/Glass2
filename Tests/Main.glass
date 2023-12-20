@@ -1,0 +1,6 @@
+
+#foreign fn printf!(u8* format) : i32;
+
+fn main() {
+	printf("Hello World!");
+}

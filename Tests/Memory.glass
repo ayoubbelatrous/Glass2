@@ -1,0 +1,58 @@
+#load "C.glass";
+
+fn NewArray(Type $T, u64 size) : T[..] {
+	T[..] array;
+	array.data = malloc(size * sizeof(T));
+	array.count = size;
+	return array;
+}
+
+fn Alloc(Type $T, u64 size) : T* {
+	memory := cast(T*) malloc(size * sizeof(T));
+	return memory;
+}
+
+fn Array_Add($T element, T[..]* array) {
+	T* old_data = xx array.data;
+	array.data = malloc(sizeof(T) * array.count + 1);
+	memcpy(xx array.data, xx old_data, xx (array.count * sizeof(T)));
+	free(xx old_data);
+}
+
+fn T_Array_Add($T element, T[..]* array) {
+	array.data = malloc(sizeof(T) * array.count + 1);
+	array.data[array.count] = element;
+	memcpy(xx array.data, xx old_data, xx (array.count * sizeof(T)));
+}
+
+struct Allocator {
+	u8* buffer_begin;
+	u8* buffer;
+	u64 pool_size;
+};
+
+fn Allocator_Init(Allocator* a, u64 initial_size) {
+	a.buffer_begin = xx malloc(initial_size);
+	a.buffer = a.buffer_begin;
+	a.pool_size = initial_size;
+}
+
+fn Allocator_Allocate(Allocator* a, u64 count) : u8* {
+	a.buffer = &a.buffer[count];
+	return a.buffer;
+}
+
+Allocator global_temporary_allocator;
+
+fn talloc(u64 size) : u8* {
+
+	if global_temporary_allocator.buffer_begin == cast(u8*) null {
+		Allocator_Init(&global_temporary_allocator, 1024 * 1024);
+	}
+
+	return Allocator_Allocate(&global_temporary_allocator, size);
+}
+
+fn global_temporary_allocator_reset() {
+	global_temporary_allocator.buffer = global_temporary_allocator.buffer_begin;
+}

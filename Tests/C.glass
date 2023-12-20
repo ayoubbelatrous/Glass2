@@ -1,0 +1,39 @@
+#foreign fn printf!		(u8* format) 									: i32;
+#foreign fn sprintf!	(u8* format, u8* buffer) 						: i32;
+
+#foreign fn fopen		(u8* path, u8* mode) 							: u64*;
+#foreign fn fclose		(u64* file) 									: void;
+#foreign fn malloc		(u64 size) 										: void*;
+#foreign fn free		(void* ptr) 									: void;
+#foreign fn strlen		(u8* ptr) 										: i32;
+#foreign fn memcpy		(u8* dst, u8* src, int count) 					: u64;
+#foreign fn memset		(void* buf, i32 c, u64 n) 						: u64;
+
+#foreign fn putchar		(u8 c) 											: void;
+#foreign fn abort		() : void ;
+
+#foreign fn strcmp		(u8* str1, u8* str2) 							: i32;
+#foreign fn strncmp		(u8* str1, u8* str2, i32 count) 				: i32;
+
+#foreign fn isalpha	    (i32 c) 										: i32;
+#foreign fn isdigit		(i32 c) 										: i32;
+#foreign fn isspace		(i32 c) 										: i32;
+
+#foreign fn fseek		(u64* stream, i64 offset, i32 whence) 			: i32;
+#foreign fn ftell		(u64* stream) 									: u64;
+#foreign fn fread		(u8 *ptr, u64 size, u64 nmemb, u64* stream) 	: u64;
+#foreign fn fwrite		(void* ptr, u64 size, u64 nmemb, u64* stream) 	: u64;
+#foreign fn fflush		(u64* stream) 									: i32;
+
+
+#foreign fn exit(i32 status) 											: void;
+#foreign fn rand() 														: i32;
+#foreign fn srand(i32 seed) 											: i32;
+#foreign fn time(i32* t) 												: i32;
+
+#foreign fn cosf(f32 x) 												: f32;
+#foreign fn sinf(f32 x) 												: f32;
+
+#foreign fn sqrtf(f32 x) 												: f32;
+#foreign fn roundf(f32 x) 												: f32;
+#foreign fn floorf(f32 x) 												: f32;

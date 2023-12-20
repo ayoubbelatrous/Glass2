@@ -1,0 +1,348 @@
+
+#load "C.glass"
+#load "Memory.glass"
+
+u8* global_print_buffer_begin;
+u8* global_print_buffer;
+u64 global_print_buffer_loc = 0;
+
+fn inc_print_buffer(i32 x, u8** print_buffer) {
+	u8* print_buffer_value = *print_buffer;
+	*print_buffer = &print_buffer_value[x];
+}
+
+fn print_s_int(i64 signed, u64 bit_size, u8* print_buffer) : i32 {
+
+	i32 printed = 0;
+
+	if bit_size == 8 {
+		i8 i_8 = cast(i8) signed;
+		printed = sprintf(print_buffer, "%i", i_8);
+	}
+
+	if bit_size == 16 {
+		i16 i_16 = cast(i16) signed;
+		printed = sprintf(print_buffer, "%i", i_16);
+	}
+
+	if bit_size == 32 {
+		i32 i_32 = cast(i32) signed;
+		printed = sprintf(print_buffer, "%i", i_32);
+	}
+
+	if bit_size == 64 {
+		i64 i_64 = cast(i64) signed;
+		printed = sprintf(print_buffer, "%i", i_64);
+	}
+
+	return printed;
+}
+
+fn print_u_int(u64 unsigned, u64 bit_size, u8* print_buffer) : i32 {
+
+	i32 printed = 0;
+
+	if bit_size < 33 {
+		u32 u_32 = cast(u32) unsigned;
+		printed = sprintf(print_buffer, "%lu", u_32);
+	}
+
+	if bit_size > 32 {
+		u64 u_64 = cast(u64) unsigned;
+		printed = sprintf(print_buffer, "%zu", u_64);
+	}
+
+	return printed;
+}
+
+fn print_float(f32 flt, u8* print_buffer) : i32 {
+	return sprintf(print_buffer, "%f", flt);
+}
+
+fn print_double(f64 flt, u8* print_buffer) : i32 {
+	return sprintf(print_buffer, "%f", flt);
+}
+
+fn print_string(u8* str, u8* print_buffer) : i32 {
+	return sprintf(print_buffer, "%s", str);
+}
+
+fn print_address(void* addr, u8* print_buffer) : i32 {
+	return sprintf(print_buffer, "%x", addr);
+}
+
+fn print_bool(bool boolean, u8* print_buffer) : i32 {
+
+	i32 printed = 0;
+
+	if boolean {
+		printed = sprintf(print_buffer, "true");
+	}
+
+	if boolean == 0 {
+		printed = sprintf(print_buffer, "false");
+	}
+
+	return printed;
+}
+
+fn print_any(Any any, i32 indent, u8** print_buffer) : i32 {
+
+	TypeInfo* typeinfo = type_info(any.type);
+
+	i64 zero = 0;
+
+	i32 printed = 0;
+
+	// Base Types
+	if typeinfo.flags & TypeInfo_Flags.BASE_TYPE {
+
+		if typeinfo.flags & TypeInfo_Flags.NUMERIC_TYPE {
+
+			//Strings
+			if any.type == u8* {
+				printed = print_string(*cast(u8**)any.data, *print_buffer);
+			}
+
+			//Numbers
+
+			if any.type != u8* {
+
+				if typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE {
+					if typeinfo.size == 4 {
+						f32 flt = *cast(f32*) any.data;
+						printed = print_float(flt, *print_buffer);
+					}
+
+					if typeinfo.size == 8 {
+						f64 flt = *cast(f64*) any.data;
+						printed = print_double(flt, *print_buffer);
+					}
+				}
+
+				if (typeinfo.flags & TypeInfo_Flags.FLOATING_TYPE) == zero {
+
+					if (typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE) == zero {
+						printed = print_s_int(*cast(i64*) any.data, typeinfo.size * 8, *print_buffer);
+					}
+
+					if typeinfo.flags & TypeInfo_Flags.UNSIGNED_TYPE {
+
+						if any.type == bool {
+							printed = print_bool(*cast(bool*) any.data, *print_buffer);
+						}
+
+						if any.type != bool {
+							printed = print_u_int(*cast(u64*) any.data, typeinfo.size * 8, *print_buffer);
+						}
+					}
+				}
+			}
+
+		}
+	}
+
+	if typeinfo.flags & TypeInfo_Flags.POINTER {
+
+		if any.type == u8* {
+			printed = print_string(*cast(u8**)any.data, *print_buffer);
+		}
+
+		if any.type != u8* {
+			printed = print_address(*cast(void**)any.data, *print_buffer);
+		}
+
+	}
+
+	inc_print_buffer(printed, print_buffer);
+
+	if typeinfo.flags & TypeInfo_Flags.STRUCT {
+
+		i8* base_ptr = cast(i8*) any.data;
+		TypeInfo_Struct* type_info_struct = cast(TypeInfo_Struct*) typeinfo;
+
+		u64 member_it = 0;
+
+		inc_print_buffer(sprintf(*print_buffer, "%s :: struct {\n", type_info_struct.name), print_buffer);
+
+		while member_it < type_info_struct.members.count {
+
+			TypeInfo_Member member = type_info_struct.members[member_it];
+
+			u8* member_ptr = cast(u8*) &base_ptr[member.offset];
+
+			Any struct_any;
+			struct_any.data = cast(void*) member_ptr;
+			struct_any.type = member.type;
+
+			for 0..indent {
+				inc_print_buffer(sprintf(*print_buffer, "  "), print_buffer);
+			}
+
+			inc_print_buffer(sprintf(*print_buffer, "%s: ", member.name), print_buffer);
+
+			i32 new_indentation = indent + 1;
+
+			print_any(struct_any, new_indentation, print_buffer);
+
+			inc_print_buffer(sprintf(*print_buffer, ";\n"), print_buffer);
+
+			member_it = member_it + 1;
+		}
+
+		if indent > 0 {
+			for 0..indent-1 {
+				inc_print_buffer(sprintf(*print_buffer, "  "), print_buffer);
+			}
+		}
+
+		inc_print_buffer(sprintf(*print_buffer, "}"), print_buffer);
+	}
+
+	return 0;
+}
+
+fn init_print_buffer() {
+
+	if global_print_buffer_begin == cast(u8*) null {
+		global_print_buffer_begin = xx malloc(10 * 4096);
+	}
+
+	global_print_buffer = global_print_buffer_begin;
+
+	global_print_buffer_loc = xx 0; // TODO: make global variable register auto convertion type
+}
+
+fn flush_print_buffer() {
+
+	i32 x;
+
+	if global_print_buffer_loc > 0 {
+
+		global_print_buffer[global_print_buffer_loc] = cast(u8) 0;
+
+		printf("%s\n", global_print_buffer_begin);
+
+		global_print_buffer_loc = xx 0;
+		global_print_buffer = global_print_buffer_begin;
+	}
+}
+
+fn print_any_array(Any[..] args, u8** print_buffer) {
+
+	Any* arguments = cast(Any*) args.data;
+
+	Any fmt_arg = arguments[0];
+	u8* fmt_string = *cast(u8**) fmt_arg.data;
+
+	i32 format_char_count = strlen(fmt_string);
+	i32 format_it = 0;
+
+	u8 current_char = 0;
+
+	Any current_argument;
+	TypeInfo current_argument_typeinfo;
+
+	u64 argument_count = args.count;
+	u64 argument_it = 0;
+
+	while format_it < format_char_count {
+
+		current_char = fmt_string[format_it];
+
+		u8 modulo = "%"[0];
+
+		if current_char == modulo {
+			argument_it = argument_it + 1;
+			current_argument = arguments[argument_it];
+			print_any(current_argument, 0, print_buffer);
+		}
+
+		if current_char != "%"[0] {
+			inc_print_buffer(sprintf(*print_buffer, "%c", current_char), print_buffer);
+		}
+
+		format_it = format_it + 1;
+	}
+}
+
+fn print(Any... args) {
+
+	Any[..] array;
+
+	init_print_buffer();
+
+	array.data = args.data;
+	array.count = args.count;
+
+	print_any_array(array, &global_print_buffer);
+
+	begin_as_int := cast(u64) global_print_buffer_begin;
+	end_as_int := cast(u64) global_print_buffer;
+
+	global_print_buffer_loc = end_as_int - begin_as_int;
+
+	flush_print_buffer();
+}
+
+fn sprint(Any... args) : u64 {
+
+	Any[..] array;
+
+	buffer_arg := args[0];
+	u8* buffer = *cast(u8**) buffer_arg.data;
+
+	Any* data_as_any = xx args.data;
+	array.data = xx &data_as_any[1];
+	array.count = args.count - 1;
+
+	buffer_begin := buffer;
+
+	print_any_array(array, &buffer);
+
+	begin_as_int := cast(u64) buffer_begin;
+	end_as_int := cast(u64) buffer;
+
+	printed := end_as_int - begin_as_int;
+
+	return printed;
+}
+
+u8* tprint_temporary_buffer;
+
+fn tprint(Any... args) : u8* {
+
+	if tprint_temporary_buffer == cast(u8*) null {
+		tprint_temporary_buffer = xx malloc(1024 * 64);
+	}
+
+	Any[..] array;
+	array.data = args.data;
+	array.count = args.count;
+
+	buffer_begin := tprint_temporary_buffer;
+
+	print_any_array(array, &tprint_temporary_buffer);
+
+	begin_as_int := cast(u64) buffer_begin;
+	end_as_int := cast(u64) tprint_temporary_buffer;
+
+	printed := end_as_int - begin_as_int;
+
+	tprint_temporary_buffer = buffer_begin;
+
+	result := talloc(printed + 1);
+
+	memcpy(result, tprint_temporary_buffer, xx (printed + 1));
+
+	result[(printed + 1)] = cast(u8) 0;
+
+	return result;
+}
+
+fn assert($T cond, u8* message) {
+	if cond == cast(T) null {
+		print("Assertion Failed % :: %\n", cond, message);
+		abort();
+	}
+}

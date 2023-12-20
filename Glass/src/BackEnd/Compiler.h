@@ -376,16 +376,16 @@ namespace Glass
 
 			if (assignment_type_flags & FLAG_NUMERIC_TYPE)
 			{
-				if (!(assignment_type_flags & FLAG_FLOATING_TYPE)) {
-					SetLikelyConstantIntegerType(assignment_type_id);
-				}
-				else if (assignment_type_flags & FLAG_FLOATING_TYPE) {
-					SetLikelyConstantFloatType(assignment_type_id);
-				}
+				m_ConstantLikelyType = assignment_type_id;
 			}
 		}
 
+		u64 GetLikelyConstantType() {
+			return m_ConstantLikelyType;
+		}
+
 		void ResetLikelyConstantType() {
+			m_ConstantLikelyType = -1;
 			ResetLikelyConstantIntegerType();
 			ResetLikelyConstantFloatType();
 		}
@@ -412,6 +412,7 @@ namespace Glass
 
 		DBGSourceLoc m_CurrentDBGLoc;
 
+		u64 m_ConstantLikelyType = -1;
 		u64 m_ConstantIntegerLikelyType = IR_int;
 		u64 m_ConstantFloatLikelyType = IR_float;
 

@@ -41,6 +41,7 @@ namespace Glass
 		case NodeType::Call:
 		case NodeType::Cast:
 		case NodeType::SizeOf:
+		case NodeType::AutoCast:
 			PolyExpression((Expression*)stmt);
 			break;
 		case NodeType::TypeOf: {
@@ -110,9 +111,18 @@ namespace Glass
 		case NodeType::NumericLiteral:
 		case NodeType::StringLiteral:
 			return;
-		case NodeType::Reference:
-		case NodeType::DeReference:
-			return;
+		case NodeType::Reference: {
+			PolyExpression(((RefNode*)expr)->What);
+		}
+								return;
+		case NodeType::DeReference: {
+			PolyExpression(((DeRefNode*)expr)->What);
+		}
+								  return;
+		case NodeType::AutoCast: {
+			PolyExpression(((AutoCastNode*)expr)->Expr);
+		}
+							   return;
 		}
 
 		GS_CORE_ASSERT(0);
