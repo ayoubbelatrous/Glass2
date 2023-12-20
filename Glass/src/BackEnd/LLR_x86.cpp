@@ -7,6 +7,78 @@
 
 namespace Glass
 {
+	Assembly_Instruction Builder::Ret()
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Ret;
+
+		return instruction;
+	}
+
+	Assembly_Instruction Builder::Push(Assembly_Operand* operand)
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Push;
+		instruction.Operand1 = operand;
+
+		return instruction;
+	}
+
+	Assembly_Instruction Builder::Pop(Assembly_Operand* operand)
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Pop;
+		instruction.Operand1 = operand;
+
+		return instruction;
+	}
+
+	Assembly_Instruction Builder::Add(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Add;
+		instruction.Operand1 = operand1;
+		instruction.Operand2 = operand2;
+
+		return instruction;
+	}
+
+	Assembly_Instruction Builder::Sub(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Sub;
+		instruction.Operand1 = operand1;
+		instruction.Operand2 = operand2;
+
+		return instruction;
+	}
+
+	Assembly_Operand* Builder::Register(X86_Register reg)
+	{
+		Assembly_Operand operand = {};
+		operand.reg.Register = reg;
+		operand.type = Op_Register;
+
+		return ASMA(operand);
+	}
+
+	Assembly_Operand* Builder::Constant_Integer(i64 integer)
+	{
+		Assembly_Operand operand = {};
+		operand.constant_integer.integer = integer;
+		operand.type = Op_Constant_Integer;
+
+		return ASMA(operand);
+	}
+
+	std::unordered_map<X86_Register, std::string> Register_Names = {
+		{X86_Register::RBP,"rbp"},
+		{X86_Register::RSP,"rsp"},
+
+		{X86_Register::RAX,"rax"},
+		{X86_Register::RBX,"rbx"},
+	};
+
 	X86_BackEnd::X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata)
 		: m_TranslationUnit(translation_unit), m_Metadata(metadata)
 	{
@@ -15,6 +87,129 @@ namespace Glass
 
 	void X86_BackEnd::Init()
 	{
+	}
+
+	std::string X86_BackEnd::Mangle_Name(const std::string& name, TypeStorage* type)
+	{
+		return fmt::format("{}_{}", name, (void*)type->Hash);
+	}
+
+	void X86_BackEnd::AssembleExternalFunction(const FunctionMetadata* function)
+	{
+		Assembly_External_Symbol external;
+		external.Name = function->Symbol.Symbol;
+		external.ExternalName = function->Symbol.Symbol;
+
+		Externals.push_back(external);
+	}
+
+	void X86_BackEnd::AssembleExternals()
+	{
+		for (const auto& function_pair : m_Metadata->m_Functions) {
+
+			const FunctionMetadata& function = function_pair.second;
+
+			if (function.Foreign) {
+				AssembleExternalFunction(&function);
+			}
+		}
+	}
+
+	void X86_BackEnd::Assemble()
+	{
+		AssembleExternals();
+
+		for (auto i : m_TranslationUnit->Instructions) {
+			if (i->GetType() == IRNodeType::File) {
+
+				IRFile* ir_file = (IRFile*)i;
+
+				for (auto tl_inst : ir_file->Instructions) {
+					if (tl_inst->GetType() == IRNodeType::Function) {
+						AssembleFunctionSymbol((IRFunction*)tl_inst);
+					}
+				}
+			}
+		}
+
+		for (auto i : m_TranslationUnit->Instructions) {
+			if (i->GetType() == IRNodeType::File) {
+
+				IRFile* ir_file = (IRFile*)i;
+
+				for (auto tl_inst : ir_file->Instructions) {
+					AssembleInstruction(tl_inst);
+				}
+			}
+			else {
+				AssembleInstruction(i);
+			}
+		}
+
+		Assembly_File assembly;
+		assembly.externals = Externals;
+		assembly.functions = Functions;
+
+		FASM_Printer fasm_printer(&assembly);
+		std::string fasm_output = fasm_printer.Print();
+
+		if (!std::filesystem::exists(".build")) {
+			std::filesystem::create_directory(".build");
+		}
+
+		{
+			auto file_stream = std::ofstream(".build/fasm.s");
+			file_stream << fasm_output;
+		}
+
+		GS_CORE_WARN("Running Fasm");
+
+		system("fasm .build/fasm.s");
+
+		GS_CORE_WARN("Running Linker On Fasm Output");
+
+		system("clang .build/fasm.obj");
+	}
+
+	void X86_BackEnd::AssembleInstruction(IRInstruction* instruction)
+	{
+		switch (instruction->GetType()) {
+		case IRNodeType::Function:
+			AssembleFunction((IRFunction*)instruction);
+			break;
+		default:
+			GS_CORE_ASSERT(nullptr, "Un Implemented Instruction");
+		}
+	}
+
+	void X86_BackEnd::AssembleFunctionSymbol(IRFunction* ir_function)
+	{
+		const auto& metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+		const auto& name = metadata->Symbol.Symbol;
+
+		Assembly_Function assembly;
+		assembly.Name = name;
+
+		Functions.push_back(assembly);
+
+		m_Data.Functions[ir_function->ID] = &Functions[Functions.size() - 1];
+	}
+
+	void X86_BackEnd::AssembleFunction(IRFunction* ir_function)
+	{
+		Code.clear();
+
+		Assembly_Function* assembly = m_Data.Functions[ir_function->ID];
+
+		Code.push_back(Builder::Push(Builder::Register(RBP)));
+		Code.push_back(Builder::Sub(Builder::Register(RSP), Builder::Constant_Integer(32)));
+
+		Code.push_back(Builder::Add(Builder::Register(RSP), Builder::Constant_Integer(32)));
+		Code.push_back(Builder::Pop(Builder::Register(RBP)));
+
+		Code.push_back(Builder::Ret());
+
+		assembly->Code = Code;
 	}
 
 	TypeStorage* X86_BackEnd::GetIRNodeType(IRInstruction* inst)
@@ -185,4 +380,90 @@ namespace Glass
 
 		//
 
+	FASM_Printer::FASM_Printer(Assembly_File* assembly)
+	{
+		Assembly = assembly;
+	}
+
+	std::string FASM_Printer::Print()
+	{
+		std::stringstream stream;
+
+		stream << "format MS64 COFF" << "\n" << "\n";
+		stream << "public main" << "\n" << "\n";
+
+		for (Assembly_External_Symbol external : Assembly->externals) {
+			stream << "extrn '" << external.ExternalName << "' " << "as " << external.ExternalName << "\n";
+		}
+
+		PrintCode(stream);
+
+		return stream.str();
+	}
+
+	void FASM_Printer::PrintOperand(const Assembly_Operand* operand, std::stringstream& stream)
+	{
+		switch (operand->type)
+		{
+		case Op_Register:
+			stream << Register_Names.at(operand->reg.Register);
+			break;
+		case Op_Constant_Integer:
+			stream << operand->constant_integer.integer;
+			break;
+		default:
+			GS_CORE_ASSERT(nullptr, "Un Implemented Operand Instruction");
+			break;
+		}
+	}
+
+	void FASM_Printer::PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream)
+	{
+		switch (instruction.OpCode)
+		{
+		case I_Ret:
+			stream << "ret";
+			break;
+		case I_Push:
+			stream << "push ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+		case I_Pop:
+			stream << "pop ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+		case I_Add:
+			stream << "add ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+		case I_Sub:
+			stream << "sub ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+		default:
+			GS_CORE_ASSERT(nullptr, "Un Implemented Assembly Instruction");
+			break;
+		}
+	}
+
+	void FASM_Printer::PrintCode(std::stringstream& stream)
+	{
+		stream << "\n";
+		stream << "section '.code' code readable executable\n";
+		stream << "\n";
+
+		for (Assembly_Function& asm_function : Assembly->functions) {
+			stream << asm_function.Name << ":" << "\n";
+
+			for (auto& code : asm_function.Code) {
+				stream << "\t";
+				PrintInstruction(code, stream);
+				stream << "\n";
+			}
+		}
+	}
 }
