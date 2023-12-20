@@ -53,6 +53,16 @@ namespace Glass
 		return instruction;
 	}
 
+	Assembly_Instruction Builder::Mov(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Instruction instruction = {};
+		instruction.OpCode = I_Mov;
+		instruction.Operand1 = operand1;
+		instruction.Operand2 = operand2;
+
+		return instruction;
+	}
+
 	Assembly_Operand* Builder::Register(X86_Register reg)
 	{
 		Assembly_Operand operand = {};
@@ -71,9 +81,77 @@ namespace Glass
 		return ASMA(operand);
 	}
 
+	Assembly_Operand* Builder::OpAdd(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Operand operand = {};
+		operand.bin_op.operand1 = operand1;
+		operand.bin_op.operand2 = operand2;
+
+		operand.type = Op_Add;
+
+		return ASMA(operand);
+	}
+
+	Assembly_Operand* Builder::OpSub(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Operand operand = {};
+		operand.bin_op.operand1 = operand1;
+		operand.bin_op.operand2 = operand2;
+
+		operand.type = Op_Sub;
+
+		return ASMA(operand);
+	}
+
+	Assembly_Operand* Builder::OpMul(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Operand operand = {};
+		operand.bin_op.operand1 = operand1;
+		operand.bin_op.operand2 = operand2;
+
+		operand.type = Op_Mul;
+
+		return ASMA(operand);
+	}
+
+	Assembly_Operand* Builder::OpDiv(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		Assembly_Operand operand = {};
+		operand.bin_op.operand1 = operand1;
+		operand.bin_op.operand2 = operand2;
+
+		operand.type = Op_Div;
+
+		return ASMA(operand);
+	}
+
+	Assembly_Operand* Builder::De_Reference(Assembly_Operand* operand1, TypeStorage* type /*= nullptr*/)
+	{
+		Assembly_Operand operand = {};
+		operand.de_reference.operand = operand1;
+		operand.de_reference.wordness = asm_none;
+
+		if (type) {
+			operand.de_reference.wordness = to_asm_size(TypeSystem::GetTypeSize(type));
+		}
+
+		operand.type = Op_De_Reference;
+
+		return ASMA(operand);
+	}
+
 	std::unordered_map<X86_Register, std::string> Register_Names = {
 		{X86_Register::RBP,"rbp"},
 		{X86_Register::RSP,"rsp"},
+
+		{X86_Register::AL,"al"},
+		{X86_Register::BL,"bl"},
+
+		{X86_Register::AX,"ax"},
+		{X86_Register::BX,"bx"},
+
+		{X86_Register::EAX,"eax"},
+		{X86_Register::EBX,"ebx"},
 
 		{X86_Register::RAX,"rax"},
 		{X86_Register::RBX,"rbx"},
@@ -177,6 +255,15 @@ namespace Glass
 		case IRNodeType::Function:
 			AssembleFunction((IRFunction*)instruction);
 			break;
+		case IRNodeType::Register:
+			AssembleRegister((IRRegister*)instruction);
+			break;
+		case IRNodeType::ConstValue:
+			AssembleConstValue((IRCONSTValue*)instruction);
+			break;
+		case IRNodeType::Return:
+			AssembleReturn((IRReturn*)instruction);
+			break;
 		default:
 			GS_CORE_ASSERT(nullptr, "Un Implemented Instruction");
 		}
@@ -184,7 +271,7 @@ namespace Glass
 
 	void X86_BackEnd::AssembleFunctionSymbol(IRFunction* ir_function)
 	{
-		const auto& metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+		const auto metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
 		const auto& name = metadata->Symbol.Symbol;
 
 		Assembly_Function assembly;
@@ -197,19 +284,68 @@ namespace Glass
 
 	void X86_BackEnd::AssembleFunction(IRFunction* ir_function)
 	{
+		const auto& metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+
 		Code.clear();
+
+		m_Data.IR_RegisterValues.clear();
+		m_Data.IR_RegisterTypes.clear();
+		m_Data.Stack_Size = 0;
+
+		Return_Storage_Location = nullptr;
+		Return_Counter = 0;
 
 		Assembly_Function* assembly = m_Data.Functions[ir_function->ID];
 
+		Assembly_Operand* stack_size_constant = Builder::Constant_Integer(32);
+
 		Code.push_back(Builder::Push(Builder::Register(RBP)));
-		Code.push_back(Builder::Sub(Builder::Register(RSP), Builder::Constant_Integer(32)));
+		Code.push_back(Builder::Sub(Builder::Register(RSP), stack_size_constant));
 
-		Code.push_back(Builder::Add(Builder::Register(RSP), Builder::Constant_Integer(32)));
+		if (metadata->ReturnType != TypeSystem::GetVoid()) {
+			Return_Storage_Location = Stack_Alloc(metadata->ReturnType);
+		}
+
+		for (auto instruction : ir_function->Instructions) {
+			AssembleInstruction(instruction);
+		}
+
+		stack_size_constant->constant_integer.integer += m_Data.Stack_Size;
+		stack_size_constant->constant_integer.integer = (i64)align_to(stack_size_constant->constant_integer.integer, 16);
+
+		if (Return_Storage_Location) {
+			auto return_location = GetReturnRegister(metadata->ReturnType);
+			Code.push_back(Builder::Mov(return_location, Builder::De_Reference(Return_Storage_Location, metadata->ReturnType)));
+		}
+
+		Code.push_back(Builder::Add(Builder::Register(RSP), stack_size_constant));
 		Code.push_back(Builder::Pop(Builder::Register(RBP)));
-
 		Code.push_back(Builder::Ret());
 
 		assembly->Code = Code;
+	}
+
+	void X86_BackEnd::AssembleRegister(IRRegister* ir_register)
+	{
+		CurrentRegister = ir_register->ID;
+
+		AssembleInstruction(ir_register->Value);
+	}
+
+	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
+	{
+		Return_Counter++;
+		Code.push_back(Builder::Mov(Builder::De_Reference(Return_Storage_Location, ir_return->Type), GetRegisterValue((IRRegisterValue*)ir_return->Value)));
+	}
+
+	void X86_BackEnd::AssembleConstValue(IRCONSTValue* ir_constant)
+	{
+		if (!(ir_constant->Type & FLAG_FLOATING_TYPE)) {
+			SetRegisterValue(Builder::Constant_Integer(*(i64*)ir_constant->Data));
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
 	}
 
 	TypeStorage* X86_BackEnd::GetIRNodeType(IRInstruction* inst)
@@ -217,6 +353,42 @@ namespace Glass
 		TypeStorage* type = nullptr;
 		IRNodeType node_type = inst->GetType();
 		return type;
+	}
+
+	Assembly_Operand* X86_BackEnd::Stack_Alloc(TypeStorage* type)
+	{
+		auto type_size = TypeSystem::GetTypeSize(type);
+		m_Data.Stack_Size += type_size;
+		return Builder::OpSub(Builder::Register(RBP), Builder::Constant_Integer(m_Data.Stack_Size));
+	}
+
+	Assembly_Operand* X86_BackEnd::GetReturnRegister(TypeStorage* type)
+	{
+		const std::unordered_map<u64, X86_Register> return_registers = {
+			{1,AL},
+			{2,AX},
+			{4,EAX},
+			{8,RAX},
+		};
+
+		auto type_size = TypeSystem::GetTypeSize(type);
+
+		if (type_size > 8) {
+			return Builder::Register(RAX);
+		}
+		else {
+			return Builder::Register(return_registers.at(type_size));
+		}
+	}
+
+	void X86_BackEnd::SetRegisterValue(Assembly_Operand* register_value)
+	{
+		m_Data.IR_RegisterValues[CurrentRegister] = register_value;
+	}
+
+	Assembly_Operand* X86_BackEnd::GetRegisterValue(IRRegisterValue* ir_register)
+	{
+		return m_Data.IR_RegisterValues.at(ir_register->RegisterID);
 	}
 
 	// 	//
@@ -403,6 +575,14 @@ namespace Glass
 
 	void FASM_Printer::PrintOperand(const Assembly_Operand* operand, std::stringstream& stream)
 	{
+		static const std::unordered_map<Assembly_Size, std::string> wordness_map = {
+			{asm_none, ""},
+			{asm_byte,"byte "},
+			{asm_word,"word "},
+			{asm_dword,"dword "},
+			{asm_qword,"qword "},
+		};
+
 		switch (operand->type)
 		{
 		case Op_Register:
@@ -410,6 +590,19 @@ namespace Glass
 			break;
 		case Op_Constant_Integer:
 			stream << operand->constant_integer.integer;
+			break;
+
+		case Op_Sub:
+			PrintOperand(operand->bin_op.operand1, stream);
+			stream << " - ";
+			PrintOperand(operand->bin_op.operand2, stream);
+			break;
+
+		case Op_De_Reference:
+			stream << wordness_map.at(operand->de_reference.wordness);
+			stream << '[';
+			PrintOperand(operand->de_reference.operand, stream);
+			stream << ']';
 			break;
 		default:
 			GS_CORE_ASSERT(nullptr, "Un Implemented Operand Instruction");
@@ -444,6 +637,14 @@ namespace Glass
 			stream << ", ";
 			PrintOperand(instruction.Operand2, stream);
 			break;
+
+		case I_Mov:
+			stream << "mov ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
 		default:
 			GS_CORE_ASSERT(nullptr, "Un Implemented Assembly Instruction");
 			break;
