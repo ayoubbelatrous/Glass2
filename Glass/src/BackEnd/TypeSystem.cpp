@@ -261,6 +261,11 @@ namespace Glass {
 		}
 	}
 
+	bool TypeSystem::IsFlt(TypeStorage* type)
+	{
+		return GetTypeFlags(type) & FLAG_FLOATING_TYPE;
+	}
+
 	bool TypeSystem::IsPointer(TypeStorage* type)
 	{
 		return type->Kind == TypeStorageKind::Pointer;

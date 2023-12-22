@@ -94,6 +94,8 @@ namespace Glass {
 		static TypeStorage* ReduceIndirection(TSPtr* pointer);
 		static u16 IndirectionCount(TypeStorage* type);
 
+		static bool IsFlt(TypeStorage* type);
+
 		static bool IsPointer(TypeStorage* type);
 		static bool IsArray(TypeStorage* type);
 		static TypeStorage* GetArrayElementTy(TypeStorage* type);

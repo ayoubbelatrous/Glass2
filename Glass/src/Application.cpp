@@ -130,7 +130,7 @@ namespace Glass
 			GS_CORE_INFO("IR Generation Done");
 		}
 
-		bool llvm = true;
+		bool llvm = false;
 
 		std::chrono::steady_clock::time_point m_LLVMStart;
 		std::chrono::steady_clock::time_point m_LLVMEnd;
