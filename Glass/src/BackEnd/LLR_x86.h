@@ -387,6 +387,8 @@ namespace Glass
 
 		void AssembleAlloca(IRAlloca* ir_alloca);
 
+		void AssembleMemberAccess(IRMemberAccess* ir_member_access);
+
 		void AssembleStore(IRStore* ir_store);
 		void AssembleLoad(IRLoad* ir_load);
 

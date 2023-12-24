@@ -2711,12 +2711,13 @@ namespace Glass
 			}
 			else
 			{
-				arg_type = m_Metadata.GetExprType(argumentValueRefs[i]->RegisterID);
 				arg = GetExpressionByValue(call->Arguments[i], argumentValueRefs[i]);
+				arg_type = m_Metadata.GetExprType(((IRRegisterValue*)arg)->RegisterID);
 			}
 
 			ir_call.Arguments.push_back(arg);
 			ir_call.ArgumentTypes.push_back(arg_type);
+
 			if (decl_arg != nullptr)
 			{
 				if (decl_arg->Variadic)
