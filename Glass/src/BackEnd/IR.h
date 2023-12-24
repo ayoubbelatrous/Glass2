@@ -850,6 +850,7 @@ namespace Glass
 		TypeStorage* Overload = nullptr;
 
 		std::vector<IRInstruction*> Arguments;
+		std::vector<TypeStorage*> ArgumentTypes;
 
 		IRFunctionCall() = default;
 

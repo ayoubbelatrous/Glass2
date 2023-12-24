@@ -2657,6 +2657,7 @@ namespace Glass
 			const ArgumentMetadata* decl_arg = metadata->GetArgument(i);
 
 			IRInstruction* arg = nullptr;
+			TypeStorage* arg_type = nullptr;
 
 			IRRegisterValue* argument_code = nullptr;
 
@@ -2706,13 +2707,16 @@ namespace Glass
 				}
 
 				arg = argument_code;
+				arg_type = type;
 			}
 			else
 			{
+				arg_type = m_Metadata.GetExprType(argumentValueRefs[i]->RegisterID);
 				arg = GetExpressionByValue(call->Arguments[i], argumentValueRefs[i]);
 			}
 
 			ir_call.Arguments.push_back(arg);
+			ir_call.ArgumentTypes.push_back(arg_type);
 			if (decl_arg != nullptr)
 			{
 				if (decl_arg->Variadic)

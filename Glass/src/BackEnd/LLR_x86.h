@@ -10,10 +10,6 @@ namespace Glass
 		std::string Name;
 	};
 
-	struct Assembly_String {
-		std::string String;
-	};
-
 	enum Assembly_Op_Code {
 		I_Ret,
 
@@ -26,8 +22,20 @@ namespace Glass
 		I_IMul,
 		I_IDiv,
 
+		I_Div,
+		I_Mul,
+
 		I_AddSS,
 		I_AddSD,
+
+		I_SubSS,
+		I_SubSD,
+
+		I_MulSS,
+		I_MulSD,
+
+		I_DivSS,
+		I_DivSD,
 
 		I_Mov,
 		I_MovD,
@@ -35,6 +43,16 @@ namespace Glass
 
 		I_MovSS,
 		I_MovSD,
+
+		I_Lea,
+
+		I_CvtSS2SD,
+		I_CvtSD2SS,
+
+		I_CBW,
+		I_CWD,
+		I_CDQ,
+		I_CQO,
 
 		I_Call,
 	};
@@ -51,8 +69,23 @@ namespace Glass
 		F_C,
 		F_D,
 
+		F_R8,
+		F_R9,
+		F_R10,
+		F_R11,
+		F_R12,
+		F_R13,
+		F_R14,
+		F_R15,
+
 		F_X0,
 		F_X1,
+		F_X2,
+		F_X3,
+		F_X4,
+		F_X5,
+		F_X6,
+		F_X7,
 	};
 
 	enum X86_Register {
@@ -62,9 +95,13 @@ namespace Glass
 		RSP,
 
 		AL,
+		AH,
 		BL,
+		BH,
 		DL,
+		DH,
 		CL,
+		CH,
 
 		AX,
 		BX,
@@ -83,6 +120,48 @@ namespace Glass
 
 		XMM0,
 		XMM1,
+		XMM2,
+		XMM3,
+		XMM4,
+		XMM5,
+		XMM6,
+		XMM7,
+
+		R8b,
+		R9b,
+		R10b,
+		R11b,
+		R12b,
+		R13b,
+		R14b,
+		R15b,
+
+		R8w,
+		R9w,
+		R10w,
+		R11w,
+		R12w,
+		R13w,
+		R14w,
+		R15w,
+
+		R8d,
+		R9d,
+		R10d,
+		R11d,
+		R12d,
+		R13d,
+		R14d,
+		R15d,
+
+		R8,
+		R9,
+		R10,
+		R11,
+		R12,
+		R13,
+		R14,
+		R15,
 	};
 
 	struct Assembly_Operand;
@@ -160,11 +239,16 @@ namespace Glass
 		double value = 0.0;
 	};
 
+	struct Assembly_String_Constant {
+		u64 id = 0;
+		std::string value;
+	};
+
 	struct Assembly_File {
 		std::vector<Assembly_External_Symbol> externals;
-		std::vector<Assembly_String> strings;
 		std::vector<Assembly_Function> functions;
 		std::vector<Assembly_Float_Constant> floats;
+		std::vector<Assembly_String_Constant> strings;
 	};
 
 	struct FASM_Printer {
@@ -207,17 +291,31 @@ namespace Glass
 	{
 		static Assembly_Instruction Ret();
 
+		static Assembly_Instruction Build_Inst(Assembly_Op_Code op_code, Assembly_Operand* op1 = nullptr, Assembly_Operand* op2 = nullptr);
+
 		static Assembly_Instruction Push(Assembly_Operand* operand);
 		static Assembly_Instruction Pop(Assembly_Operand* operand);
 		static Assembly_Instruction Add(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction AddSS(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction AddSD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction Sub(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction SubSS(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction SubSD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction Mul(Assembly_Operand* operand1, Assembly_Operand* operand2);
-		static Assembly_Instruction Div(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction MulSS(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction MulSD(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction IDiv(Assembly_Operand* operand1);
+		static Assembly_Instruction Div(Assembly_Operand* operand1);
+		static Assembly_Instruction DivSS(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction DivSD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction Call(Assembly_Operand* operand1);
+		static Assembly_Instruction Lea(Assembly_Operand* operand1, Assembly_Operand* operand2);
+
+		static Assembly_Instruction SS2SD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Instruction Mov(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction MovD(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction MovQ(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Operand* OpAdd(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Operand* OpSub(Assembly_Operand* operand1, Assembly_Operand* operand2);
@@ -260,6 +358,8 @@ namespace Glass
 		std::unordered_map<u64, Assembly_Function*> Functions;
 
 		u64 Stack_Size = 0;
+		u64 Call_Stack_Size = 0;
+		u64 Call_Stack_Pointer = 0;
 	};
 
 	class X86_BackEnd
@@ -299,6 +399,11 @@ namespace Glass
 
 		void AssembleConstValue(IRCONSTValue* ir_constant);
 
+		std::unordered_map<u64, Assembly_Operand*> data_values;
+
+		void AssembleData(IRData* ir_data);
+		void AssembleDataValue(IRDataValue* ir_data_value);
+
 		TypeStorage* GetIRNodeType(IRInstruction* ir);
 
 		X86_BackEnd_Data m_Data;
@@ -306,12 +411,13 @@ namespace Glass
 		MetaData* m_Metadata = nullptr;
 
 		std::vector<Assembly_External_Symbol> Externals;
-		std::vector<Assembly_String> Strings;
+		std::vector<Assembly_String_Constant> Strings;
 		std::vector<Assembly_Function*> Functions;
 		std::vector<Assembly_Instruction> Code;
 		std::vector<Assembly_Float_Constant> Floats;
 
 		Assembly_Operand* Stack_Alloc(TypeStorage* type);
+		Assembly_Operand* Alloc_Call_StackTop(TypeStorage* type);
 		Assembly_Operand* GetReturnRegister(TypeStorage* type);
 
 		Assembly_Instruction MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2);
@@ -334,8 +440,10 @@ namespace Glass
 		Assembly_Operand* Allocate_Register(TypeStorage* type, u64 ir_register, X86_Register x86_register);
 
 		Assembly_Operand* Allocate_Float_Register(TypeStorage* type, u64 ir_register);
+		Assembly_Operand* Allocate_Float_Register(TypeStorage* type, u64 ir_register, X86_Register x86_register);
 
 		Assembly_Operand* Create_Floating_Constant(u64 size, double value);
+		Assembly_Operand* Create_String_Constant(const std::string& data, u64 id);
 
 		bool Are_Equal(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
