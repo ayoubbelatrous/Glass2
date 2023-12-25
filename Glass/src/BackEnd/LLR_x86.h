@@ -66,11 +66,7 @@ namespace Glass
 
 		F_A,
 		F_B,
-		F_C,
-		F_D,
 
-		F_R8,
-		F_R9,
 		F_R10,
 		F_R11,
 		F_R12,
@@ -78,14 +74,19 @@ namespace Glass
 		F_R14,
 		F_R15,
 
+		F_C,
+		F_D,
+		F_R8,
+		F_R9,
+
+		F_X5,
+		F_X6,
+		F_X7,
 		F_X0,
 		F_X1,
 		F_X2,
 		F_X3,
 		F_X4,
-		F_X5,
-		F_X6,
-		F_X7,
 	};
 
 	enum X86_Register {
@@ -337,16 +338,19 @@ namespace Glass
 	};
 
 	struct Register_Allocation_Data {
-		std::unordered_map<X86_Register_Family, bool> allocated;
-		std::unordered_map<X86_Register_Family, bool> allocated_floating;
+		std::map<X86_Register_Family, bool> allocated;
+		std::map<X86_Register_Family, bool> allocated_floating;
 		std::unordered_map<u64, Register_Allocation> allocations;
 		std::unordered_map<X86_Register_Family, Register_Allocation*> family_to_allocation;
 	};
 
-	enum class Register_Liveness {
-		Other = 0,
-		Address_To_Value,
-		Value,
+	enum class Register_Value_Type {
+		Immediate_Value, // 50, 60 etc
+		Register_Value, // rax or 16
+		Memory_Value, // qword [rax + 16] or qword [rbp - 16] or dword [flt_60]
+
+		Stack_Address, // rbp - 4
+		Pointer_Address, // rbx + 4 rbx
 	};
 
 	struct X86_BackEnd_Data
@@ -354,7 +358,7 @@ namespace Glass
 		std::unordered_map<u64, Assembly_Operand*> IR_RegisterValues;
 		std::unordered_map<u64, TypeStorage*> IR_RegisterTypes;
 		std::unordered_map<u64, u64> IR_RegisterLifetimes;
-		std::unordered_map<u64, Register_Liveness> IR_RegisterLiveness;
+		std::unordered_map<u64, Register_Value_Type> IR_RegisterValueTypes;
 		std::unordered_map<u64, Assembly_Function*> Functions;
 
 		u64 Stack_Size = 0;
@@ -426,14 +430,15 @@ namespace Glass
 
 		u64 CurrentRegister = 0;
 
-		void SetRegisterValue(Assembly_Operand* register_value, Register_Liveness liveness);
+		void SetRegisterValue(Assembly_Operand* register_value, Register_Value_Type value_type);
 		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id);
-		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id, Register_Liveness liveness);
+		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id, Register_Value_Type value_type);
 		u64 CreateTempRegister(Assembly_Operand* register_value);
 
 		Assembly_Operand* GetRegisterValue(u64 ir_register);
 		Assembly_Operand* GetRegisterValue(IRRegisterValue* ir_register);
-		Register_Liveness GetRegisterLiveness(IRRegisterValue* ir_register);
+		Register_Value_Type GetRegisterValueType(u64 register_id);
+		Register_Value_Type GetRegisterValueType(IRRegisterValue* ir_register);
 
 		void UseRegisterValue(u64 ir_register);
 		void UseRegisterValue(IRRegisterValue* ir_register);
