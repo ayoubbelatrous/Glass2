@@ -827,25 +827,37 @@ namespace Glass
 			}
 		}
 
+		Assembly_Operand* return_location = nullptr;
+
 		if (metadata->ReturnType != TypeSystem::GetVoid()) {
 			auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
-			Assembly_Operand* return_value = nullptr;
 
 			if (!TypeSystem::IsFlt(metadata->ReturnType)) {
-				return_value = Allocate_Register(metadata->ReturnType, CurrentRegister, return_register_map.at(return_type_size));
+				return_location = Allocate_Register(metadata->ReturnType, CurrentRegister, return_register_map.at(return_type_size));
 			}
 			else {
-				return_value = Allocate_Register(metadata->ReturnType, CurrentRegister, XMM0);
+				return_location = Allocate_Register(metadata->ReturnType, CurrentRegister, XMM0);
 			}
-
-			SetRegisterValue(return_value, Register_Liveness::Value);
 		}
+
+		Code.push_back(Builder::Call(Builder::Symbol(name)));
+
+		if (!TypeSystem::IsPointer(metadata->ReturnType)) {
+			if (m_Metadata->GetStructIDFromType(metadata->ReturnType->BaseID) != -1) {
+
+				auto new_return_location = Stack_Alloc(metadata->ReturnType);
+
+				Code.push_back(Builder::Mov(Builder::De_Reference(new_return_location, metadata->ReturnType), return_location));
+
+				return_location = new_return_location;
+			}
+		}
+
+		SetRegisterValue(return_location, Register_Liveness::Value);
 
 		for (auto allocation : argument_allocations) {
 			UseRegisterValue(allocation);
 		}
-
-		Code.push_back(Builder::Call(Builder::Symbol(name)));
 
 		m_Data.Call_Stack_Pointer = 0;
 	}
