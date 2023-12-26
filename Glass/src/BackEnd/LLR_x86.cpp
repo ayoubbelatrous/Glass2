@@ -171,6 +171,26 @@ namespace Glass
 		return instruction;
 	}
 
+	Assembly_Instruction Builder::Cmp(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		return Builder::Build_Inst(I_Cmp, operand1, operand2);
+	}
+
+	Assembly_Instruction Builder::SetNe(Assembly_Operand* op)
+	{
+		return Builder::Build_Inst(I_Setne, op);
+	}
+
+	Assembly_Instruction Builder::And(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		return Builder::Build_Inst(I_And, operand1, operand2);
+	}
+
+	Assembly_Instruction Builder::Or(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		return Builder::Build_Inst(I_Or, operand1, operand2);
+	}
+
 	Assembly_Instruction Builder::SS2SD(Assembly_Operand* operand1, Assembly_Operand* operand2)
 	{
 		Assembly_Instruction instruction = {};
@@ -208,6 +228,11 @@ namespace Glass
 		instruction.Operand2 = operand2;
 
 		return instruction;
+	}
+
+	Assembly_Instruction Builder::MovZX(Assembly_Operand* operand1, Assembly_Operand* operand2)
+	{
+		return Builder::Build_Inst(I_MovZX, operand1, operand2);
 	}
 
 	Assembly_Operand* Builder::Register(X86_Register reg)
@@ -308,6 +333,13 @@ namespace Glass
 		{X86_Register::DL,"dl"},
 		{X86_Register::R8b,"r8b"},
 		{X86_Register::R9b,"r9b"},
+		{X86_Register::R10b,"r10b"},
+		{X86_Register::R11b,"r11b"},
+		{X86_Register::R12b,"r12b"},
+		{X86_Register::R13b,"r13b"},
+		{X86_Register::R14b,"r14b"},
+		{X86_Register::R15b,"r15b"},
+
 
 		{X86_Register::AX,"ax"},
 		{X86_Register::BX,"bx"},
@@ -315,6 +347,12 @@ namespace Glass
 		{X86_Register::DX,"dx"},
 		{X86_Register::R8w,"r8w"},
 		{X86_Register::R9w,"r9w"},
+		{X86_Register::R10w,"r10w"},
+		{X86_Register::R11w,"r11w"},
+		{X86_Register::R12w,"r12w"},
+		{X86_Register::R13w,"r13w"},
+		{X86_Register::R14w,"r14w"},
+		{X86_Register::R15w,"r15w"},
 
 		{X86_Register::EAX,"eax"},
 		{X86_Register::EBX,"ebx"},
@@ -553,6 +591,12 @@ namespace Glass
 			break;
 		case IRNodeType::DIV:
 			AssembleDiv((IRDIV*)instruction);
+			break;
+		case IRNodeType::And:
+			AssembleAnd((IRAnd*)instruction);
+			break;
+		case IRNodeType::Or:
+			AssembleOr((IROr*)instruction);
 			break;
 		case IRNodeType::Return:
 			AssembleReturn((IRReturn*)instruction);
@@ -793,6 +837,12 @@ namespace Glass
 				type_size = TypeSystem::GetTypeSize(argument_type);
 			}
 
+			if (metadata->Variadic) {
+				if (type_size < 4) {
+					type_size = 4;
+				}
+			}
+
 			if (type_size <= 8) {
 
 				X86_Register needed_register;
@@ -850,23 +900,25 @@ namespace Glass
 				type_size = TypeSystem::GetTypeSize(argument_type);
 			}
 
-			X86_Register needed_register;
-
 			if (i < 4)
 			{
-				if (!TypeSystem::IsFlt(argument_type)) {
-					needed_register = argument_register_map.at({ type_size,i });
-				}
-				else {
-					needed_register = argument_float_register_map.at(i);
-				}
-
 				GS_CORE_ASSERT(argument_allocations_registers[i].first);
 				auto argument_phys_register = argument_allocations_registers[i].first;
 
 				auto call_argument_value = GetRegisterValue(call_argument);
 
-				Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
+				if (metadata->Variadic) {
+
+					if (type_size < 4) {
+						Code.push_back(Builder::MovZX(argument_phys_register, call_argument_value));
+					}
+					else {
+						Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
+					}
+				}
+				else {
+					Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
+				}
 
 				if (metadata->Variadic) {
 					if (TypeSystem::IsFlt(argument_type)) {
@@ -969,6 +1021,7 @@ namespace Glass
 	void X86_BackEnd::AssembleRegister(IRRegister* ir_register)
 	{
 		CurrentRegister = ir_register->ID;
+		CurrentIrRegister = ir_register;
 		AssembleInstruction(ir_register->Value);
 	}
 
@@ -1521,6 +1574,82 @@ namespace Glass
 
 		UseRegisterValue(ir_div->RegisterA);
 		UseRegisterValue(ir_div->RegisterB);
+	}
+
+	void X86_BackEnd::AssembleAnd(IRAnd* ir_and)
+	{
+		auto a_value = GetRegisterValue(ir_and->RegisterA);
+		auto b_value = GetRegisterValue(ir_and->RegisterB);
+
+		if (CurrentIrRegister->IsCondition) {
+
+			Code.push_back(Builder::Cmp(a_value, b_value));
+
+			UseRegisterValue(ir_and->RegisterA);
+			UseRegisterValue(ir_and->RegisterB);
+			return;
+		}
+
+		auto result_location = Allocate_Register(ir_and->Type, CurrentRegister);
+
+		auto temp_reg_id = CreateTempRegister(nullptr);
+		auto temp_location = Allocate_Register(ir_and->Type, temp_reg_id);
+		SetRegisterValue(temp_location, temp_reg_id, Register_Value_Type::Register_Value);
+
+		Code.push_back(MoveBasedOnType(ir_and->Type, result_location, a_value));
+		Code.push_back(MoveBasedOnType(ir_and->Type, temp_location, b_value));
+
+		Code.push_back(Builder::Cmp(temp_location, Builder::Constant_Integer(0)));
+		Code.push_back(Builder::SetNe(temp_location));
+
+		Code.push_back(Builder::Cmp(result_location, Builder::Constant_Integer(0)));
+		Code.push_back(Builder::SetNe(result_location));
+
+		Code.push_back(Builder::And(result_location, temp_location));
+
+		SetRegisterValue(result_location, Register_Value_Type::Register_Value);
+
+		UseRegisterValue(ir_and->RegisterA);
+		UseRegisterValue(ir_and->RegisterB);
+		UseRegisterValue(temp_reg_id);
+	}
+
+	void X86_BackEnd::AssembleOr(IROr* ir_or)
+	{
+		auto a_value = GetRegisterValue(ir_or->RegisterA);
+		auto b_value = GetRegisterValue(ir_or->RegisterB);
+
+		if (CurrentIrRegister->IsCondition) {
+
+			Code.push_back(Builder::Cmp(a_value, b_value));
+
+			UseRegisterValue(ir_or->RegisterA);
+			UseRegisterValue(ir_or->RegisterB);
+			return;
+		}
+
+		auto result_location = Allocate_Register(ir_or->Type, CurrentRegister);
+
+		auto temp_reg_id = CreateTempRegister(nullptr);
+		auto temp_location = Allocate_Register(ir_or->Type, temp_reg_id);
+		SetRegisterValue(temp_location, temp_reg_id, Register_Value_Type::Register_Value);
+
+		Code.push_back(MoveBasedOnType(ir_or->Type, result_location, a_value));
+		Code.push_back(MoveBasedOnType(ir_or->Type, temp_location, b_value));
+
+		Code.push_back(Builder::Cmp(temp_location, Builder::Constant_Integer(0)));
+		Code.push_back(Builder::SetNe(temp_location));
+
+		Code.push_back(Builder::Cmp(result_location, Builder::Constant_Integer(0)));
+		Code.push_back(Builder::SetNe(result_location));
+
+		Code.push_back(Builder::Or(result_location, temp_location));
+
+		SetRegisterValue(result_location, Register_Value_Type::Register_Value);
+
+		UseRegisterValue(ir_or->RegisterA);
+		UseRegisterValue(ir_or->RegisterB);
+		UseRegisterValue(temp_reg_id);
 	}
 
 	void X86_BackEnd::AssemblePointerCast(IRPointerCast* ir_pointer_cast)
@@ -2224,167 +2353,6 @@ namespace Glass
 		return false;
 	}
 
-	// 	//
-	// 	// 
-	// 	switch (node_type)
-	// 	{
-	// 	case IRNodeType::ConstValue:
-	// 	{
-	// 		IRCONSTValue* as_const_value = (IRCONSTValue*)inst;
-	// 		type = TypeSystem::GetBasic(as_const_value->Type);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::DataValue:
-	// 	{
-	// 		type = TypeSystem::GetPtr(TypeSystem::GetBasic(IR_u8), 1);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Alloca:
-	// 	{
-	// 		IRAlloca* as_alloca = (IRAlloca*)inst;
-	// 		type = as_alloca->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Load:
-	// 	{
-	// 		IRLoad* as_load = (IRLoad*)inst;
-	// 		type = as_load->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::MemberAccess:
-	// 	{
-	// 		auto member_access = (IRMemberAccess*)inst;
-	// 
-	// 		const StructMetadata* struct_metadata = m_Metadata->GetStructMetadata(member_access->StructID);
-	// 		GS_CORE_ASSERT(struct_metadata);
-	// 		GS_CORE_ASSERT(member_access->MemberID < struct_metadata->Members.size());
-	// 
-	// 		const MemberMetadata& member = struct_metadata->Members[member_access->MemberID];
-	// 		type = TypeSystem::GetPtr(member.Type, 1);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::ArrayAccess:
-	// 	{
-	// 		auto array_access = (IRArrayAccess*)inst;
-	// 		type = TypeSystem::GetPtr(array_access->Type, 1);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Store:
-	// 	{
-	// 		IRStore* as_store = (IRStore*)inst;
-	// 		type = as_store->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Call:
-	// 	{
-	// 		IRFunctionCall* as_call = (IRFunctionCall*)inst;
-	// 		type = m_Metadata->GetFunctionMetadata(as_call->FuncID)->ReturnType;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::ADD:
-	// 	case IRNodeType::SUB:
-	// 	case IRNodeType::MUL:
-	// 	case IRNodeType::DIV:
-	// 	{
-	// 		IRBinOp* as_binop = (IRBinOp*)inst;
-	// 		type = as_binop->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Argument:
-	// 	{
-	// 		GS_CORE_ASSERT(m_CurrentFunction);
-	// 
-	// 		IRArgumentAllocation* argument = (IRArgumentAllocation*)inst;
-	// 		type = m_CurrentFunction->Arguments[argument->ArgumentIndex].Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::RegisterValue:
-	// 	{
-	// 		type = m_Data.IR_RegisterTypes.at(((IRRegisterValue*)inst)->RegisterID);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::GlobAddress:
-	// 	{
-	// 		type = m_Metadata->GetVariableMetadata(((IRGlobalAddress*)inst)->GlobID)->Tipe;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::NullPtr:
-	// 	{
-	// 		type = TypeSystem::GetPtr(TypeSystem::GetBasic(((IRNullPtr*)inst)->TypeID), 1);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::PointerCast:
-	// 	{
-	// 		type = ((IRPointerCast*)inst)->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::IntTrunc:
-	// 	case IRNodeType::Int2PtrCast:
-	// 	case IRNodeType::Ptr2IntCast:
-	// 	case IRNodeType::SExtCast:
-	// 	case IRNodeType::ZExtCast:
-	// 	case IRNodeType::FPTrunc:
-	// 	case IRNodeType::FPExt:
-	// 	{
-	// 		type = ((IRIntTrunc*)inst)->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Int2FP:
-	// 	{
-	// 		type = ((IRInt2FP*)inst)->Type;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::GreaterThan:
-	// 	case IRNodeType::LesserThan:
-	// 	case IRNodeType::Equal:
-	// 	case IRNodeType::NotEqual:
-	// 	case IRNodeType::BitAnd:
-	// 	case IRNodeType::BitOr:
-	// 	case IRNodeType::And:
-	// 	case IRNodeType::Or:
-	// 	{
-	// 		type = ((IRBinOp*)inst)->Type;
-	// 	}
-	// 	break;
-	// 
-	// 	case IRNodeType::TypeValue:
-	// 	{
-	// 		return TypeSystem::GetBasic(IR_type);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::TypeInfo:
-	// 	case IRNodeType::TypeOf:
-	// 	{
-	// 		return TypeSystem::GetPtr(TypeSystem::GetBasic(IR_typeinfo), 1);
-	// 	}
-	// 	break;
-	// 	case IRNodeType::Any:
-	// 	{
-	// 		return TypeSystem::GetBasic(IR_any);
-	// 	}
-	// 	case IRNodeType::AnyArray:
-	// 	{
-	// 		return TypeSystem::GetDynArray(TypeSystem::GetAny());
-	// 	}
-	// 	break;
-	// 	case IRNodeType::FuncRef:
-	// 	{
-	// 		type = m_Metadata->GetFunctionMetadata(((IRFuncRef*)inst)->FunctionID)->Signature;
-	// 	}
-	// 	break;
-	// 	case IRNodeType::CallFuncRef:
-	// 	{
-	// 		type = ((TSFunc*)((IRCallFuncRef*)inst)->Signature)->ReturnType;
-	// 	}
-	// 	break;
-	// 
-	// 	default:
-	// 		GS_CORE_ASSERT(0);
-	// 		break;
-	// 	}
-
-		//
-
 	FASM_Printer::FASM_Printer(Assembly_File* assembly)
 	{
 		Assembly = assembly;
@@ -2666,6 +2634,13 @@ namespace Glass
 			PrintOperand(instruction.Operand2, stream);
 			break;
 
+		case I_MovZX:
+			stream << "movzx ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
 		case I_Lea:
 			stream << "lea ";
 			PrintOperand(instruction.Operand1, stream);
@@ -2696,6 +2671,32 @@ namespace Glass
 			break;
 		case I_CQO:
 			stream << "cqo";
+			break;
+
+		case I_Cmp:
+			stream << "cmp ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_And:
+			stream << "and ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_Or:
+			stream << "or ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_Setne:
+			stream << "setne ";
+			PrintOperand(instruction.Operand1, stream);
 			break;
 
 		default:

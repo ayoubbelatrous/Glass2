@@ -44,6 +44,8 @@ namespace Glass
 		I_MovSS,
 		I_MovSD,
 
+		I_MovZX,
+
 		I_Lea,
 
 		I_CvtSS2SD,
@@ -53,6 +55,12 @@ namespace Glass
 		I_CWD,
 		I_CDQ,
 		I_CQO,
+
+		I_Cmp,
+		I_Setne,
+		I_And,
+		I_Or,
+
 
 		I_Call,
 	};
@@ -312,11 +320,18 @@ namespace Glass
 		static Assembly_Instruction Call(Assembly_Operand* operand1);
 		static Assembly_Instruction Lea(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
+		static Assembly_Instruction Cmp(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction SetNe(Assembly_Operand* op);
+		static Assembly_Instruction And(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction Or(Assembly_Operand* operand1, Assembly_Operand* operand2);
+
 		static Assembly_Instruction SS2SD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Instruction Mov(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction MovD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction MovQ(Assembly_Operand* operand1, Assembly_Operand* operand2);
+
+		static Assembly_Instruction MovZX(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Operand* OpAdd(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Operand* OpSub(Assembly_Operand* operand1, Assembly_Operand* operand2);
@@ -402,6 +417,9 @@ namespace Glass
 		void AssembleMul(IRMUL* ir_mul);
 		void AssembleDiv(IRDIV* ir_div);
 
+		void AssembleAnd(IRAnd* ir_and);
+		void AssembleOr(IROr* ir_or);
+
 		void AssemblePointerCast(IRPointerCast* ir_pointer_cast);
 
 		void AssembleReturn(IRReturn* ir_return);
@@ -432,6 +450,7 @@ namespace Glass
 		Assembly_Instruction MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2);
 
 		u64 CurrentRegister = 0;
+		IRRegister* CurrentIrRegister = nullptr;
 
 		void SetRegisterValue(Assembly_Operand* register_value, Register_Value_Type value_type);
 		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id);
