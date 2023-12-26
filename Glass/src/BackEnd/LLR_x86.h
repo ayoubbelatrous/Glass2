@@ -58,11 +58,19 @@ namespace Glass
 
 		I_Cmp,
 		I_Setne,
+
+		I_Je,
+		I_Jne,
+
+		I_Jg,
+		I_Jl,
+
 		I_And,
 		I_Or,
 
-
 		I_Call,
+
+		I_Label,
 	};
 
 	enum X86_Register_Family {
@@ -302,6 +310,8 @@ namespace Glass
 
 		static Assembly_Instruction Build_Inst(Assembly_Op_Code op_code, Assembly_Operand* op1 = nullptr, Assembly_Operand* op2 = nullptr);
 
+		static Assembly_Instruction Label(Assembly_Operand* operand);
+
 		static Assembly_Instruction Push(Assembly_Operand* operand);
 		static Assembly_Instruction Pop(Assembly_Operand* operand);
 		static Assembly_Instruction Add(Assembly_Operand* operand1, Assembly_Operand* operand2);
@@ -356,7 +366,7 @@ namespace Glass
 		std::map<X86_Register_Family, bool> allocated;
 		std::map<X86_Register_Family, bool> allocated_floating;
 		std::unordered_map<u64, Register_Allocation> allocations;
-		std::unordered_map<X86_Register_Family, Register_Allocation*> family_to_allocation;
+		std::unordered_map<X86_Register_Family, u64> family_to_allocation;
 	};
 
 	enum class Register_Value_Type {
@@ -409,6 +419,9 @@ namespace Glass
 		void AssembleMemberAccess(IRMemberAccess* ir_member_access);
 		void AssembleArrayAccess(IRArrayAccess* ir_array_access);
 
+		void AssembleLexicalBlock(IRLexBlock* ir_lex_block);
+		void AssembleIf(IRIf* ir_if);
+
 		void AssembleStore(IRStore* ir_store);
 		void AssembleLoad(IRLoad* ir_load);
 
@@ -442,6 +455,8 @@ namespace Glass
 		std::vector<Assembly_Function*> Functions;
 		std::vector<Assembly_Instruction> Code;
 		std::vector<Assembly_Float_Constant> Floats;
+
+		std::string GetLabelName();
 
 		Assembly_Operand* Stack_Alloc(TypeStorage* type);
 		Assembly_Operand* Alloc_Call_StackTop(TypeStorage* type);
@@ -484,5 +499,8 @@ namespace Glass
 
 		u64 Temporary_Register_ID_Counter = 100000;
 		u64 Float_Constant_Counter = 0;
+
+		u64 Function_Counter = 0;
+		u64 Label_Counter = 0;
 	};
 }

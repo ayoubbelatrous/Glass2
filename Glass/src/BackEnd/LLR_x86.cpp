@@ -25,6 +25,11 @@ namespace Glass
 		return instruction;
 	}
 
+	Assembly_Instruction Builder::Label(Assembly_Operand* operand)
+	{
+		return Builder::Build_Inst(I_Label, operand);
+	}
+
 	Assembly_Instruction Builder::Push(Assembly_Operand* operand)
 	{
 		Assembly_Instruction instruction = {};
@@ -607,6 +612,14 @@ namespace Glass
 		case IRNodeType::ArrayAccess:
 			AssembleArrayAccess((IRArrayAccess*)instruction);
 			break;
+
+		case IRNodeType::If:
+			AssembleIf((IRIf*)instruction);
+			break;
+		case IRNodeType::LexicalBlock:
+			AssembleLexicalBlock((IRLexBlock*)instruction);
+			break;
+
 		case IRNodeType::PointerCast:
 			AssemblePointerCast((IRPointerCast*)instruction);
 			break;
@@ -694,6 +707,8 @@ namespace Glass
 		m_Data.Stack_Size = 0;
 		m_Data.Call_Stack_Pointer = 0;
 		m_Data.Call_Stack_Size = 0;
+
+		m_Metadata->m_CurrentFunction = ir_function->ID;
 
 		Return_Storage_Location = nullptr;
 		Return_Counter = 0;
@@ -803,6 +818,8 @@ namespace Glass
 		Code.push_back(Builder::Ret());
 
 		assembly->Code = Code;
+		Function_Counter++;
+		Label_Counter = 0;
 	}
 
 	void X86_BackEnd::AssembleFunctionCall(IRFunctionCall* ir_function)
@@ -1241,6 +1258,87 @@ namespace Glass
 		}
 
 		UseRegisterValue(ir_array_access->ElementIndexRegister);
+	}
+
+	void X86_BackEnd::AssembleLexicalBlock(IRLexBlock* ir_lex_block)
+	{
+		for (auto inst : ir_lex_block->Instructions) {
+			AssembleInstruction(inst);
+		}
+	}
+
+	void X86_BackEnd::AssembleIf(IRIf* ir_if)
+	{
+		std::string skip_label_name = GetLabelName();
+		Assembly_Operand* skip_label = Builder::Symbol(skip_label_name);
+
+		auto condition_ir_register = m_Metadata->GetRegister(ir_if->ConditionRegister);
+
+		Assembly_Op_Code jump_op_code;
+
+		if (condition_ir_register->IsCondition) {
+
+			auto ir_condition_type = condition_ir_register->Value->GetType();
+			GS_CORE_ASSERT(nullptr);
+		}
+		else {
+
+			auto register_value = GetRegisterValue(ir_if->ConditionRegister);
+			UseRegisterValue(ir_if->ConditionRegister);
+
+			Code.push_back(Builder::Cmp(register_value, Builder::Constant_Integer(0)));
+			jump_op_code = I_Je;
+		}
+
+		for (const auto& [family, used] : Register_Allocator_Data.allocated) {
+
+			if (used) {
+
+				auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
+
+				auto spillage_location = Stack_Alloc(allocation.type);
+				spillage_location = Builder::De_Reference(spillage_location, allocation.type);
+
+				auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				spill.Comment = "Spillage";
+
+				Code.push_back(spill);
+
+				m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+				m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
+
+				allocation.spillage_location = spillage_location;
+			}
+		}
+
+		for (const auto& [family, used] : Register_Allocator_Data.allocated_floating) {
+
+			if (used) {
+
+				auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
+
+				auto spillage_location = Stack_Alloc(allocation.type);
+				spillage_location = Builder::De_Reference(spillage_location, allocation.type);
+
+				auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				spill.Comment = "Spillage";
+
+				Code.push_back(spill);
+
+				m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+				m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
+
+				allocation.spillage_location = spillage_location;
+			}
+		}
+
+		Code.push_back(Builder::Build_Inst(jump_op_code, skip_label));
+
+		for (auto inst : ir_if->Instructions) {
+			AssembleInstruction(inst);
+		}
+
+		Code.push_back(Builder::Label(skip_label));
 	}
 
 	void X86_BackEnd::AssembleStore(IRStore* ir_store)
@@ -1778,6 +1876,13 @@ namespace Glass
 		return type;
 	}
 
+	std::string X86_BackEnd::GetLabelName()
+	{
+		std::string label_name = fmt::format("L{}_{}", Function_Counter, Label_Counter);
+		Label_Counter++;
+		return label_name;
+	}
+
 	Assembly_Operand* X86_BackEnd::Stack_Alloc(TypeStorage* type)
 	{
 		auto type_size = TypeSystem::GetTypeSize(type);
@@ -2095,7 +2200,7 @@ namespace Glass
 				allocation.virtual_register_id = ir_register;
 
 				Register_Allocator_Data.allocations[ir_register] = allocation;
-				Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+				Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 				return Builder::Register(allocation.reg);
 			}
@@ -2103,20 +2208,20 @@ namespace Glass
 
 		for (auto [family, used] : Register_Allocator_Data.allocated) {
 
-			auto allocation = Register_Allocator_Data.family_to_allocation[family];
+			auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
 
-			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation->type), allocation->type);
+			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation.type), allocation.type);
 
-			auto spill = Builder::Mov(spillage_location, Builder::Register(allocation->reg));
+			auto spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
 
 			spill.Comment = "Spillage";
 
 			Code.push_back(spill);
 
-			m_Data.IR_RegisterValues.at(allocation->virtual_register_id) = spillage_location;
-			m_Data.IR_RegisterValueTypes.at(allocation->virtual_register_id) = Register_Value_Type::Memory_Value;
+			m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+			m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
 
-			allocation->spillage_location = spillage_location;
+			allocation.spillage_location = spillage_location;
 
 			Register_Allocation new_allocation = { };
 
@@ -2126,7 +2231,7 @@ namespace Glass
 			new_allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = new_allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(new_allocation.reg);
 		}
@@ -2160,25 +2265,25 @@ namespace Glass
 			allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(allocation.reg);
 		}
 		else {
-			auto allocation = Register_Allocator_Data.family_to_allocation.at(family);
+			auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation.at(family)];
 
-			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation->type), allocation->type);
+			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation.type), allocation.type);
 
-			auto spill = MoveBasedOnType(allocation->type, spillage_location, Builder::Register(allocation->reg));
+			auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
 
 			spill.Comment = "Spillage";
 
 			Code.push_back(spill);
 
-			m_Data.IR_RegisterValues.at(allocation->virtual_register_id) = spillage_location;
-			m_Data.IR_RegisterValueTypes.at(allocation->virtual_register_id) = Register_Value_Type::Memory_Value;
+			m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+			m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
 
-			allocation->spillage_location = spillage_location;
+			allocation.spillage_location = spillage_location;
 
 			Register_Allocation new_allocation = { };
 
@@ -2188,7 +2293,7 @@ namespace Glass
 			new_allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = new_allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(new_allocation.reg);
 		}
@@ -2215,7 +2320,7 @@ namespace Glass
 				allocation.virtual_register_id = ir_register;
 
 				Register_Allocator_Data.allocations[ir_register] = allocation;
-				Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+				Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 				return Builder::Register(allocation.reg);
 			}
@@ -2223,21 +2328,21 @@ namespace Glass
 
 		for (auto [family, used] : Register_Allocator_Data.allocated_floating) {
 
-			auto allocation = Register_Allocator_Data.family_to_allocation[family];
+			auto& allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
 
-			auto spillage_location = Stack_Alloc(allocation->type);
-			spillage_location = Builder::De_Reference(spillage_location, allocation->type);
+			auto spillage_location = Stack_Alloc(allocation.type);
+			spillage_location = Builder::De_Reference(spillage_location, allocation.type);
 
-			auto spill = MoveBasedOnType(allocation->type, spillage_location, Builder::Register(allocation->reg));
+			auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
 
 			spill.Comment = "Spillage";
 
 			Code.push_back(spill);
 
-			m_Data.IR_RegisterValues.at(allocation->virtual_register_id) = spillage_location;
-			m_Data.IR_RegisterValueTypes.at(allocation->virtual_register_id) = Register_Value_Type::Memory_Value;
+			m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+			m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
 
-			allocation->spillage_location = spillage_location;
+			allocation.spillage_location = spillage_location;
 
 			Register_Allocation new_allocation = { };
 
@@ -2247,7 +2352,7 @@ namespace Glass
 			new_allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = new_allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(new_allocation.reg);
 		}
@@ -2277,26 +2382,25 @@ namespace Glass
 			allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(allocation.reg);
 		}
 		else {
-			auto allocation = Register_Allocator_Data.family_to_allocation[family];
+			auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
 
-			auto spillage_location = Stack_Alloc(allocation->type);
-			spillage_location = Builder::De_Reference(spillage_location, allocation->type);
-
-			auto spill = MoveBasedOnType(allocation->type, spillage_location, Builder::Register(allocation->reg));
+			auto spillage_location = Stack_Alloc(allocation.type);
+			spillage_location = Builder::De_Reference(spillage_location, allocation.type);
+			auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
 
 			spill.Comment = "Spillage";
 
 			Code.push_back(spill);
 
-			m_Data.IR_RegisterValues.at(allocation->virtual_register_id) = spillage_location;
-			m_Data.IR_RegisterValueTypes.at(allocation->virtual_register_id) = Register_Value_Type::Memory_Value;
+			m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+			m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
 
-			allocation->spillage_location = spillage_location;
+			allocation.spillage_location = spillage_location;
 
 			Register_Allocation new_allocation = { };
 
@@ -2306,7 +2410,7 @@ namespace Glass
 			new_allocation.virtual_register_id = ir_register;
 
 			Register_Allocator_Data.allocations[ir_register] = new_allocation;
-			Register_Allocator_Data.family_to_allocation[family] = &Register_Allocator_Data.allocations[ir_register];
+			Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
 			return Builder::Register(new_allocation.reg);
 		}
@@ -2507,6 +2611,10 @@ namespace Glass
 	{
 		switch (instruction.OpCode)
 		{
+		case I_Label:
+			PrintOperand(instruction.Operand1, stream);
+			stream << ':';
+			break;
 		case I_Ret:
 			stream << "ret";
 			break;
@@ -2699,6 +2807,26 @@ namespace Glass
 			PrintOperand(instruction.Operand1, stream);
 			break;
 
+		case I_Je:
+			stream << "je ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
+		case I_Jne:
+			stream << "jne ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
+		case I_Jg:
+			stream << "jg ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
+		case I_Jl:
+			stream << "jl ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
 		default:
 			GS_CORE_ASSERT(nullptr, "Un Implemented Assembly Instruction");
 			break;
@@ -2715,7 +2843,11 @@ namespace Glass
 			stream << asm_function.Name << ":" << "\n";
 
 			for (auto& code : asm_function.Code) {
-				stream << "\t";
+
+				if (code.OpCode != I_Label) {
+					stream << "\t";
+				}
+
 				PrintInstruction(code, stream);
 
 				if (code.Comment) {
