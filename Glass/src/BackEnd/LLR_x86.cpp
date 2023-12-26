@@ -404,13 +404,30 @@ namespace Glass
 
 	void X86_BackEnd::AssembleExternals()
 	{
+		bool has_memcpy = false;
 		for (const auto& function_pair : m_Metadata->m_Functions) {
 
 			const FunctionMetadata& function = function_pair.second;
 
+			if (function.Symbol.Symbol == "memcpy") {
+				has_memcpy = true;
+			}
+
 			if (function.Foreign) {
 				AssembleExternalFunction(&function);
 			}
+		}
+
+		//intrinsics
+
+		//memcpy
+		if (!has_memcpy)
+		{
+			Assembly_External_Symbol external;
+			external.Name = "memcpy";
+			external.ExternalName = "memcpy";
+
+			Externals.push_back(external);
 		}
 	}
 
@@ -543,6 +560,12 @@ namespace Glass
 		case IRNodeType::MemberAccess:
 			AssembleMemberAccess((IRMemberAccess*)instruction);
 			break;
+		case IRNodeType::ArrayAccess:
+			AssembleArrayAccess((IRArrayAccess*)instruction);
+			break;
+		case IRNodeType::PointerCast:
+			AssemblePointerCast((IRPointerCast*)instruction);
+			break;
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -653,36 +676,53 @@ namespace Glass
 		Code.push_back(Builder::Lea(Builder::Register(RBP), Builder::De_Reference(Builder::OpAdd(Builder::Register(RSP), stack_size_constant))));
 
 		if (metadata->ReturnType != TypeSystem::GetVoid()) {
-			Return_Storage_Location = Stack_Alloc(metadata->ReturnType);
+
+			auto return_type = metadata->ReturnType;
+			auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
+
+			if (return_type_size > 8) {
+				return_type = TypeSystem::GetPtr(return_type, 1);
+			}
+
+			Return_Storage_Location = Stack_Alloc(return_type);
+		}
+
+		auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
+
+		if (return_type_size > 8) {
+			auto return_type = TypeSystem::GetPtr(metadata->ReturnType, 1);
+			Code.push_back(MoveBasedOnType(return_type, Builder::De_Reference(Return_Storage_Location, return_type), Builder::Register(RAX)));
 		}
 
 		u64 i = 0;
 
 		for (const ArgumentMetadata& argument : metadata->Arguments) {
-			auto type_size = TypeSystem::GetTypeSize(argument.Type);
 
 			CurrentRegister = argument.AllocationLocation->RegisterID;
 
-			if (type_size <= 8) {
-				if (i < 4)
-				{
-					X86_Register needed_register;
+			auto argument_type = argument.Type;
 
-					if (!TypeSystem::IsFlt(argument.Type)) {
-						needed_register = argument_register_map.at({ type_size, i });
-					}
-					else {
-						needed_register = argument_float_register_map.at(i);
-					}
+			if (TypeSystem::GetTypeSize(argument_type) > 8) {
+				argument_type = TypeSystem::GetPtr(argument_type, 1);
+			}
 
-					SetRegisterValue(Allocate_Register(argument.Type, CurrentRegister, needed_register), Register_Value_Type::Register_Value);
+			auto type_size = TypeSystem::GetTypeSize(argument_type);
+
+			if (i < 4)
+			{
+				X86_Register needed_register;
+
+				if (!TypeSystem::IsFlt(argument_type)) {
+					needed_register = argument_register_map.at({ type_size, i });
 				}
 				else {
-					SetRegisterValue(Builder::De_Reference(Builder::OpAdd(Builder::Register(RBP), Builder::Constant_Integer(40 + (i - 3) * 8)), argument.Type), Register_Value_Type::Memory_Value);
+					needed_register = argument_float_register_map.at(i);
 				}
+
+				SetRegisterValue(Allocate_Register(argument_type, CurrentRegister, needed_register), Register_Value_Type::Register_Value);
 			}
 			else {
-				GS_CORE_ASSERT(nullptr);
+				SetRegisterValue(Builder::De_Reference(Builder::OpAdd(Builder::Register(RBP), Builder::Constant_Integer(40 + (i - 3) * 8)), argument_type), Register_Value_Type::Memory_Value);
 			}
 			i++;
 		}
@@ -702,8 +742,16 @@ namespace Glass
 		stack_size_constant->constant_integer.integer = (i64)align_to(stack_size_constant->constant_integer.integer, 16);
 
 		if (Return_Storage_Location) {
+
+			auto return_type = metadata->ReturnType;
+			auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
+
+			if (return_type_size > 8) {
+				return_type = TypeSystem::GetPtr(return_type, 1);
+			}
+
 			auto return_location = GetReturnRegister(metadata->ReturnType);
-			Code.push_back(MoveBasedOnType(metadata->ReturnType, return_location, Builder::De_Reference(Return_Storage_Location, metadata->ReturnType)));
+			Code.push_back(MoveBasedOnType(return_type, return_location, Builder::De_Reference(Return_Storage_Location, return_type)));
 		}
 
 		Code.push_back(Builder::Add(Builder::Register(RSP), stack_size_constant));
@@ -740,6 +788,11 @@ namespace Glass
 
 			auto type_size = TypeSystem::GetTypeSize(argument_type);
 
+			if (type_size > 8) {
+				argument_type = TypeSystem::GetPtr(argument_type, 1);
+				type_size = TypeSystem::GetTypeSize(argument_type);
+			}
+
 			if (type_size <= 8) {
 
 				X86_Register needed_register;
@@ -761,8 +814,6 @@ namespace Glass
 					SetRegisterValue(argument_phys_register, temp_register_id);
 
 					auto call_argument_value = GetRegisterValue(call_argument);
-
-					Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
 
 					if (metadata->Variadic) {
 						if (TypeSystem::IsFlt(argument_type)) {
@@ -794,96 +845,108 @@ namespace Glass
 
 			auto type_size = TypeSystem::GetTypeSize(argument_type);
 
-			if (type_size <= 8) {
+			if (type_size > 8) {
+				argument_type = TypeSystem::GetPtr(argument_type, 1);
+				type_size = TypeSystem::GetTypeSize(argument_type);
+			}
 
-				X86_Register needed_register;
+			X86_Register needed_register;
 
-				if (i < 4)
-				{
-					if (!TypeSystem::IsFlt(argument_type)) {
-						needed_register = argument_register_map.at({ type_size,i });
-					}
-					else {
-						needed_register = argument_float_register_map.at(i);
-					}
-
-					GS_CORE_ASSERT(argument_allocations_registers[i].first);
-					auto argument_phys_register = argument_allocations_registers[i].first;
-
-					auto call_argument_value = GetRegisterValue(call_argument);
-
-					Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
-
-					if (metadata->Variadic) {
-						if (TypeSystem::IsFlt(argument_type)) {
-
-							if (type_size != 8) {
-								Code.push_back(Builder::SS2SD(argument_phys_register, argument_phys_register));
-							}
-
-							GS_CORE_ASSERT(argument_allocations_registers[i].second);
-
-							auto integer_phys_register = argument_allocations_registers[i].second;
-
-							Code.push_back(Builder::MovQ(integer_phys_register, argument_phys_register));
-						}
-					}
+			if (i < 4)
+			{
+				if (!TypeSystem::IsFlt(argument_type)) {
+					needed_register = argument_register_map.at({ type_size,i });
 				}
 				else {
-					auto call_argument_value = GetRegisterValue(call_argument);
-
-					if (GetRegisterValueType(call_argument) != Register_Value_Type::Register_Value) {
-
-						auto tmp_move_register_id = CreateTempRegister(nullptr);
-						auto tmp_move_register = Allocate_Register(argument_type, tmp_move_register_id);
-						SetRegisterValue(tmp_move_register, tmp_move_register_id, Register_Value_Type::Register_Value);
-						UseRegisterValue(tmp_move_register_id);
-
-						Code.push_back(MoveBasedOnType(argument_type, tmp_move_register, call_argument_value));
-
-						call_argument_value = tmp_move_register;
-					}
-
-					if (metadata->Variadic) {
-						if (TypeSystem::IsFlt(argument_type)) {
-
-							if (type_size != 8) {
-								Code.push_back(Builder::SS2SD(call_argument_value, call_argument_value));
-								argument_type = TypeSystem::GetBasic(IR_f64);
-							}
-						}
-					}
-
-					auto argument_stack_location = Builder::De_Reference(Alloc_Call_StackTop(TypeSystem::GetU64()), argument_type);
-
-					Code.push_back(MoveBasedOnType(argument_type, argument_stack_location, call_argument_value));
+					needed_register = argument_float_register_map.at(i);
 				}
 
-				UseRegisterValue(call_argument);
+				GS_CORE_ASSERT(argument_allocations_registers[i].first);
+				auto argument_phys_register = argument_allocations_registers[i].first;
+
+				auto call_argument_value = GetRegisterValue(call_argument);
+
+				Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
+
+				if (metadata->Variadic) {
+					if (TypeSystem::IsFlt(argument_type)) {
+
+						if (type_size != 8) {
+							Code.push_back(Builder::SS2SD(argument_phys_register, argument_phys_register));
+						}
+
+						GS_CORE_ASSERT(argument_allocations_registers[i].second);
+
+						auto integer_phys_register = argument_allocations_registers[i].second;
+
+						Code.push_back(Builder::MovQ(integer_phys_register, argument_phys_register));
+					}
+				}
 			}
 			else {
-				GS_CORE_ASSERT(nullptr);
+				auto call_argument_value = GetRegisterValue(call_argument);
+
+				if (GetRegisterValueType(call_argument) != Register_Value_Type::Register_Value) {
+
+					auto tmp_move_register_id = CreateTempRegister(nullptr);
+					auto tmp_move_register = Allocate_Register(argument_type, tmp_move_register_id);
+					SetRegisterValue(tmp_move_register, tmp_move_register_id, Register_Value_Type::Register_Value);
+					UseRegisterValue(tmp_move_register_id);
+
+					Code.push_back(MoveBasedOnType(argument_type, tmp_move_register, call_argument_value));
+
+					call_argument_value = tmp_move_register;
+				}
+
+				if (metadata->Variadic) {
+					if (TypeSystem::IsFlt(argument_type)) {
+
+						if (type_size != 8) {
+							Code.push_back(Builder::SS2SD(call_argument_value, call_argument_value));
+							argument_type = TypeSystem::GetBasic(IR_f64);
+						}
+					}
+				}
+
+				auto argument_stack_location = Builder::De_Reference(Alloc_Call_StackTop(TypeSystem::GetU64()), argument_type);
+
+				Code.push_back(MoveBasedOnType(argument_type, argument_stack_location, call_argument_value));
 			}
+
+			UseRegisterValue(call_argument);
 		}
 
 		Assembly_Operand* return_location = nullptr;
 
 		if (metadata->ReturnType != TypeSystem::GetVoid()) {
+
 			auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
+			auto return_type = metadata->ReturnType;
+
+			if (return_type_size > 8) {
+				return_type = TypeSystem::GetPtr(metadata->ReturnType, 1);
+				return_type_size = TypeSystem::GetTypeSize(return_type);
+			}
 
 			if (!TypeSystem::IsFlt(metadata->ReturnType)) {
-				return_location = Allocate_Register(metadata->ReturnType, CurrentRegister, return_register_map.at(return_type_size));
+				return_location = Allocate_Register(return_type, CurrentRegister, return_register_map.at(return_type_size));
 			}
 			else {
-				return_location = Allocate_Register(metadata->ReturnType, CurrentRegister, XMM0);
+				return_location = Allocate_Register(return_type, CurrentRegister, XMM0);
 			}
+		}
+
+		auto return_type_size = TypeSystem::GetTypeSize(metadata->ReturnType);
+
+		if (return_type_size > 8) {
+			Code.push_back(Builder::Lea(return_location, Builder::De_Reference(Stack_Alloc(metadata->ReturnType), metadata->ReturnType)));
 		}
 
 		Code.push_back(Builder::Call(Builder::Symbol(name)));
 
 		SetRegisterValue(return_location, Register_Value_Type::Register_Value);
 
-		if (!TypeSystem::IsPointer(metadata->ReturnType)) {
+		if (!TypeSystem::IsPointer(metadata->ReturnType) && return_type_size <= 8) {
 			if (m_Metadata->GetStructIDFromType(metadata->ReturnType->BaseID) != -1) {
 
 				auto new_return_location = Stack_Alloc(metadata->ReturnType);
@@ -912,27 +975,71 @@ namespace Glass
 	void X86_BackEnd::AssembleArgument(IRArgumentAllocation* ir_argument)
 	{
 		auto argument_input_location = GetRegisterValue(CurrentRegister);
-		UseRegisterValue(CurrentRegister);
+
+		auto argument_input_value_type = GetRegisterValueType(CurrentRegister);
 
 		auto argument_storage_location = Stack_Alloc(ir_argument->AllocationType);
 
-		if (argument_input_location->type != Op_Register) {
+		auto type_size = TypeSystem::GetTypeSize(ir_argument->AllocationType);
+
+		if (argument_input_value_type == Register_Value_Type::Memory_Value) {
+
+			auto tmp_register_type = ir_argument->AllocationType;
+
+			if (type_size > 8) {
+				tmp_register_type = TypeSystem::GetPtr(tmp_register_type, 1);
+			}
 
 			auto tmp_move_register_id = CreateTempRegister(nullptr);
-			auto tmp_move_register = Allocate_Register(ir_argument->AllocationType, tmp_move_register_id);
+			auto tmp_move_register = Allocate_Register(tmp_register_type, tmp_move_register_id);
 			SetRegisterValue(tmp_move_register, tmp_move_register_id, Register_Value_Type::Register_Value);
 			UseRegisterValue(tmp_move_register_id);
 
-			Code.push_back(MoveBasedOnType(ir_argument->AllocationType, tmp_move_register, argument_input_location));
+			Code.push_back(MoveBasedOnType(tmp_register_type, tmp_move_register, argument_input_location));
 
 			argument_input_location = tmp_move_register;
 		}
 
-		Code.push_back(MoveBasedOnType(ir_argument->AllocationType, Builder::De_Reference(argument_storage_location, ir_argument->AllocationType), argument_input_location));
+		if (type_size <= 8) {
+			Code.push_back(MoveBasedOnType(ir_argument->AllocationType, Builder::De_Reference(argument_storage_location, ir_argument->AllocationType), argument_input_location));
+		}
+		else {
+
+			auto mmcpy_dest_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_dest_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_dest_reg_id, X86_Register::RCX);
+			SetRegisterValue(mmcpy_dest_reg, mmcpy_dest_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_src_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_src_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_src_reg_id, X86_Register::RDX);
+			SetRegisterValue(mmcpy_src_reg, mmcpy_src_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_size_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_size_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_size_reg_id, X86_Register::R8);
+			SetRegisterValue(mmcpy_size_reg, mmcpy_size_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_return_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_return_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_return_reg_id, X86_Register::RAX);
+			SetRegisterValue(mmcpy_return_reg, mmcpy_return_reg_id, Register_Value_Type::Register_Value);
+
+			auto argument_input_location = GetRegisterValue(CurrentRegister);
+
+			Code.push_back(Builder::Lea(mmcpy_dest_reg, Builder::De_Reference(argument_storage_location)));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, argument_input_location));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
+
+			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+
+			UseRegisterValue(mmcpy_dest_reg_id);
+			UseRegisterValue(mmcpy_src_reg_id);
+			UseRegisterValue(mmcpy_size_reg_id);
+			UseRegisterValue(mmcpy_return_reg_id);
+		}
 
 		SetRegisterValue(argument_storage_location, Register_Value_Type::Stack_Address);
 
 		m_Data.IR_RegisterLifetimes.at(CurrentRegister) = 1;
+
+		UseRegisterValue(CurrentRegister);
 	}
 
 	void X86_BackEnd::AssembleAlloca(IRAlloca* ir_alloca)
@@ -1002,6 +1109,87 @@ namespace Glass
 		}
 	}
 
+	void X86_BackEnd::AssembleArrayAccess(IRArrayAccess* ir_array_access)
+	{
+		auto array_address_value = GetRegisterValue(ir_array_access->ArrayAddress);
+		auto register_value_type = GetRegisterValueType(ir_array_access->ArrayAddress);
+
+		if (register_value_type == Register_Value_Type::Memory_Value) {
+
+			GS_CORE_ASSERT(array_address_value->type != Op_Register);
+
+			UseRegisterValue(ir_array_access->ArrayAddress);
+			auto new_array_address_value = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+
+			if (register_value_type != Register_Value_Type::Memory_Value && register_value_type != Register_Value_Type::Register_Value) {
+				array_address_value = Builder::De_Reference(new_array_address_value, TypeSystem::GetVoidPtr());
+			}
+
+			register_value_type = Register_Value_Type::Register_Value;
+
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), new_array_address_value, new_array_address_value));
+
+			array_address_value = new_array_address_value;
+		}
+		else if (register_value_type == Register_Value_Type::Register_Value) {
+			UseRegisterValue(ir_array_access->ArrayAddress);
+
+			GS_CORE_ASSERT(array_address_value->type == Op_Register);
+
+			Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister, array_address_value->reg.Register);
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		auto array_index_value = GetRegisterValue(ir_array_access->ElementIndexRegister);
+		auto array_index_type = GetRegisterValueType(ir_array_access->ElementIndexRegister);
+
+		if (array_index_type == Register_Value_Type::Memory_Value) {
+
+			auto temp_array_index_register_id = CreateTempRegister(nullptr);
+			auto new_array_index_value = Allocate_Register(TypeSystem::GetVoidPtr(), temp_array_index_register_id);
+			SetRegisterValue(new_array_index_value, temp_array_index_register_id, Register_Value_Type::Register_Value);
+
+			if (array_index_type != Register_Value_Type::Memory_Value && array_index_type != Register_Value_Type::Register_Value) {
+				array_index_value = Builder::De_Reference(new_array_index_value, TypeSystem::GetVoidPtr());
+			}
+
+			array_index_type = Register_Value_Type::Register_Value;
+
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), new_array_index_value, array_index_value));
+
+			array_index_value = new_array_index_value;
+
+			UseRegisterValue(temp_array_index_register_id);
+		}
+
+		auto element_type_size = TypeSystem::GetTypeSize(ir_array_access->Type);
+
+		if (array_index_type == Register_Value_Type::Immediate_Value) {
+
+			if (register_value_type == Register_Value_Type::Register_Value) {
+
+				if (element_type_size < 8) {
+					SetRegisterValue(Builder::OpAdd(IR(*array_address_value), Builder::OpMul(IR(*array_index_value), Builder::Constant_Integer(element_type_size))), CurrentRegister, Register_Value_Type::Pointer_Address);
+				}
+				else {
+					SetRegisterValue(Builder::OpAdd(IR(*array_address_value), Builder::Constant_Integer(element_type_size * array_index_value->constant_integer.integer)), CurrentRegister, Register_Value_Type::Pointer_Address);
+				}
+			}
+			else {
+				GS_CORE_ASSERT(nullptr);
+			}
+		}
+		else {
+			Code.push_back(Builder::Mul(array_index_value, Builder::Constant_Integer(element_type_size)));
+			Code.push_back(Builder::Add(array_address_value, array_index_value));
+			SetRegisterValue(array_address_value, CurrentRegister, Register_Value_Type::Pointer_Address);
+		}
+
+		UseRegisterValue(ir_array_access->ElementIndexRegister);
+	}
+
 	void X86_BackEnd::AssembleStore(IRStore* ir_store)
 	{
 		auto type_size = TypeSystem::GetTypeSize(ir_store->Type);
@@ -1009,16 +1197,23 @@ namespace Glass
 		auto pointer_register_value = GetRegisterValue(ir_store->AddressRegister);
 
 		auto data_register_value = GetRegisterValue((IRRegisterValue*)ir_store->Data);
+		auto data_register_value_type = GetRegisterValueType((IRRegisterValue*)ir_store->Data);
 
-		if (data_register_value->type != Op_Register) {
+		if (data_register_value_type != Register_Value_Type::Register_Value) {
+
+			auto store_type = ir_store->Type;
+
+			if (type_size > 8) {
+				store_type = TypeSystem::GetPtr(ir_store->Type, 1);
+			}
 
 			auto temp_register_id = CreateTempRegister(nullptr);
 
-			auto temp_phys_register = Allocate_Register(ir_store->Type, temp_register_id);
+			auto temp_phys_register = Allocate_Register(store_type, temp_register_id);
 
 			SetRegisterValue(temp_phys_register, temp_register_id);
 
-			Code.push_back(MoveBasedOnType(ir_store->Type, temp_phys_register, data_register_value));
+			Code.push_back(MoveBasedOnType(store_type, temp_phys_register, data_register_value));
 
 			UseRegisterValue(temp_register_id);
 
@@ -1030,7 +1225,33 @@ namespace Glass
 			Code.push_back(move);
 		}
 		else {
-			GS_CORE_ASSERT(nullptr);
+
+			auto mmcpy_dest_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_dest_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_dest_reg_id, X86_Register::RCX);
+			SetRegisterValue(mmcpy_dest_reg, mmcpy_dest_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_src_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_src_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_src_reg_id, X86_Register::RDX);
+			SetRegisterValue(mmcpy_src_reg, mmcpy_src_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_size_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_size_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_size_reg_id, X86_Register::R8);
+			SetRegisterValue(mmcpy_size_reg, mmcpy_size_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_return_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_return_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_return_reg_id, X86_Register::RAX);
+			SetRegisterValue(mmcpy_return_reg, mmcpy_return_reg_id, Register_Value_Type::Register_Value);
+
+			Code.push_back(Builder::Lea(mmcpy_dest_reg, Builder::De_Reference(pointer_register_value)));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, data_register_value));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
+
+			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+
+			UseRegisterValue(mmcpy_dest_reg_id);
+			UseRegisterValue(mmcpy_src_reg_id);
+			UseRegisterValue(mmcpy_size_reg_id);
+			UseRegisterValue(mmcpy_return_reg_id);
 		}
 
 		UseRegisterValue(ir_store->AddressRegister);
@@ -1049,11 +1270,14 @@ namespace Glass
 			SetRegisterValue(loaded_data_register, Register_Value_Type::Register_Value);
 		}
 		else {
-			GS_CORE_ASSERT(nullptr);
+
+			auto pointer_type = TypeSystem::GetPtr(ir_load->Type, 1);
+			auto loaded_data_register = Allocate_Register(pointer_type, CurrentRegister);
+			Code.push_back(Builder::Lea(loaded_data_register, Builder::De_Reference(pointer_register_value, pointer_type)));
+			SetRegisterValue(loaded_data_register, Register_Value_Type::Pointer_Address);
 		}
 
 		UseRegisterValue(ir_load->AddressRegister);
-
 	}
 
 	void X86_BackEnd::AssembleAdd(IRADD* ir_add)
@@ -1299,6 +1523,17 @@ namespace Glass
 		UseRegisterValue(ir_div->RegisterB);
 	}
 
+	void X86_BackEnd::AssemblePointerCast(IRPointerCast* ir_pointer_cast)
+	{
+		auto pointer = GetRegisterValue(ir_pointer_cast->PointerRegister);
+		UseRegisterValue(ir_pointer_cast->PointerRegister);
+
+		auto result = Allocate_Register(ir_pointer_cast->Type, CurrentRegister);
+		Code.push_back(MoveBasedOnType(ir_pointer_cast->Type, result, pointer));
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
 	{
 		Return_Counter++;
@@ -1315,9 +1550,17 @@ namespace Glass
 
 		if (data_register->type != Op_Register) {
 
+			auto type_size = TypeSystem::GetTypeSize(ir_return->Type);
+			auto return_type = ir_return->Type;
+
+			if (type_size > 8) {
+				return_type = TypeSystem::GetPtr(ir_return->Type, 1);
+				type_size = 8;
+			}
+
 			auto temp_register_id = CreateTempRegister(nullptr);
 
-			auto temp_phys_register = Allocate_Register(ir_return->Type, temp_register_id);
+			auto temp_phys_register = Allocate_Register(return_type, temp_register_id);
 
 			SetRegisterValue(temp_phys_register, temp_register_id);
 
@@ -1328,7 +1571,39 @@ namespace Glass
 			data_register = temp_phys_register;
 		}
 
-		Code.push_back(MoveBasedOnType(ir_return->Type, Builder::De_Reference(Return_Storage_Location, ir_return->Type), data_register));
+		auto type_size = TypeSystem::GetTypeSize(ir_return->Type);
+
+		if (type_size <= 8) {
+			Code.push_back(MoveBasedOnType(ir_return->Type, Builder::De_Reference(Return_Storage_Location, ir_return->Type), data_register));
+		}
+		else {
+			auto mmcpy_dest_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_dest_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_dest_reg_id, X86_Register::RCX);
+			SetRegisterValue(mmcpy_dest_reg, mmcpy_dest_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_src_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_src_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_src_reg_id, X86_Register::RDX);
+			SetRegisterValue(mmcpy_src_reg, mmcpy_src_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_size_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_size_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_size_reg_id, X86_Register::R8);
+			SetRegisterValue(mmcpy_size_reg, mmcpy_size_reg_id, Register_Value_Type::Register_Value);
+
+			auto mmcpy_return_reg_id = CreateTempRegister(nullptr);
+			auto mmcpy_return_reg = Allocate_Register(TypeSystem::GetVoidPtr(), mmcpy_return_reg_id, X86_Register::RAX);
+			SetRegisterValue(mmcpy_return_reg, mmcpy_return_reg_id, Register_Value_Type::Register_Value);
+
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_dest_reg, Builder::De_Reference(Return_Storage_Location, TypeSystem::GetVoidPtr())));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, data_register));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
+
+			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+
+			UseRegisterValue(mmcpy_dest_reg_id);
+			UseRegisterValue(mmcpy_src_reg_id);
+			UseRegisterValue(mmcpy_size_reg_id);
+			UseRegisterValue(mmcpy_return_reg_id);
+		}
 	}
 
 	void X86_BackEnd::AssembleConstValue(IRCONSTValue* ir_constant)
@@ -2236,6 +2511,12 @@ namespace Glass
 		case Op_Add:
 			PrintOperand(operand->bin_op.operand1, stream);
 			stream << " + ";
+			PrintOperand(operand->bin_op.operand2, stream);
+			break;
+
+		case Op_Mul:
+			PrintOperand(operand->bin_op.operand1, stream);
+			stream << " * ";
 			PrintOperand(operand->bin_op.operand2, stream);
 			break;
 

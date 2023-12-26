@@ -392,6 +392,7 @@ namespace Glass
 		void AssembleAlloca(IRAlloca* ir_alloca);
 
 		void AssembleMemberAccess(IRMemberAccess* ir_member_access);
+		void AssembleArrayAccess(IRArrayAccess* ir_array_access);
 
 		void AssembleStore(IRStore* ir_store);
 		void AssembleLoad(IRLoad* ir_load);
@@ -400,6 +401,8 @@ namespace Glass
 		void AssembleSub(IRSUB* ir_sub);
 		void AssembleMul(IRMUL* ir_mul);
 		void AssembleDiv(IRDIV* ir_div);
+
+		void AssemblePointerCast(IRPointerCast* ir_pointer_cast);
 
 		void AssembleReturn(IRReturn* ir_return);
 

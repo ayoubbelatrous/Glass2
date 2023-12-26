@@ -2939,7 +2939,7 @@ namespace Glass
 
 			TypeStorage* obj_expr_type = m_Metadata.GetExprType(obj_register_value->RegisterID);
 
-			if (TypeSystem::IndirectionCount(obj_expr_type) > 1) {
+			if (TypeSystem::IndirectionCount(obj_expr_type) > 1 && !TypeSystem::IsArray(obj_expr_type)) {
 				MSG_LOC(memberAccess->Object);
 				FMT_WARN("The type '{}' is not a struct and does not support members", PrintType(obj_expr_type));
 			}
