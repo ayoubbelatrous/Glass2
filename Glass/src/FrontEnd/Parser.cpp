@@ -1247,7 +1247,7 @@ namespace Glass
 				num_lit.type = NumericLiteral::Type::Float;
 			}
 			else {
-				num_lit.Val.Int = std::stoll(num_lit.token.Symbol);
+				num_lit.Val.Int = std::stoull(num_lit.token.Symbol);
 				num_lit.type = NumericLiteral::Type::Int;
 			}
 

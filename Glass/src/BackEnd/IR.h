@@ -1261,6 +1261,7 @@ namespace Glass
 	struct IRCast : public IRInstruction {
 		u64 ID = 0;
 
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 Register = 0;
 
@@ -1276,6 +1277,7 @@ namespace Glass
 	struct IRPointerCast : public IRInstruction {
 		u64 ID = 0;
 
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 PointerRegister = 0;
 
@@ -1294,7 +1296,7 @@ namespace Glass
 
 	struct IRInt2PtrCast : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 
@@ -1313,7 +1315,7 @@ namespace Glass
 
 	struct IRPtr2IntCast : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 PointerRegister = 0;
 
@@ -1332,7 +1334,7 @@ namespace Glass
 
 	struct IRZExtCast : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 
@@ -1351,7 +1353,7 @@ namespace Glass
 
 	struct IRSExtCast : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 
@@ -1370,7 +1372,7 @@ namespace Glass
 
 	struct IRIntTrunc : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 
@@ -1389,7 +1391,7 @@ namespace Glass
 
 	struct IRInt2FP : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 		bool Signed = false;
@@ -1409,7 +1411,7 @@ namespace Glass
 
 	struct IRFP2Int : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 IntegerRegister = 0;
 		bool Signed = false;
@@ -1429,7 +1431,7 @@ namespace Glass
 
 	struct IRFPExt : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 FloatRegister = 0;
 
@@ -1448,7 +1450,7 @@ namespace Glass
 
 	struct IRFPTrunc : public IRInstruction {
 		u64 ID = 0;
-
+		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
 		u64 FloatRegister = 0;
 

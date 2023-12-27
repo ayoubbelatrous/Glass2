@@ -1609,10 +1609,10 @@ namespace Glass
 
 		//:
 		iterator->IteratorIndex = CreateIRRegister(IR(IRAlloca(type)));
-		CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, begin));
+		CreateStore(type, iterator->IteratorIndex->RegisterID, begin);
 
 		iterator->IteratorIt = CreateIRRegister(IR(IRAlloca(type)));
-		CreateIRRegister(CreateStore(type, iterator->IteratorIt->RegisterID, begin));
+		CreateStore(type, iterator->IteratorIt->RegisterID, begin);
 
 		//Cond:
 		{
@@ -1642,10 +1642,10 @@ namespace Glass
 		{
 			PushScope();
 
-			auto index_load = CreateIRRegister(CreateLoad(type, iterator->IteratorIndex->RegisterID));
+			auto index_load = CreateLoad(type, iterator->IteratorIndex->RegisterID);
 			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(type->BaseID, 1), type)));
-			CreateIRRegister(CreateStore(type, iterator->IteratorIndex->RegisterID, index_addition));
-			CreateIRRegister(CreateStore(type, iterator->IteratorIt->RegisterID, index_addition));
+			CreateStore(type, iterator->IteratorIndex->RegisterID, index_addition);
+			CreateStore(type, iterator->IteratorIt->RegisterID, index_addition);
 
 			auto register_stack = PoPIRRegisters();
 			for (auto inst : register_stack) {
@@ -1674,10 +1674,10 @@ namespace Glass
 
 		//:
 		iterator->IteratorIndex = CreateIRRegister(IR(IRAlloca(index_type)));
-		CreateIRRegister(CreateStore(
+		CreateStore(
 			index_type,
 			iterator->IteratorIndex->RegisterID,
-			CreateConstantInteger(index_type->BaseID, 0)));
+			CreateConstantInteger(index_type->BaseID, 0));
 
 		iterator->IteratorIt = CreateIRRegister(IR(IRAlloca(dynmaic_array_element_type)));
 
@@ -1688,17 +1688,17 @@ namespace Glass
 			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
 			IRRegisterValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
 
-			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			auto index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
 
 			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
 
 			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type)));
 
-			CreateIRRegister(CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID)));
+			CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID));
 
 			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->RegisterID)->RegisterID);
 
-			index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
 			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end, index_type)));
 
 			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
@@ -1717,9 +1717,9 @@ namespace Glass
 		{
 			PushScope();
 
-			auto index_load = CreateIRRegister(CreateLoad(index_type, iterator->IteratorIndex->RegisterID));
+			auto index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
 			auto index_addition = CreateIRRegister(IR(IRADD(index_load, CreateConstantInteger(index_type->BaseID, 1), index_type)));
-			CreateIRRegister(CreateStore(index_type, iterator->IteratorIndex->RegisterID, index_addition));
+			CreateStore(index_type, iterator->IteratorIndex->RegisterID, index_addition);
 
 			auto register_stack = PoPIRRegisters();
 			for (auto inst : register_stack) {
@@ -3436,6 +3436,8 @@ namespace Glass
 		}
 
 		m_Metadata.RegExprType(new_register->ID, cast_type);
+
+		cast_ir_node->From = castee_type;
 
 		new_register->Value = cast_ir_node;
 		return IR(IRRegisterValue(new_register->ID), cast_ir_node);

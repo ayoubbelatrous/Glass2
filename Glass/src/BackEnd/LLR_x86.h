@@ -46,6 +46,9 @@ namespace Glass
 
 		I_MovZX,
 
+		I_MovSX,
+		I_MovSXD,
+
 		I_Lea,
 
 		I_CvtSS2SD,
@@ -57,13 +60,26 @@ namespace Glass
 		I_CQO,
 
 		I_Cmp,
+
 		I_Setne,
+		I_Sete,
+
+		I_Setl,
+		I_Setg,
+
+		I_Setle,
+		I_Setge,
 
 		I_Je,
 		I_Jne,
 
 		I_Jg,
 		I_Jl,
+
+		I_Jle,
+		I_Jge,
+
+		I_Jmp,
 
 		I_And,
 		I_Or,
@@ -331,7 +347,13 @@ namespace Glass
 		static Assembly_Instruction Lea(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Instruction Cmp(Assembly_Operand* operand1, Assembly_Operand* operand2);
+
 		static Assembly_Instruction SetNe(Assembly_Operand* op);
+		static Assembly_Instruction SetE(Assembly_Operand* op);
+
+		static Assembly_Instruction SetL(Assembly_Operand* op);
+		static Assembly_Instruction SetG(Assembly_Operand* op);
+
 		static Assembly_Instruction And(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Instruction Or(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
@@ -342,6 +364,9 @@ namespace Glass
 		static Assembly_Instruction MovQ(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Instruction MovZX(Assembly_Operand* operand1, Assembly_Operand* operand2);
+
+		static Assembly_Instruction MovSX(Assembly_Operand* operand1, Assembly_Operand* operand2);
+		static Assembly_Instruction MovSXD(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		static Assembly_Operand* OpAdd(Assembly_Operand* operand1, Assembly_Operand* operand2);
 		static Assembly_Operand* OpSub(Assembly_Operand* operand1, Assembly_Operand* operand2);
@@ -419,8 +444,11 @@ namespace Glass
 		void AssembleMemberAccess(IRMemberAccess* ir_member_access);
 		void AssembleArrayAccess(IRArrayAccess* ir_array_access);
 
+		void EndBlock();
+
 		void AssembleLexicalBlock(IRLexBlock* ir_lex_block);
 		void AssembleIf(IRIf* ir_if);
+		void AssembleWhile(IRWhile* ir_while);
 
 		void AssembleStore(IRStore* ir_store);
 		void AssembleLoad(IRLoad* ir_load);
@@ -432,8 +460,19 @@ namespace Glass
 
 		void AssembleAnd(IRAnd* ir_and);
 		void AssembleOr(IROr* ir_or);
+		void AssembleEqual(IREQ* ir_eq);
+
+		void AssembleLesser(IRLesser* ir_lesser);
+		void AssembleGreater(IRGreater* ir_greater);
+
+		void AssembleBitAnd(IRBitAnd* ir_bit_and);
 
 		void AssemblePointerCast(IRPointerCast* ir_pointer_cast);
+		void AssembleInt2PCast(IRInt2PtrCast* ir_int_2_ptr);
+		void AssemblePtr2IntCast(IRPtr2IntCast* ir_ptr_2_int);
+		void AssembleSextCast(IRSExtCast* ir_sext);
+		void AssembleZextCast(IRZExtCast* ir_zext);
+		void AssembleIntTruncCast(IRIntTrunc* ir_int_trunc);
 
 		void AssembleReturn(IRReturn* ir_return);
 
