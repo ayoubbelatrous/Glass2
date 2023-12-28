@@ -833,6 +833,18 @@ namespace Glass
 		case IRNodeType::IntTrunc:
 			AssembleIntTruncCast((IRIntTrunc*)instruction);
 			break;
+		case IRNodeType::Int2FP:
+			AssembleInt2FPCast((IRInt2FP*)instruction);
+			break;
+		case IRNodeType::FP2Int:
+			AssembleFP2IntCast((IRFP2Int*)instruction);
+			break;
+		case IRNodeType::FPExt:
+			AssembleFPExtCast((IRFPExt*)instruction);
+			break;
+		case IRNodeType::FPTrunc:
+			AssembleFPTruncCast((IRFPTrunc*)instruction);
+			break;
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -2314,6 +2326,134 @@ namespace Glass
 		UseRegisterValue(ir_int_trunc->IntegerRegister);
 	}
 
+	void X86_BackEnd::AssembleInt2FPCast(IRInt2FP* ir_int_2_fp)
+	{
+		GS_CORE_ASSERT(ir_int_2_fp->From);
+		GS_CORE_ASSERT(!TypeSystem::IsFlt(ir_int_2_fp->From));
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_int_2_fp->Type));
+
+		auto from_type_size = TypeSystem::GetTypeSize(ir_int_2_fp->From);
+		auto from_type_flags = TypeSystem::GetTypeFlags(ir_int_2_fp->From);
+		auto to_type_size = TypeSystem::GetTypeSize(ir_int_2_fp->Type);
+
+		auto integer = GetRegisterValue(ir_int_2_fp->IntegerRegister);
+
+		if (from_type_size <= 2) {
+
+			auto tmp_register_id = CreateTempRegister(nullptr);
+			auto tmp_register = Allocate_Register(TypeSystem::GetI32(), tmp_register_id);
+			SetRegisterValue(tmp_register, tmp_register_id, Register_Value_Type::Register_Value);
+
+			if (from_type_flags & FLAG_UNSIGNED_TYPE) {
+				Code.push_back(Builder::MovZX(tmp_register, integer));
+			}
+			else {
+				Code.push_back(Builder::MovSX(tmp_register, integer));
+			}
+
+			integer = tmp_register;
+			UseRegisterValue(tmp_register_id);
+		}
+
+		auto result = Allocate_Register(ir_int_2_fp->Type, CurrentRegister);
+
+		if (to_type_size == 4) {
+			Code.push_back(Builder::Build_Inst(I_CvtSI2SS, result, integer));
+		}
+		else if (to_type_size == 8) {
+			Code.push_back(Builder::Build_Inst(I_CvtSI2SD, result, integer));
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		UseRegisterValue(ir_int_2_fp->IntegerRegister);
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
+	void X86_BackEnd::AssembleFP2IntCast(IRFP2Int* ir_fp_2_int)
+	{
+		GS_CORE_ASSERT(ir_fp_2_int->From);
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_fp_2_int->From));
+		GS_CORE_ASSERT(!TypeSystem::IsFlt(ir_fp_2_int->Type));
+
+		auto from_type_size = TypeSystem::GetTypeSize(ir_fp_2_int->From);
+		auto from_type_flags = TypeSystem::GetTypeFlags(ir_fp_2_int->From);
+		auto to_type_size = TypeSystem::GetTypeSize(ir_fp_2_int->Type);
+
+		auto floating = GetRegisterValue(ir_fp_2_int->FloatRegister);
+
+		auto result = Allocate_Register(ir_fp_2_int->Type, CurrentRegister);
+		auto result_section = result;
+
+		if (to_type_size <= 2) {
+
+			auto integer_register_family = register_to_family_map.at(result->reg.Register);
+			auto section = register_family_map.at({ 4, integer_register_family });
+
+			result_section = Builder::Register(section);
+		}
+
+		if (from_type_size == 4) {
+			Code.push_back(Builder::Build_Inst(I_CvtSS2SI, result_section, floating));
+		}
+		else if (from_type_size == 8) {
+			Code.push_back(Builder::Build_Inst(I_CvtSD2SI, result_section, floating));
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		UseRegisterValue(ir_fp_2_int->FloatRegister);
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
+	void X86_BackEnd::AssembleFPExtCast(IRFPExt* ir_fp_ext)
+	{
+		GS_CORE_ASSERT(ir_fp_ext->From);
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_fp_ext->From));
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_fp_ext->Type));
+
+		auto from_type_size = TypeSystem::GetTypeSize(ir_fp_ext->From);
+		auto to_type_size = TypeSystem::GetTypeSize(ir_fp_ext->Type);
+
+		GS_CORE_ASSERT(to_type_size > from_type_size);
+
+		auto floating = GetRegisterValue(ir_fp_ext->FloatRegister);
+
+		auto result = Allocate_Register(ir_fp_ext->Type, CurrentRegister);
+
+		Code.push_back(Builder::Build_Inst(I_CvtSS2SD, result, floating));
+
+		UseRegisterValue(ir_fp_ext->FloatRegister);
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
+	void X86_BackEnd::AssembleFPTruncCast(IRFPTrunc* ir_fp_trunc)
+	{
+		GS_CORE_ASSERT(ir_fp_trunc->From);
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_fp_trunc->From));
+		GS_CORE_ASSERT(TypeSystem::IsFlt(ir_fp_trunc->Type));
+
+		auto from_type_size = TypeSystem::GetTypeSize(ir_fp_trunc->From);
+		auto to_type_size = TypeSystem::GetTypeSize(ir_fp_trunc->Type);
+
+		GS_CORE_ASSERT(to_type_size < from_type_size);
+
+		auto floating = GetRegisterValue(ir_fp_trunc->FloatRegister);
+
+		auto result = Allocate_Register(ir_fp_trunc->Type, CurrentRegister);
+
+		Code.push_back(Builder::Build_Inst(I_CvtSD2SS, result, floating));
+
+		UseRegisterValue(ir_fp_trunc->FloatRegister);
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
 	{
 		Return_Counter++;
@@ -3179,8 +3319,44 @@ namespace Glass
 			PrintOperand(instruction.Operand2, stream);
 			break;
 
+		case I_CvtSI2SS:
+			stream << "cvtsi2ss ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_CvtSI2SD:
+			stream << "cvtsi2sd ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+
+		case I_CvtSS2SI:
+			stream << "cvtss2si ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_CvtSD2SI:
+			stream << "cvtsd2si ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
 		case I_CvtSS2SD:
 			stream << "cvtss2sd ";
+			PrintOperand(instruction.Operand1, stream);
+			stream << ", ";
+			PrintOperand(instruction.Operand2, stream);
+			break;
+
+		case I_CvtSD2SS:
+			stream << "cvtsd2ss ";
 			PrintOperand(instruction.Operand1, stream);
 			stream << ", ";
 			PrintOperand(instruction.Operand2, stream);

@@ -1413,11 +1413,11 @@ namespace Glass
 		u64 ID = 0;
 		TypeStorage* From = nullptr;
 		TypeStorage* Type = nullptr;
-		u64 IntegerRegister = 0;
+		u64 FloatRegister = 0;
 		bool Signed = false;
 
 		IRFP2Int(TypeStorage* type, u64 integerRegister, bool _signed)
-			:Type(type), IntegerRegister(integerRegister), Signed(_signed)
+			:Type(type), FloatRegister(integerRegister), Signed(_signed)
 		{}
 
 		virtual std::string ToString() const override {

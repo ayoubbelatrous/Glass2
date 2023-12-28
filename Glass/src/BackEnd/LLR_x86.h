@@ -51,6 +51,12 @@ namespace Glass
 
 		I_Lea,
 
+		I_CvtSI2SS,
+		I_CvtSI2SD,
+
+		I_CvtSS2SI,
+		I_CvtSD2SI,
+
 		I_CvtSS2SD,
 		I_CvtSD2SS,
 
@@ -473,6 +479,10 @@ namespace Glass
 		void AssembleSextCast(IRSExtCast* ir_sext);
 		void AssembleZextCast(IRZExtCast* ir_zext);
 		void AssembleIntTruncCast(IRIntTrunc* ir_int_trunc);
+		void AssembleInt2FPCast(IRInt2FP* ir_int_2_fp);
+		void AssembleFP2IntCast(IRFP2Int* ir_fp_2_int);
+		void AssembleFPExtCast(IRFPExt* ir_fp_ext);
+		void AssembleFPTruncCast(IRFPTrunc* ir_fp_trunc);
 
 		void AssembleReturn(IRReturn* ir_return);
 

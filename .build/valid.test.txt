@@ -1,0 +1,95 @@
+Addition Tests:
+Test 1: 5.3 + 2.7 = 8.000000
+Test 2: 10.5 + (-3.2) = 7.300000
+Test 3: 1.0 + 2.0 + 3.0 + 4.0 + 5.0 + 6.0 + 7.0 + 8.0 + 9.0 + 10.0 = 55.000000
+
+Subtraction Tests:
+Test 1: 8.5 - 3.2 = 5.300000
+Test 2: 2.0 - (-1.5) = 3.500000
+Test 3: 15.0 - 5.0 - 3.0 - 2.0 - 1.0 = 4.000000
+
+Multiplication Tests:
+Test 1: 4.0 * 6.0 = 24.000000
+Test 2: (-2.5) * 3.0 = -7.500000
+Test 3: 1.0 * 2.0 * 3.0 * 4.0 * 5.0 * 6.0 * 7.0 * 8.0 * 9.0 * 10.0 = 3628800.000000
+
+Int Tests
+Scenario 1 Results: 15, 10, 150
+Scenario 2 Results: 50, 10
+Scenario 3 Result: 105
+Scenario 5 Result: 155
+
+Signed Int Divide Tests
+Test 2: -15 / 3 = -5 (Expected: -5)
+Test 1: 10 / 2 = 5 (Expected: 5)
+Test 3: 0 / -5 = 0 (Expected: 0)
+Test 5: 2147483647 / 1 = 2147483647 (Expected: 2147483647)
+
+UnSigned Int Divide Tests
+Test 2: 15 / 3 = 5 (Expected: 5)
+Test 1: 10 / 2 = 5 (Expected: 5)
+Test 3: 0 / 5 = 0 (Expected: 0)
+Test 5: 2147483647 / 1 = 2147483647 (Expected: 2147483647)
+
+Int Mul Tests:
+Test 1: 5 + 2 = 7
+Test 2: 105 + (-32) = 73
+Test 3: 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 = 55
+
+Subtraction Tests:
+Test 1: 88 - 33 = 55
+Test 2: 20 - -15 = 35
+Test 3: 150 - 50 - 30 - 20 - 10 = 40
+
+Multiplication Tests:
+Test 1: 40 * 60 = 2400
+Test 2: (-25) * 30 = -750
+Test 3: 1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10 = 3628800
+
+Float Divide Tests
+Test 2: 50.500000 / 5.050000 = 10.000000 (Expected: 10.0)
+Test 1: 10.000000 / 2.000000 = 5.000000 (Expected: 5.0)
+Test 3: 0.000000 / 5.000000 = 0.000000 (Expected: 0.0)
+Test 5: 515.299988 / 2.000000 = 257.649994 (Expected: 257.65)
+
+Double Divide Tests
+Test 2: 50.500000 / 5.050000 = 10.000000 (Expected: 10.0)
+Test 1: 10.000000 / 2.000000 = 5.000000 (Expected: 5.0)
+Test 3: 0.000000 / 5.000000 = 0.000000 (Expected: 0.0)
+Test 5: 515.300000 / 2.000000 = 257.650000 (Expected: 257.65)
+f32 x: 42.419998, i32 a: 6868, f64 y: 24.242400,u64* ptr: 000000F8A33FF9E8, u64* *ptr: 42
+
+pass_4_sum_int:
+111, 222, 333, 444
+sum is 1110
+
+pass_4_sum_int: returned: 1110
+
+pass_4_sum_float:
+101.110001, 202.220001, 303.329987,404.440002
+sum is 1011.100037
+
+pass_4_sum_float: returned: 1011.100037
+[1.900000, 2.900000, 3.900000, 4.900000, 5.900000, 8.900000]
+sum is 28.400000
+
+pass_6_sum_float: returned: 28.400000
+[2, 3, 4, 5, 6, 7]
+
+pass_6_sum_int: returned: 27
+
+Pointer Tests
+a: 15, b: 30
+a_ptr: 000000F8A33FF9EC, b_ptr: 000000F8A33FF9E8
+*a_ptr: 15, *b_ptr: 30; *a_ptr + *b_ptr = 45
+**a_ptr_ptr: 15, **b_ptr_ptr: 30; **a_ptr_ptr + **b_ptr_ptr = 45
+c_ptr: 000000F8A33FF9EC, d_ptr: 000000F8A33FF9E8
+*c_ptr: 15.000000, *d_ptr: 20.000000; *c_ptr + *d_ptr = 15.000000
+
+Member Access Tests
+strct.Member: 10, strct.Member2: 20, strct.member.Member: 30
+strct.Member * strct.member.Member = 300
+*member_2_ptr: 20
+*member_Member_ptr: 30
+*strct_ptr.Member * *strct_ptr.member.Member = 1500
+*strct_ptr.Member * *strct_ptr.member.Member = 750
