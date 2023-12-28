@@ -605,6 +605,64 @@ namespace Glass
 		return fmt::format("{}_{}", name, (void*)type->Hash);
 	}
 
+	void X86_BackEnd::AssembleForeignLibraries()
+	{
+		bool has_msvcrt = false;
+		bool has_kernel32 = false;
+
+		for (const auto& [name, library] : m_Metadata->Libraries) {
+
+			Assembly_Dynamic_Library library_import;
+			library_import.Name = library.Name.Symbol;
+			library_import.Path = library.Value->Symbol.Symbol;
+
+			if (library_import.Name == "msvcrt") {
+				has_msvcrt = true;
+			}
+
+			if (library_import.Name == "kernel32") {
+				has_kernel32 = true;
+			}
+
+			m_Data.Library_Indices[library.Name.Symbol] = Dynamic_Libraries.size();
+
+			Dynamic_Libraries.push_back(library_import);
+		}
+
+		if (!has_msvcrt) {
+
+			Assembly_Dynamic_Library library_import;
+
+			library_import.Name = "msvcrt";
+			library_import.Path = "msvcrt.dll";
+
+			m_Data.Library_Indices["msvcrt"] = Dynamic_Libraries.size();
+
+			Dynamic_Libraries.push_back(library_import);
+		}
+
+		if (!has_kernel32) {
+
+			Assembly_Dynamic_Library library_import;
+
+			library_import.Name = "kernel32";
+			library_import.Path = "kernel32";
+
+			m_Data.Library_Indices["kernel32"] = Dynamic_Libraries.size();
+
+			Dynamic_Libraries.push_back(library_import);
+		}
+	}
+
+	void X86_BackEnd::AssembleForeignImport(const FunctionMetadata* function)
+	{
+		Assembly_Import external;
+		external.Name = function->Symbol.Symbol;
+		external.library_idx = m_Data.Library_Indices.at(function->Foreign_Library);
+
+		Imports.push_back(external);
+	}
+
 	void X86_BackEnd::AssembleExternalFunction(const FunctionMetadata* function)
 	{
 		Assembly_External_Symbol external;
@@ -617,6 +675,7 @@ namespace Glass
 	void X86_BackEnd::AssembleExternals()
 	{
 		bool has_memcpy = false;
+		bool has_exit_process = false;
 		for (const auto& function_pair : m_Metadata->m_Functions) {
 
 			const FunctionMetadata& function = function_pair.second;
@@ -626,31 +685,57 @@ namespace Glass
 			}
 
 			if (function.Foreign) {
-				AssembleExternalFunction(&function);
+				if (Use_Linker) {
+					AssembleExternalFunction(&function);
+				}
+				else {
+					AssembleForeignImport(&function);
+				}
 			}
 		}
 
 		//intrinsics
 
 		//memcpy
-		if (!has_memcpy)
-		{
-			Assembly_External_Symbol external;
-			external.Name = "memcpy";
-			external.ExternalName = "memcpy";
+		if (Use_Linker) {
+			if (!has_memcpy)
+			{
+				Assembly_External_Symbol external;
+				external.Name = "memcpy";
+				external.ExternalName = "memcpy";
 
-			Externals.push_back(external);
+				Externals.push_back(external);
+			}
 		}
+		else {
+			if (!has_memcpy)
+			{
+				Assembly_Import external;
+				external.Name = "memcpy";
+				external.library_idx = m_Data.Library_Indices.at("msvcrt");
+
+				Imports.push_back(external);
+			}
+			if (!has_exit_process)
+			{
+				Assembly_Import external;
+				external.Name = "ExitProcess";
+				external.library_idx = m_Data.Library_Indices.at("kernel32");
+
+				Imports.push_back(external);
+			}
+		}
+
 	}
 
 	void X86_BackEnd::Assemble()
 	{
-
 		std::chrono::steady_clock::time_point Start;
 		std::chrono::steady_clock::time_point End;
 
 		Start = std::chrono::high_resolution_clock::now();
 
+		AssembleForeignLibraries();
 		AssembleExternals();
 
 		for (auto i : m_TranslationUnit->Instructions) {
@@ -681,7 +766,17 @@ namespace Glass
 		}
 
 		Assembly_File assembly;
-		assembly.externals = Externals;
+
+		if (Use_Linker) {
+			assembly.externals = Externals;
+			assembly.output_mode = Assembler_Output_Mode::COFF_Object;
+		}
+		else {
+			assembly.output_mode = Assembler_Output_Mode::PE_Executable;
+			assembly.libraries = Dynamic_Libraries;
+			assembly.imports = Imports;
+		}
+
 		assembly.floats = Floats;
 		assembly.strings = Strings;
 
@@ -710,26 +805,34 @@ namespace Glass
 		system("fasm .build/fasm.s");
 		std::chrono::steady_clock::time_point Fasm_End = std::chrono::high_resolution_clock::now();
 
-		GS_CORE_WARN("Running Linker On Fasm Output");
-
 		std::chrono::steady_clock::time_point Linker_Start = std::chrono::high_resolution_clock::now();
+		if (Use_Linker)
+		{
+			GS_CORE_WARN("Running Linker On Fasm Output");
+			std::stringstream libraries;
+			for (const auto& [name, library] : m_Metadata->Libraries) {
 
-		std::stringstream libraries;
+				if (name == "msvcrt") {
+					continue;
+				}
 
-		for (const auto& [name, library] : m_Metadata->Libraries) {
-			auto library_path = fs_path(library.Value->Symbol.Symbol);
-			libraries << library_path << " ";
+				auto library_path = fs_path(library.Value->Symbol.Symbol);
+				libraries << library_path << " ";
+			}
+
+			std::string linker_command = fmt::format("clang ./.build/fasm.obj -O0 {}", libraries.str());
+			system(linker_command.c_str());
 		}
-
-		std::string linker_command = fmt::format("clang ./.build/fasm.obj -O0 {}", libraries.str());
-
-		system(linker_command.c_str());
-
+		else {
+			std::filesystem::copy(".build/fasm.exe", "a.exe", std::filesystem::copy_options::overwrite_existing);
+		}
 		std::chrono::steady_clock::time_point Linker_End = std::chrono::high_resolution_clock::now();
 
 		GS_CORE_WARN("Assembly Generation Took: {} milli s", std::chrono::duration_cast<std::chrono::milliseconds>(End - Start).count());
 		GS_CORE_WARN("FASM Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Fasm_End - Fasm_Start).count());
-		GS_CORE_WARN("Linker Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Linker_End - Linker_Start).count());
+		if (Use_Linker) {
+			GS_CORE_WARN("Linker Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Linker_End - Linker_Start).count());
+		}
 	}
 
 	void X86_BackEnd::AssembleInstruction(IRInstruction* instruction)
@@ -922,7 +1025,7 @@ namespace Glass
 
 	void X86_BackEnd::AssembleFunction(IRFunction* ir_function)
 	{
-		const auto& metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+		const auto metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
 
 		Code.clear();
 
@@ -1037,6 +1140,18 @@ namespace Glass
 
 			auto return_location = GetReturnRegister(metadata->ReturnType);
 			Code.push_back(MoveBasedOnType(return_type, return_location, Builder::De_Reference(Return_Storage_Location, return_type)));
+		}
+
+		if (metadata->Symbol.Symbol == "main" && Use_Linker == false) {
+
+			if (Return_Storage_Location) {
+				Builder::Mov(Builder::Register(ECX), Builder::De_Reference(Return_Storage_Location, TypeSystem::GetI32()));
+			}
+			else {
+				Builder::Mov(Builder::Register(ECX), Builder::Constant_Integer(0));
+			}
+
+			Code.push_back(Builder::Call(Builder::De_Reference(Builder::Symbol("ExitProcess"))));
 		}
 
 		Code.push_back(Builder::Add(Builder::Register(RSP), stack_size_constant));
@@ -1243,7 +1358,12 @@ namespace Glass
 			Code.push_back(Builder::Lea(return_location, Builder::De_Reference(Stack_Alloc(metadata->ReturnType), metadata->ReturnType)));
 		}
 
-		Code.push_back(Builder::Call(Builder::Symbol(name)));
+		if (metadata->Foreign && !Use_Linker) {
+			Code.push_back(Builder::Call(Builder::De_Reference(Builder::Symbol(name))));
+		}
+		else {
+			Code.push_back(Builder::Call(Builder::Symbol(name)));
+		}
 
 		SetRegisterValue(return_location, Register_Value_Type::Register_Value);
 
@@ -1329,7 +1449,7 @@ namespace Glass
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, argument_input_location));
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
 
-			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+			Call_Memcpy();
 
 			UseRegisterValue(mmcpy_dest_reg_id);
 			UseRegisterValue(mmcpy_src_reg_id);
@@ -1708,7 +1828,7 @@ namespace Glass
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, data_register_value));
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
 
-			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+			Call_Memcpy();
 
 			UseRegisterValue(mmcpy_dest_reg_id);
 			UseRegisterValue(mmcpy_src_reg_id);
@@ -2517,7 +2637,7 @@ namespace Glass
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_src_reg, data_register));
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), mmcpy_size_reg, Builder::Constant_Integer(type_size)));
 
-			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+			Call_Memcpy();
 
 			UseRegisterValue(mmcpy_dest_reg_id);
 			UseRegisterValue(mmcpy_src_reg_id);
@@ -2574,6 +2694,16 @@ namespace Glass
 		std::string label_name = fmt::format("L{}_{}", Function_Counter, Label_Counter);
 		Label_Counter++;
 		return label_name;
+	}
+
+	void X86_BackEnd::Call_Memcpy()
+	{
+		if (!Use_Linker) {
+			Code.push_back(Builder::Call(Builder::De_Reference(Builder::Symbol("memcpy"))));
+		}
+		else {
+			Code.push_back(Builder::Call(Builder::Symbol("memcpy")));
+		}
 	}
 
 	Assembly_Operand* X86_BackEnd::Stack_Alloc(TypeStorage* type)
@@ -3031,8 +3161,127 @@ namespace Glass
 	{
 		std::stringstream stream;
 
-		stream << "format MS64 COFF" << "\n" << "\n";
-		stream << "public main" << "\n" << "\n";
+		if (Assembly->output_mode == Assembler_Output_Mode::COFF_Object) {
+			stream << "format MS64 COFF" << "\n" << "\n";
+			stream << "public main" << "\n" << "\n";
+		}
+		else if (Assembly->output_mode == Assembler_Output_Mode::PE_Executable) {
+			stream << "format PE64 CONSOLE" << "\n" << "\n";
+			stream << "entry main" << "\n" << "\n";
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+		if (Assembly->output_mode == Assembler_Output_Mode::PE_Executable) {
+
+			{
+				stream <<
+					R"(
+macro library[name, string]
+{ common
+import.data:
+forward
+local _label
+if defined name#.redundant
+if ~name#.redundant
+	dd RVA name#.lookup,0,0,RVA _label,RVA name#.address
+end if
+end if
+name#.referred = 1
+common
+dd 0,0,0,0,0
+forward
+if defined name#.redundant
+if ~name#.redundant
+	_label db string,0
+	rb RVA $ and 1
+end if
+end if }
+
+macro import name, [label, string]
+{ common
+	rb(-rva $) and 7
+	if defined name#.referred
+		name#.lookup:
+forward
+	if used label
+		if string eqtype ''
+			local _label
+			dq RVA _label
+		else
+			dq 8000000000000000h + string
+			end if
+			end if
+			common
+			if $ > name#.lookup
+				name#.redundant = 0
+				dq 0
+			else
+				name#.redundant = 1
+				end if
+				name#.address:
+forward
+	if used label
+		if string eqtype ''
+			label dq RVA _label
+		else
+			label dq 8000000000000000h + string
+			end if
+			end if
+			common
+			if ~name#.redundant
+				dq 0
+				end if
+				forward
+				if used label& string eqtype ''
+					_label dw 0
+					db string, 0
+					rb RVA $ and 1
+					end if
+					common
+					end if }
+
+	macro api[name]{})"
+					;
+			}
+
+			stream << "\nsection '.idata' import data readable\n";
+
+			std::unordered_map<std::string, std::vector<std::string>> import_per_library;
+
+			for (size_t i = 0; i < Assembly->imports.size(); i++)
+			{
+				Assembly_Import& foreign_import = Assembly->imports[i];
+				import_per_library[Assembly->libraries[foreign_import.library_idx].Name].push_back(foreign_import.Name);
+			}
+
+			stream << "library ";
+
+			for (size_t i = 0; i < Assembly->libraries.size(); i++)
+			{
+				Assembly_Dynamic_Library& dynamic_library = Assembly->libraries[i];
+
+				stream << dynamic_library.Name << ", " << fmt::format("'{}'", dynamic_library.Path + ".dll");
+
+				if (i != Assembly->libraries.size() - 1) {
+					stream << ", \\ \n";
+				}
+
+			}
+
+			for (size_t i = 0; i < Assembly->libraries.size(); i++)
+			{
+				Assembly_Dynamic_Library& dynamic_library = Assembly->libraries[i];
+
+				stream << "\nimport " << dynamic_library.Name;
+
+				for (auto& import_name : import_per_library[dynamic_library.Name]) {
+					stream << fmt::format(", {0}, '{0}'", import_name);
+				}
+
+				stream << "\n";
+			}
+		}
 
 		for (Assembly_External_Symbol external : Assembly->externals) {
 			stream << "extrn '" << external.ExternalName << "' " << "as " << external.ExternalName << "\n";

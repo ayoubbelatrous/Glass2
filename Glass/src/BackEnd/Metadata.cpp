@@ -85,38 +85,31 @@ namespace Glass {
 			}
 		}
 
-		i64 remainder = 0;
-
-		u64 offset = 0;
+		i64 offset = 0;
+		// 
+		// 		if (metadata->Name.Symbol == "SDL_Keysym") {
+		// 			__debugbreak();
+		// 		}
 
 		for (MemberMetadata& member : metadata->Members) {
 			auto member_size = (i64)GetTypeSize(member.Type);
+			auto type_alignment = (i64)GetTypeAlignment(member.Type);
 
-			if (member_size >= alignment) {
-				size += remainder;
-				offset += remainder;
-				remainder = member_size % alignment;
-				size += member_size;
+			member.Offset = offset;
+
+			if ((offset + member_size) % type_alignment != 0) {
+				i64 padding = (type_alignment - ((offset + member_size) % type_alignment)) % type_alignment;
+				offset += padding;
+				member.Offset = offset;
 				offset += member_size;
 			}
 			else {
-				if (remainder - member_size >= 0) {
-					offset += (remainder - member_size) + member_size;
-					remainder = remainder - member_size;
-					size += member_size;
-				}
-				else {
-					size += remainder;
-					remainder = (alignment - (member_size % alignment)) % alignment;
-					size += member_size;
-					offset += member_size;
-				}
+				offset += member_size;
 			}
 
-			member.Offset = offset - member_size;
 		}
 
-		size += remainder;
+		size = ((alignment - (offset % alignment)) % alignment) + offset;
 
 		if (size != 0 && alignment != 0) {
 			size_t finalPadding = (alignment - (size % alignment)) % alignment;

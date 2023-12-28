@@ -5,10 +5,6 @@
 
 namespace Glass
 {
-	struct Assembly_External_Symbol {
-		std::string ExternalName;
-		std::string Name;
-	};
 
 	enum Assembly_Op_Code {
 		I_Ret,
@@ -271,7 +267,6 @@ namespace Glass
 		std::vector<Assembly_Instruction> Code;
 	};
 
-
 	struct Assembly_Float_Constant {
 		u64 index = 0;
 		u64 size = 0;
@@ -283,11 +278,39 @@ namespace Glass
 		std::string value;
 	};
 
+	struct Assembly_External_Symbol {
+		std::string ExternalName;
+		std::string Name;
+	};
+
+	struct Assembly_Dynamic_Library {
+		std::string Name;
+		std::string Path;
+	};
+
+	struct Assembly_Import {
+		u64 library_idx = -1;
+		std::string Name;
+	};
+
+	enum class Assembler_Output_Mode {
+		COFF_Object,
+		PE_Executable,
+		PE_Dll,
+	};
+
 	struct Assembly_File {
+
+		Assembler_Output_Mode output_mode;
+
 		std::vector<Assembly_External_Symbol> externals;
+
 		std::vector<Assembly_Function> functions;
 		std::vector<Assembly_Float_Constant> floats;
 		std::vector<Assembly_String_Constant> strings;
+
+		std::vector<Assembly_Dynamic_Library> libraries;
+		std::vector<Assembly_Import> imports;
 	};
 
 	struct FASM_Printer {
@@ -417,6 +440,8 @@ namespace Glass
 		std::unordered_map<u64, Register_Value_Type> IR_RegisterValueTypes;
 		std::unordered_map<u64, Assembly_Function*> Functions;
 
+		std::unordered_map<std::string, u64> Library_Indices;
+
 		u64 Stack_Size = 0;
 		u64 Call_Stack_Size = 0;
 		u64 Call_Stack_Pointer = 0;
@@ -431,6 +456,8 @@ namespace Glass
 
 		std::string Mangle_Name(const std::string& name, TypeStorage* type);
 
+		void AssembleForeignLibraries();
+		void AssembleForeignImport(const FunctionMetadata* function);
 		void AssembleExternalFunction(const FunctionMetadata* function);
 		void AssembleExternals();
 		void Assemble();
@@ -499,6 +526,8 @@ namespace Glass
 		IRTranslationUnit* m_TranslationUnit = nullptr;
 		MetaData* m_Metadata = nullptr;
 
+		std::vector<Assembly_Dynamic_Library> Dynamic_Libraries;
+		std::vector<Assembly_Import> Imports;
 		std::vector<Assembly_External_Symbol> Externals;
 		std::vector<Assembly_String_Constant> Strings;
 		std::vector<Assembly_Function*> Functions;
@@ -506,6 +535,8 @@ namespace Glass
 		std::vector<Assembly_Float_Constant> Floats;
 
 		std::string GetLabelName();
+
+		void Call_Memcpy();
 
 		Assembly_Operand* Stack_Alloc(TypeStorage* type);
 		Assembly_Operand* Alloc_Call_StackTop(TypeStorage* type);
@@ -551,5 +582,7 @@ namespace Glass
 
 		u64 Function_Counter = 0;
 		u64 Label_Counter = 0;
+
+		bool Use_Linker = false;
 	};
 }

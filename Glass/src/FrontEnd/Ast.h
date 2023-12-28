@@ -731,6 +731,7 @@ namespace Glass
 	{
 	public:
 
+		Identifier* library_name = nullptr;
 		Statement* statement = nullptr;
 
 		virtual NodeType GetType() const override

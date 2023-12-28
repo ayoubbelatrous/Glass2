@@ -200,6 +200,7 @@ namespace Glass {
 		bool HasBody = false;
 		bool Variadic = false;
 		bool Foreign = false;
+		std::string Foreign_Library;
 
 		bool PolyMorphic = false;
 		std::vector<ArgumentNode*> ASTArguments;

@@ -355,13 +355,13 @@ namespace Glass
 			u64 struct_size = m_Metadata->GetTypeSize(struct_metadata.TypeID);
 			u64 llvm_Size = llvm_StructLayout->getSizeInBytes();
 
-			//GS_CORE_ASSERT(alignment == llvm_Alignment);
-			//GS_CORE_ASSERT(struct_size == llvm_Size);
+			GS_CORE_ASSERT(alignment == llvm_Alignment);
+			GS_CORE_ASSERT(struct_size == llvm_Size);
 
 			u64 mem_index = 0;
 			for (auto& member : struct_metadata.Members) {
 				auto llvm_Offset = llvm_StructLayout->getMemberOffsets()[mem_index];
-				//GS_CORE_ASSERT(llvm_Offset == member.Offset);
+				GS_CORE_ASSERT(member.Offset == llvm_Offset);
 				mem_index++;
 			}
 		}

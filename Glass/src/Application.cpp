@@ -18,18 +18,6 @@ namespace Glass
 	Application::Application(const CommandLineArgs& CmdLineArgs)
 		: m_Arguments(CmdLineArgs), m_Options(ParseOptions(CmdLineArgs))
 	{
-		GS_CORE_WARN("C Includes");
-
-		for (const auto& include : m_Options.CIncludes) {
-			GS_CORE_INFO("\t{}", include);
-		}
-
-		GS_CORE_WARN("C Libs");
-
-		for (const auto& lib : m_Options.CLibs) {
-			GS_CORE_INFO("\t{}", lib);
-		}
-
 		Init();
 	}
 
@@ -142,10 +130,12 @@ namespace Glass
 		std::chrono::steady_clock::time_point m_LinkerEnd;
 
 		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
-
-		m_X86Start = std::chrono::high_resolution_clock::now();
-		x86_backend.Assemble();
-		m_X86End = std::chrono::high_resolution_clock::now();
+		if (compilation_successful)
+		{
+			m_X86Start = std::chrono::high_resolution_clock::now();
+			x86_backend.Assemble();
+			m_X86End = std::chrono::high_resolution_clock::now();
+		}
 
 		if (llvm && compilation_successful)
 		{

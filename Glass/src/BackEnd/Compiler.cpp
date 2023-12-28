@@ -37,20 +37,20 @@ namespace Glass
 		m_Metadata.RegisterType(IR_float, "float", 4, 4);
 		m_Metadata.RegisterType(IR_int, "int", 4, 4);
 
-		m_Metadata.RegisterType(IR_i8, "i8", 1, 4);
-		m_Metadata.RegisterType(IR_i16, "i16", 2, 4);
+		m_Metadata.RegisterType(IR_i8, "i8", 1, 1);
+		m_Metadata.RegisterType(IR_i16, "i16", 2, 2);
 		m_Metadata.RegisterType(IR_i32, "i32", 4, 4);
 		m_Metadata.RegisterType(IR_i64, "i64", 8, 8);
 
-		m_Metadata.RegisterType(IR_u8, "u8", 1, 4);
-		m_Metadata.RegisterType(IR_u16, "u16", 2, 4);
+		m_Metadata.RegisterType(IR_u8, "u8", 1, 1);
+		m_Metadata.RegisterType(IR_u16, "u16", 2, 2);
 		m_Metadata.RegisterType(IR_u32, "u32", 4, 4);
 		m_Metadata.RegisterType(IR_u64, "u64", 8, 8);
 
 		m_Metadata.RegisterType(IR_f32, "f32", 4, 4);
 		m_Metadata.RegisterType(IR_f64, "f64", 8, 8);
 
-		m_Metadata.RegisterType(IR_bool, "bool", 1, 4);
+		m_Metadata.RegisterType(IR_bool, "bool", 1, 1);
 
 		m_Metadata.RegisterType(IR_type, "Type", 8, 8);
 
@@ -779,6 +779,14 @@ namespace Glass
 	{
 		NodeType tipe = frn->statement->GetType();
 
+		const Library* library = m_Metadata.GetLibrary(frn->library_name->Symbol.Symbol);
+
+		if (!library) {
+			PushMessage(CompilerMessage{ PrintTokenLocation(frn->library_name->GetLocation()), MessageType::Error });
+			PushMessage(CompilerMessage{ fmt::format("unknown library in foreign import"), MessageType::Warning });
+			return nullptr;
+		}
+
 		if (tipe == NodeType::Function)
 		{
 			FunctionNode* fn_decl = (FunctionNode*)frn->statement;
@@ -835,6 +843,7 @@ namespace Glass
 			metadata.HasBody = false;
 			metadata.ReturnType = return_type;
 			metadata.Symbol = fn_decl->Symbol;
+			metadata.Foreign_Library = library->Name.Symbol;
 
 			m_Metadata.RegisterFunction(ID, metadata);
 
@@ -844,7 +853,8 @@ namespace Glass
 			return GlobalVariableCodeGen((VariableNode*)frn->statement, true);
 		}
 
-		GS_CORE_ASSERT(0, "Un-supported foreign entity");
+		PushMessage(CompilerMessage{ PrintTokenLocation(frn->statement->GetLocation()), MessageType::Error });
+		PushMessage(CompilerMessage{ fmt::format("unsupported foreign entity"), MessageType::Warning });
 
 		return nullptr;
 	}

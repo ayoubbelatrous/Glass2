@@ -132,12 +132,23 @@ namespace Glass
 		if (At().Symbol == "foreign") {
 			Consume();
 
+			Expression* library_name = ParseExpression();
+
+			if (!library_name) {
+				Abort("Expected a Statement after #foreign directive");
+			}
+
+			if (library_name->GetType() != NodeType::Identifier) {
+				Abort("Expected a library name after #foreign directive");
+			}
+
 			ForeignNode Node;
 
 			Node.statement = ParseStatement();
+			Node.library_name = (Identifier*)library_name;
 
 			if (Node.statement == nullptr) {
-				Abort("Expected A Statement After #foreign Directive");
+				Abort("Expected a Statement after library name");
 			}
 
 			return Application::AllocateAstNode(Node);
