@@ -715,6 +715,7 @@ namespace Glass
 	struct IRRegister : public IRInstruction {
 		u64 ID = 0;
 		IRInstruction* Value = nullptr;
+		u64 Life_Time = 1;
 		bool IsCondition = false;	// optimization parameter to tell if a value is a comparison binop used by for or while
 
 		virtual std::string ToString() const override {

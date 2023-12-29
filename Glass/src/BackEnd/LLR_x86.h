@@ -317,6 +317,23 @@ namespace Glass
 		Assembly_Global_Initializer Initializer;
 	};
 
+	struct Assembly_TypeInfo_Table_Entry {
+		Assembly_Operand* elements[8];
+		u64 count = 0;
+	};
+
+	struct Assembly_TypeInfo_Table {
+		std::string External_Variable_Name;
+		std::string External_Length_Name;
+		std::string External_Members_Array_Name;
+		std::string External_Enum_Members_Array_Name;
+		std::string External_Func_Type_Parameters_Array_Name;
+		std::vector<Assembly_TypeInfo_Table_Entry> Func_Type_Parameters_Array;
+		std::vector<Assembly_TypeInfo_Table_Entry> Enum_Members_Array;
+		std::vector<Assembly_TypeInfo_Table_Entry> Members_Array;
+		std::vector<Assembly_TypeInfo_Table_Entry> Entries;
+	};
+
 	enum class Assembler_Output_Mode {
 		COFF_Object,
 		PE_Executable,
@@ -337,6 +354,7 @@ namespace Glass
 		std::vector<Assembly_Import> imports;
 
 		std::vector<Assembly_Global> globals;
+		Assembly_TypeInfo_Table type_info_table;
 	};
 
 	struct Intel_Syntax_Printer {
@@ -489,6 +507,7 @@ namespace Glass
 		void AssembleForeignImport(const FunctionMetadata* function);
 		void AssembleExternalFunction(const FunctionMetadata* function);
 		void AssembleExternals();
+		void AssembleTypeInfoTable();
 		void Assemble();
 
 		void AssembleInstruction(IRInstruction* instruction);
@@ -546,6 +565,9 @@ namespace Glass
 		void AssembleGlobalDeclare(IRGlobalDecl* ir_global);
 		void AssembleGlobalAddress(IRGlobalAddress* ir_global_addr);
 
+		void AssembleTypeValue(IRTypeValue* ir_type_value);
+		void AssembleTypeInfo(IRTypeInfo* ir_type_info);
+
 		void AssembleReturn(IRReturn* ir_return);
 
 		void AssembleConstValue(IRCONSTValue* ir_constant);
@@ -569,6 +591,7 @@ namespace Glass
 		std::vector<Assembly_Instruction> Code;
 		std::vector<Assembly_Float_Constant> Floats;
 		std::vector<Assembly_Global> Globals;
+		Assembly_TypeInfo_Table Program_Assembly_TypeInfo_Table;
 
 		std::string GetLabelName();
 
@@ -604,10 +627,13 @@ namespace Glass
 
 		Assembly_Operand* Create_Floating_Constant(u64 size, double value);
 		Assembly_Operand* Create_String_Constant(const std::string& data, u64 id);
+		Assembly_Operand* Create_String_Constant(const std::string& data);
 
 		bool Are_Equal(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		Register_Allocation_Data Register_Allocator_Data;
+
+		Assembly_Operand* TypeInfo_Table_Label = nullptr;
 
 		Assembly_Operand* Return_Storage_Location = nullptr;
 		u64 Return_Counter = 0;
@@ -618,6 +644,10 @@ namespace Glass
 
 		u64 Function_Counter = 0;
 		u64 Label_Counter = 0;
+
+		u64 String_Id_Counter = 64000;
+
+		u64 Current_Register_Lifetime = 0;
 
 		bool Use_Linker = false;
 	};

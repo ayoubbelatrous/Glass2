@@ -728,12 +728,213 @@ namespace Glass
 
 	}
 
+	void X86_BackEnd::AssembleTypeInfoTable()
+	{
+		const u64 Type_Info_Element_Size = 64;
+
+		std::vector<TypeStorage*> type_info_map = TypeSystem::GetTypeMap();
+
+		Assembly_TypeInfo_Table assembly_type_info_table;
+		assembly_type_info_table.External_Variable_Name = "TypeInfo_Array";
+		assembly_type_info_table.External_Members_Array_Name = "TypeInfo_Members_Array";
+		assembly_type_info_table.External_Enum_Members_Array_Name = "TypeInfo_Enum_Members_Array";
+		assembly_type_info_table.External_Func_Type_Parameters_Array_Name = "TypeInfo_Func_Type_Parameters_Array";
+
+		TypeInfo_Table_Label = Builder::Symbol("TypeInfo_Array");
+
+		auto Func_Type_Parameters_Array_Name = Builder::Symbol("TypeInfo_Func_Type_Parameters_Array");
+
+		auto Enum_Members_Array_Symbol = Builder::Symbol("TypeInfo_Enum_Members_Array");
+
+		std::unordered_map<u64, u64> Enum_Members_Offsets;
+
+		u64 i = 0;
+		for (auto& [enum_id, enum_metadata] : m_Metadata->m_Enums)
+		{
+			Enum_Members_Offsets[enum_id] = Type_Info_Element_Size * i;
+
+			for (const EnumMemberMetadata& member : enum_metadata.Members) {
+				auto member_name_string = Create_String_Constant(member.Name);
+
+				Assembly_TypeInfo_Table_Entry entry = {};
+				entry.elements[0] = member_name_string;
+				entry.elements[1] = Builder::Constant_Integer(member.Value);
+				entry.elements[2] = Builder::Constant_Integer(0);
+				entry.elements[3] = Builder::Constant_Integer(0);
+				entry.elements[4] = Builder::Constant_Integer(0);
+				entry.elements[5] = Builder::Constant_Integer(0);
+				entry.elements[6] = Builder::Constant_Integer(0);
+				entry.elements[7] = Builder::Constant_Integer(0);
+				assembly_type_info_table.Enum_Members_Array.push_back(entry);
+				i++;
+			}
+		}
+
+		std::unordered_map<u64, u64> Struct_Members_Offsets;
+
+		auto Struct_Members_Array_Symbol = Builder::Symbol("TypeInfo_Members_Array");
+
+		i = 0;
+		for (auto& [struct_id, struct_metadata] : m_Metadata->m_StructMetadata)
+		{
+			Struct_Members_Offsets[struct_id] = Type_Info_Element_Size * i;
+
+			for (const MemberMetadata& member : struct_metadata.Members) {
+				auto member_name_string = Create_String_Constant(member.Name.Symbol);
+
+				Assembly_TypeInfo_Table_Entry entry = {};
+				entry.elements[0] = member_name_string;
+				entry.elements[1] = Builder::Constant_Integer(TypeSystem::GetTypeInfoIndex(member.Type));
+				entry.elements[2] = Builder::Constant_Integer(member.Offset);
+				entry.elements[3] = Builder::Constant_Integer(0);
+				entry.elements[4] = Builder::Constant_Integer(0);
+				entry.elements[5] = Builder::Constant_Integer(0);
+				entry.elements[6] = Builder::Constant_Integer(0);
+				entry.elements[7] = Builder::Constant_Integer(0);
+				assembly_type_info_table.Members_Array.push_back(entry);
+				i++;
+			}
+		}
+
+		u64 func_type_param_i = 0;
+
+		for (size_t i = 0; i < type_info_map.size(); i++)
+		{
+			TypeStorage* type = type_info_map[i];
+
+			if (type->Kind == TypeStorageKind::Base) {
+
+				auto flags = TypeSystem::GetTypeFlags(type);
+
+				if (flags & FLAG_ENUM_TYPE) {
+					const EnumMetadata* enum_metadata = m_Metadata->GetEnumFromType(type->BaseID);
+
+					GS_CORE_ASSERT(enum_metadata);
+
+					auto type_name_string = Create_String_Constant(enum_metadata->Name.Symbol);
+
+					Assembly_TypeInfo_Table_Entry entry = {};
+					entry.elements[0] = type_name_string;
+					entry.elements[1] = Builder::Constant_Integer(TI_ENUM);
+					entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeSize(type));
+					entry.elements[3] = Builder::Constant_Integer(enum_metadata->Members.size());
+					entry.elements[4] = Builder::OpAdd(Enum_Members_Array_Symbol, Builder::Constant_Integer(Enum_Members_Offsets.at(enum_metadata->EnumID)));
+					entry.elements[5] = Builder::Constant_Integer(0);
+					entry.elements[6] = Builder::Constant_Integer(0);
+					entry.elements[7] = Builder::Constant_Integer(0);
+
+					assembly_type_info_table.Entries.push_back(entry);
+				}
+				else if (flags & FLAG_STRUCT_TYPE) {
+					u64 struct_id = m_Metadata->GetStructIDFromType(type->BaseID);
+					const StructMetadata* struct_metadata = m_Metadata->GetStructFromType(type->BaseID);
+					GS_CORE_ASSERT(struct_metadata);
+
+					auto type_name_string = Create_String_Constant(struct_metadata->Name.Symbol);
+
+					Assembly_TypeInfo_Table_Entry entry = {};
+					entry.elements[0] = type_name_string;
+					entry.elements[1] = Builder::Constant_Integer(m_Metadata->GetTypeInfoFlags(type->BaseID));
+					entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeSize(type));
+					entry.elements[3] = Builder::Constant_Integer(struct_metadata->Members.size());
+					entry.elements[4] = Builder::OpAdd(Struct_Members_Array_Symbol, Builder::Constant_Integer(Struct_Members_Offsets.at(struct_id)));
+					entry.elements[5] = Builder::Constant_Integer(0);
+					entry.elements[6] = Builder::Constant_Integer(0);
+					entry.elements[7] = Builder::Constant_Integer(0);
+
+					assembly_type_info_table.Entries.push_back(entry);
+				}
+				else {
+					std::string type_name = TypeSystem::PrintType(type);
+					auto type_name_string = Create_String_Constant(type_name);
+
+					Assembly_TypeInfo_Table_Entry entry = {};
+					entry.elements[0] = type_name_string;
+					entry.elements[1] = Builder::Constant_Integer(m_Metadata->GetTypeInfoFlags(type->BaseID));
+					entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeSize(type));
+					entry.elements[3] = Builder::Constant_Integer(0);
+					entry.elements[4] = Builder::Constant_Integer(0);
+					entry.elements[5] = Builder::Constant_Integer(0);
+					entry.elements[6] = Builder::Constant_Integer(0);
+					entry.elements[7] = Builder::Constant_Integer(0);
+
+					assembly_type_info_table.Entries.push_back(entry);
+				}
+			}
+			else if (type->Kind == TypeStorageKind::Pointer) {
+				std::string type_name = TypeSystem::PrintType(type);
+				auto type_name_string = Create_String_Constant(type_name);
+
+				Assembly_TypeInfo_Table_Entry entry = {};
+				entry.elements[0] = type_name_string;
+				entry.elements[1] = Builder::Constant_Integer(TI_POINTER);
+				entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeInfoIndex(((TSPtr*)type)->Pointee));
+				entry.elements[3] = Builder::Constant_Integer(((TSPtr*)type)->Indirection);
+				entry.elements[4] = Builder::Constant_Integer(0);
+				entry.elements[5] = Builder::Constant_Integer(0);
+				entry.elements[6] = Builder::Constant_Integer(0);
+				entry.elements[7] = Builder::Constant_Integer(0);
+
+				assembly_type_info_table.Entries.push_back(entry);
+			}
+			else if (type->Kind == TypeStorageKind::DynArray) {
+				std::string type_name = TypeSystem::PrintType(type);
+				auto type_name_string = Create_String_Constant(type_name);
+
+				Assembly_TypeInfo_Table_Entry entry = {};
+				entry.elements[0] = type_name_string;
+				entry.elements[1] = Builder::Constant_Integer(TI_DYN_ARRAY);
+				entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeInfoIndex(((TSDynArray*)type)->ElementType));
+				entry.elements[3] = Builder::Constant_Integer(0);
+				entry.elements[4] = Builder::Constant_Integer(0);
+				entry.elements[5] = Builder::Constant_Integer(0);
+				entry.elements[6] = Builder::Constant_Integer(0);
+				entry.elements[7] = Builder::Constant_Integer(0);
+
+				assembly_type_info_table.Entries.push_back(entry);
+			}
+			else if (type->Kind == TypeStorageKind::Function) {
+				TSFunc* as_func = (TSFunc*)type;
+
+				std::string type_name = TypeSystem::PrintType(type);
+				auto type_name_string = Create_String_Constant(type_name);
+
+				Assembly_TypeInfo_Table_Entry entry = {};
+				entry.elements[0] = type_name_string;
+				entry.elements[1] = Builder::Constant_Integer(TI_FUNCTION);
+				entry.elements[2] = Builder::Constant_Integer(TypeSystem::GetTypeInfoIndex(as_func->ReturnType));
+				entry.elements[3] = Builder::Constant_Integer(as_func->Arguments.size());
+				entry.elements[4] = Builder::OpAdd(Func_Type_Parameters_Array_Name, Builder::Constant_Integer(func_type_param_i * 8));
+				entry.elements[5] = Builder::Constant_Integer(0);
+				entry.elements[6] = Builder::Constant_Integer(0);
+				entry.elements[7] = Builder::Constant_Integer(0);
+
+				assembly_type_info_table.Entries.push_back(entry);
+
+				for (auto parameter : as_func->Arguments) {
+
+					Assembly_TypeInfo_Table_Entry param_entry = {};
+
+					param_entry.elements[0] = Builder::Constant_Integer(TypeSystem::GetTypeInfoIndex(parameter));
+
+					assembly_type_info_table.Func_Type_Parameters_Array.push_back(param_entry);
+
+					func_type_param_i++;
+				}
+			}
+		}
+
+		Program_Assembly_TypeInfo_Table = assembly_type_info_table;
+	}
+
 	void X86_BackEnd::Assemble()
 	{
 		std::chrono::steady_clock::time_point Start;
 		std::chrono::steady_clock::time_point End;
 
 		Start = std::chrono::high_resolution_clock::now();
+
+		AssembleTypeInfoTable();
 
 		AssembleForeignLibraries();
 		AssembleExternals();
@@ -780,6 +981,7 @@ namespace Glass
 		assembly.globals = Globals;
 		assembly.floats = Floats;
 		assembly.strings = Strings;
+		assembly.type_info_table = Program_Assembly_TypeInfo_Table;
 
 		for (auto func : Functions) {
 			assembly.functions.push_back(*func);
@@ -963,7 +1165,12 @@ namespace Glass
 		case IRNodeType::GlobAddress:
 			AssembleGlobalAddress((IRGlobalAddress*)instruction);
 			break;
-
+		case IRNodeType::TypeValue:
+			AssembleTypeValue((IRTypeValue*)instruction);
+			break;
+		case IRNodeType::TypeInfo:
+			AssembleTypeInfo((IRTypeInfo*)instruction);
+			break;
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -1407,6 +1614,9 @@ namespace Glass
 	{
 		CurrentRegister = ir_register->ID;
 		CurrentIrRegister = ir_register;
+		GS_CORE_ASSERT(ir_register->Life_Time);
+		Current_Register_Lifetime = ir_register->Life_Time;
+
 		AssembleInstruction(ir_register->Value);
 	}
 
@@ -1498,6 +1708,8 @@ namespace Glass
 
 		auto register_value_type = GetRegisterValueType(ir_member_access->ObjectRegister);
 
+		bool has_allocation = false;
+
 		if (ir_member_access->ReferenceAccess || register_value_type == Register_Value_Type::Memory_Value) {
 
 			GS_CORE_ASSERT(object_value->type != Op_Register);
@@ -1514,6 +1726,8 @@ namespace Glass
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), new_object_value, object_value));
 
 			object_value = new_object_value;
+
+			has_allocation = true;
 		}
 
 		if (register_value_type == Register_Value_Type::Stack_Address) {
@@ -1535,7 +1749,7 @@ namespace Glass
 		}
 		else if (register_value_type == Register_Value_Type::Register_Value) {
 
-			if (!ir_member_access->ReferenceAccess) {
+			if (!has_allocation) {
 				UseRegisterValue(ir_member_access->ObjectRegister);
 				Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister, object_value->reg.Register);
 			}
@@ -1647,7 +1861,18 @@ namespace Glass
 				auto spillage_location = Stack_Alloc(allocation.type);
 				spillage_location = Builder::De_Reference(spillage_location, allocation.type);
 
-				auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+				Assembly_Instruction spill;
+
+				if (value_type == Register_Value_Type::Pointer_Address) {
+					Code.push_back(Builder::Lea(Builder::Register(allocation.reg), Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id))));
+					spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
+				}
+				else {
+					spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				}
+
 				spill.Comment = "Spillage";
 
 				Code.push_back(spill);
@@ -1668,7 +1893,17 @@ namespace Glass
 				auto spillage_location = Stack_Alloc(allocation.type);
 				spillage_location = Builder::De_Reference(spillage_location, allocation.type);
 
-				auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+				Assembly_Instruction spill;
+
+				if (value_type == Register_Value_Type::Pointer_Address) {
+					spill = Builder::Lea(spillage_location, Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id)));
+				}
+				else {
+					spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+				}
+
 				spill.Comment = "Spillage";
 
 				Code.push_back(spill);
@@ -2820,6 +3055,28 @@ namespace Glass
 		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 	}
 
+	void X86_BackEnd::AssembleTypeValue(IRTypeValue* ir_type_value)
+	{
+		auto type_index = TypeSystem::GetTypeInfoIndex(ir_type_value->Type);
+		SetRegisterValue(Builder::Constant_Integer(type_index), CurrentRegister, Register_Value_Type::Immediate_Value);
+	}
+
+	void X86_BackEnd::AssembleTypeInfo(IRTypeInfo* ir_type_info)
+	{
+		auto argument_value = GetRegisterValue(ir_type_info->ArgumentRegister);
+
+		auto result = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+
+		UseRegisterValue(ir_type_info->ArgumentRegister);
+
+		Code.push_back(Builder::Mov(result, Builder::Constant_Integer(64)));
+
+		Code.push_back(Builder::Mul(result, argument_value));
+
+		Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::OpAdd(TypeInfo_Table_Label, result))));
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
 	{
 		Return_Counter++;
@@ -2923,7 +3180,7 @@ namespace Glass
 
 		auto address_register = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
 
-		Code.push_back(Builder::Lea(address_register, data_location));
+		Code.push_back(Builder::Lea(address_register, Builder::De_Reference(data_location)));
 
 		SetRegisterValue(address_register, Register_Value_Type::Register_Value);
 	}
@@ -3039,7 +3296,7 @@ namespace Glass
 	void X86_BackEnd::SetRegisterValue(Assembly_Operand* register_value, u64 register_id, Register_Value_Type value_type)
 	{
 		m_Data.IR_RegisterValues[register_id] = register_value;
-		m_Data.IR_RegisterLifetimes[register_id] = 1;
+		m_Data.IR_RegisterLifetimes[register_id] = Current_Register_Lifetime;
 		m_Data.IR_RegisterValueTypes[register_id] = value_type;
 	}
 
@@ -3137,7 +3394,17 @@ namespace Glass
 
 			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation.type), allocation.type);
 
-			auto spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
+			auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+			Assembly_Instruction spill;
+
+			if (value_type == Register_Value_Type::Pointer_Address) {
+				Code.push_back(Builder::Lea(Builder::Register(allocation.reg), Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id))));
+				spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
+			}
+			else {
+				spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+			}
 
 			spill.Comment = "Spillage";
 
@@ -3199,7 +3466,17 @@ namespace Glass
 
 			auto spillage_location = Builder::De_Reference(Stack_Alloc(allocation.type), allocation.type);
 
-			auto spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+			auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+			Assembly_Instruction spill;
+
+			if (value_type == Register_Value_Type::Pointer_Address) {
+				Code.push_back(Builder::Lea(Builder::Register(allocation.reg), Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id))));
+				spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
+			}
+			else {
+				spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+			}
 
 			spill.Comment = "Spillage";
 
@@ -3364,7 +3641,13 @@ namespace Glass
 
 		Strings.push_back(constant);
 
-		return Builder::De_Reference(Builder::Symbol(fmt::format("str_{}", id)));
+		return Builder::Symbol(fmt::format("str_{}", id));
+	}
+
+	Assembly_Operand* X86_BackEnd::Create_String_Constant(const std::string& data)
+	{
+		String_Id_Counter++;
+		return Create_String_Constant(data, String_Id_Counter);
 	}
 
 	bool X86_BackEnd::Are_Equal(Assembly_Operand* operand1, Assembly_Operand* operand2)
@@ -3533,7 +3816,12 @@ forward
 			stream << "extrn '" << external.ExternalName << "' " << "as " << external.ExternalName << "\n";
 		}
 
-		stream << "\nsection '.bss' data writable readable\n";
+		for (Assembly_Global& global : Assembly->globals) {
+			if (global.Initializer.Type == Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << "\nsection '.bss' data writable readable\n";
+				break;
+			}
+		}
 
 		for (Assembly_Global& global : Assembly->globals) {
 
@@ -3580,6 +3868,89 @@ forward
 		//data
 		stream << "\n";
 		stream << "section '.rdata' data readable\n";
+
+		stream << Assembly->type_info_table.External_Func_Type_Parameters_Array_Name;
+		stream << " dq ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Func_Type_Parameters_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Func_Type_Parameters_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			Intel_Syntax_Printer::PrintOperand(entry.elements[0], stream);
+		}
+
+		stream << "\n";
+		stream << Assembly->type_info_table.External_Enum_Members_Array_Name;
+		stream << " dq ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Enum_Members_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Enum_Members_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
+		stream << Assembly->type_info_table.External_Members_Array_Name;
+		stream << " dq ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Members_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Members_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
+
+		stream << Assembly->type_info_table.External_Variable_Name;
+		stream << " dq ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Entries.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Entries[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
 
 		for (Assembly_Float_Constant& floating_constant : Assembly->floats) {
 

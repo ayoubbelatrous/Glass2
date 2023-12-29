@@ -409,8 +409,11 @@ namespace Glass
 
 		llvm::Type* llvm_TypeInfoElemMemberTy = GetLLVMType(IR_u64);
 
-		llvm::Type* llvm_TypeInfoElemMemberBodyTy[5] =
+		llvm::Type* llvm_TypeInfoElemMemberBodyTy[8] =
 		{
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
+			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
 			llvm_TypeInfoElemMemberTy,
@@ -651,7 +654,6 @@ namespace Glass
 
 			}
 									  break;
-			case TypeStorageKind::StaticArray:
 			case TypeStorageKind::DynArray:
 			case TypeStorageKind::Function:
 			case TypeStorageKind::Poly: {

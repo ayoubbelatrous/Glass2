@@ -1695,6 +1695,8 @@ namespace Glass
 		{
 			PushScope();
 
+			auto generated_register = GetRegister(generated->RegisterID);
+
 			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
 			IRRegisterValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
 
@@ -1934,7 +1936,7 @@ namespace Glass
 
 			return IR(IRRegisterValue(ir_register->ID));
 		}
-		else if (symbol_type == SymbolType::Type) {
+		else if (symbol_type == SymbolType::Type || symbol_type == SymbolType::Enum) {
 			return TypeValueCodeGen(TypeSystem::GetBasic(identifier->Symbol.Symbol));
 		}
 		else if (symbol_type == SymbolType::Constant) {
@@ -3479,7 +3481,9 @@ namespace Glass
 			return nullptr;
 		}
 
-		IRRegisterValue* type_arg_value = GetExpressionByValue(type_info_call->Arguments[0]);
+		auto argument = type_info_call->Arguments[0];
+
+		IRRegisterValue* type_arg_value = GetExpressionByValue(argument);
 
 		if (!type_arg_value) {
 			return nullptr;
@@ -3631,7 +3635,7 @@ namespace Glass
 				return generated_code;
 			}
 
-			if (symbol_type == SymbolType::Type)
+			if (symbol_type == SymbolType::Type || symbol_type == SymbolType::Enum)
 			{
 				return TypeValueCodeGen(TypeSystem::GetBasic(identifier->Symbol.Symbol));
 			}
@@ -3797,6 +3801,13 @@ namespace Glass
 	IRRegisterValue* Compiler::TypeExpressionCodeGen(TypeExpression* type_expr)
 	{
 		auto type = TypeExpressionGetType(type_expr);
+
+		if (!type) {
+			MSG_LOC(type_expr);
+			FMT_WARN("unknown type");
+			return nullptr;
+		}
+
 		return TypeValueCodeGen(type);
 	}
 

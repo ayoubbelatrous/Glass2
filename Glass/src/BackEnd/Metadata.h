@@ -28,6 +28,7 @@ namespace Glass {
 		TI_ENUM = BIT(6),
 		TI_FUNCTION = BIT(7),
 		TI_POINTER = BIT(8),
+		TI_DYN_ARRAY = BIT(9),
 	};
 
 	enum TypeFlag {
