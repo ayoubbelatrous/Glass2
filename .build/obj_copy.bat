@@ -1,0 +1,1 @@
+objcopy --rename-section .dabrv=.debug_abbrev --rename-section .dinfo=.debug_info --rename-section .dstr=.debug_str --rename-section .dline=.debug_line fasm.obj output.obj

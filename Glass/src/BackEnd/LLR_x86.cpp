@@ -948,6 +948,12 @@ namespace Glass
 		case IRNodeType::FPTrunc:
 			AssembleFPTruncCast((IRFPTrunc*)instruction);
 			break;
+		case IRNodeType::FuncRef:
+			AssembleFuncRef((IRFuncRef*)instruction);
+			break;
+		case IRNodeType::CallFuncRef:
+			AssembleCallFuncRef((IRCallFuncRef*)instruction);
+			break;
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -2574,6 +2580,187 @@ namespace Glass
 		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 	}
 
+	void X86_BackEnd::AssembleFuncRef(IRFuncRef* ir_func_ref)
+	{
+		const FunctionMetadata* metadata = m_Metadata->GetFunctionMetadata(ir_func_ref->FunctionID);
+		GS_CORE_ASSERT(metadata);
+
+		std::string name = metadata->Symbol.Symbol;
+
+		if (!metadata->Foreign && metadata->Symbol.Symbol != "main") {
+			name = Mangle_Name(name, metadata->Signature);
+		}
+
+		auto result = Allocate_Register(metadata->Signature, CurrentRegister);
+
+		if (!Use_Linker) {
+			if (metadata->Foreign) {
+				Code.push_back(Builder::Mov(result, Builder::De_Reference(Builder::Symbol(name))));
+			}
+			else {
+				Code.push_back(Builder::Mov(result, Builder::Symbol(name)));
+			}
+		}
+		else {
+			Code.push_back(Builder::Mov(result, Builder::Symbol(name)));
+		}
+
+		SetRegisterValue(result, CurrentRegister);
+	}
+
+	void X86_BackEnd::AssembleCallFuncRef(IRCallFuncRef* ir_call_func_ref)
+	{
+		static std::map<u64, X86_Register> return_register_map = {
+			{1, AL},
+			{2, AX},
+			{4, EAX},
+			{8, RAX},
+		};
+
+		std::vector<u64> argument_allocations;
+		std::vector <std::pair<Assembly_Operand*, Assembly_Operand*>> argument_allocations_registers;
+
+		TSFunc* signature = (TSFunc*)ir_call_func_ref->Signature;
+
+		for (size_t i = 0; i < ir_call_func_ref->Arguments.size(); i++)
+		{
+			auto call_argument_ir_id = ir_call_func_ref->Arguments[i];
+
+			TypeStorage* argument_type = signature->Arguments[i];
+
+			auto type_size = TypeSystem::GetTypeSize(argument_type);
+
+			if (type_size > 8) {
+				argument_type = TypeSystem::GetPtr(argument_type, 1);
+				type_size = TypeSystem::GetTypeSize(argument_type);
+			}
+
+			if (type_size <= 8) {
+
+				X86_Register needed_register;
+
+				if (i < 4)
+				{
+					if (!TypeSystem::IsFlt(argument_type)) {
+						needed_register = argument_register_map.at({ type_size,i });
+					}
+					else {
+						needed_register = argument_float_register_map.at(i);
+					}
+
+					auto temp_register_id = CreateTempRegister(nullptr);
+					auto argument_phys_register = Allocate_Register(argument_type, temp_register_id, needed_register);
+
+					argument_allocations_registers.push_back({ argument_phys_register , nullptr });
+
+					SetRegisterValue(argument_phys_register, temp_register_id);
+
+					auto call_argument_value = GetRegisterValue(call_argument_ir_id);
+
+					argument_allocations.push_back(temp_register_id);
+				}
+			}
+		}
+
+		for (size_t i = 0; i < ir_call_func_ref->Arguments.size(); i++)
+		{
+			auto call_argument_ir_id = ir_call_func_ref->Arguments[i];
+
+			TypeStorage* argument_type = signature->Arguments[i];
+			auto argument_type_flags = TypeSystem::GetTypeFlags(argument_type);
+
+			auto type_size = TypeSystem::GetTypeSize(argument_type);
+
+			if (type_size > 8) {
+				argument_type = TypeSystem::GetPtr(argument_type, 1);
+				type_size = TypeSystem::GetTypeSize(argument_type);
+			}
+
+			if (i < 4)
+			{
+				GS_CORE_ASSERT(argument_allocations_registers[i].first);
+				auto argument_phys_register = argument_allocations_registers[i].first;
+
+				auto call_argument_value = GetRegisterValue(call_argument_ir_id);
+
+				Code.push_back(MoveBasedOnType(argument_type, argument_phys_register, call_argument_value));
+
+			}
+			else {
+				auto call_argument_value = GetRegisterValue(call_argument_ir_id);
+
+				if (GetRegisterValueType(call_argument_ir_id) != Register_Value_Type::Register_Value) {
+
+					auto tmp_move_register_id = CreateTempRegister(nullptr);
+					auto tmp_move_register = Allocate_Register(argument_type, tmp_move_register_id);
+					SetRegisterValue(tmp_move_register, tmp_move_register_id, Register_Value_Type::Register_Value);
+					UseRegisterValue(tmp_move_register_id);
+
+					Code.push_back(MoveBasedOnType(argument_type, tmp_move_register, call_argument_value));
+
+					call_argument_value = tmp_move_register;
+				}
+
+				auto argument_stack_location = Builder::De_Reference(Alloc_Call_StackTop(TypeSystem::GetU64()), argument_type);
+
+				Code.push_back(MoveBasedOnType(argument_type, argument_stack_location, call_argument_value));
+			}
+
+			UseRegisterValue(call_argument_ir_id);
+		}
+
+		Assembly_Operand* return_location = nullptr;
+
+		if (signature->ReturnType != TypeSystem::GetVoid()) {
+
+			auto return_type_size = TypeSystem::GetTypeSize(signature->ReturnType);
+			auto return_type = signature->ReturnType;
+
+			if (return_type_size > 8) {
+				return_type = TypeSystem::GetPtr(signature->ReturnType, 1);
+				return_type_size = TypeSystem::GetTypeSize(return_type);
+			}
+
+			if (!TypeSystem::IsFlt(signature->ReturnType)) {
+				return_location = Allocate_Register(return_type, CurrentRegister, return_register_map.at(return_type_size));
+			}
+			else {
+				return_location = Allocate_Register(return_type, CurrentRegister, XMM0);
+			}
+		}
+
+		auto return_type_size = TypeSystem::GetTypeSize(signature->ReturnType);
+
+		if (return_type_size > 8) {
+			Code.push_back(Builder::Lea(return_location, Builder::De_Reference(Stack_Alloc(signature->ReturnType), signature->ReturnType)));
+		}
+
+		Code.push_back(Builder::Call(GetRegisterValue(ir_call_func_ref->PtrRegister)));
+
+		SetRegisterValue(return_location, Register_Value_Type::Register_Value);
+
+		if (!TypeSystem::IsPointer(signature->ReturnType) && return_type_size <= 8) {
+			if (m_Metadata->GetStructIDFromType(signature->ReturnType->BaseID) != -1) {
+
+				auto new_return_location = Stack_Alloc(signature->ReturnType);
+
+				Code.push_back(Builder::Mov(Builder::De_Reference(new_return_location, signature->ReturnType), return_location));
+
+				return_location = new_return_location;
+			}
+
+			SetRegisterValue(return_location, Register_Value_Type::Stack_Address);
+		}
+
+		for (auto allocation : argument_allocations) {
+			UseRegisterValue(allocation);
+		}
+
+		UseRegisterValue(ir_call_func_ref->PtrRegister);
+
+		m_Data.Call_Stack_Pointer = 0;
+	}
+
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
 	{
 		Return_Counter++;
@@ -3353,7 +3540,7 @@ forward
 		return stream.str();
 	}
 
-	void FASM_Printer::PrintOperand(const Assembly_Operand* operand, std::stringstream& stream)
+	void Intel_Syntax_Printer::PrintOperand(const Assembly_Operand* operand, std::stringstream& stream)
 	{
 		static const std::unordered_map<Assembly_Size, std::string> wordness_map = {
 			{asm_none, ""},
@@ -3405,7 +3592,7 @@ forward
 		}
 	}
 
-	void FASM_Printer::PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream)
+	void Intel_Syntax_Printer::PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream)
 	{
 		switch (instruction.OpCode)
 		{
@@ -3711,7 +3898,7 @@ forward
 					stream << "\t";
 				}
 
-				PrintInstruction(code, stream);
+				Intel_Syntax_Printer::PrintInstruction(code, stream);
 
 				if (code.Comment) {
 					stream << "\t; ";

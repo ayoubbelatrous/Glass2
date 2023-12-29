@@ -313,13 +313,16 @@ namespace Glass
 		std::vector<Assembly_Import> imports;
 	};
 
+	struct Intel_Syntax_Printer {
+		static void PrintOperand(const Assembly_Operand* operand, std::stringstream& stream);
+		static void PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream);
+	};
+
 	struct FASM_Printer {
 
 		FASM_Printer(Assembly_File* assembly);
 
 		std::string Print();
-		void PrintOperand(const Assembly_Operand* operand, std::stringstream& stream);
-		void PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream);
 		void PrintCode(std::stringstream& stream);
 
 		Assembly_File* Assembly = nullptr;
@@ -510,6 +513,9 @@ namespace Glass
 		void AssembleFP2IntCast(IRFP2Int* ir_fp_2_int);
 		void AssembleFPExtCast(IRFPExt* ir_fp_ext);
 		void AssembleFPTruncCast(IRFPTrunc* ir_fp_trunc);
+
+		void AssembleFuncRef(IRFuncRef* ir_func_ref);
+		void AssembleCallFuncRef(IRCallFuncRef* ir_call_func_ref);
 
 		void AssembleReturn(IRReturn* ir_return);
 
