@@ -2786,7 +2786,21 @@ namespace Glass
 		global.Linkage = Assembly_Global_Linkage::External;
 
 		Assembly_Global_Initializer initializer;
-		initializer.Type = Assembly_Global_Initializer_Type::Zero_Initilizer;
+
+		if (!ir_global->Initializer) {
+			initializer.Type = Assembly_Global_Initializer_Type::Zero_Initilizer;
+		}
+		else {
+			auto type_size = TypeSystem::GetTypeSize(ir_global->Type);
+
+			for (size_t i = 0; i < type_size; i++)
+			{
+				initializer.Initializer_Data.push_back(ir_global->Initializer->Data[i]);
+			}
+
+			initializer.Type = Assembly_Global_Initializer_Type::Bytes_Initilizer;
+		}
+
 
 		global.Initializer = initializer;
 
@@ -3527,6 +3541,39 @@ forward
 
 			if (global.Initializer.Type == Assembly_Global_Initializer_Type::Zero_Initilizer) {
 				stream << global.Name << " " << "rb " << global.Allocation_Size << "\n";
+			}
+		}
+
+		for (Assembly_Global& global : Assembly->globals) {
+			if (global.Initializer.Type != Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << "\nsection '.data' data writable readable\n";
+				break;
+			}
+		}
+
+		for (Assembly_Global& global : Assembly->globals) {
+
+			GS_CORE_ASSERT(global.Allocation_Size);
+
+			if (global.Initializer.Type != Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << global.Name << " ";
+				if (global.Initializer.Type == Assembly_Global_Initializer_Type::Bytes_Initilizer) {
+
+					stream << "db ";
+
+					for (size_t i = 0; i < global.Initializer.Initializer_Data.size(); i++)
+					{
+						stream << fmt::format("{}", global.Initializer.Initializer_Data[i]);
+
+						if (i != global.Initializer.Initializer_Data.size() - 1) {
+							stream << ", ";
+						}
+					}
+					stream << "\n";
+				}
+				else {
+					GS_CORE_ASSERT(nullptr);
+				}
 			}
 		}
 
