@@ -293,6 +293,30 @@ namespace Glass
 		std::string Name;
 	};
 
+	enum class Assembly_Global_Linkage {
+		Private,
+		Import,
+		External,
+	};
+
+	enum class Assembly_Global_Initializer_Type {
+		Zero_Initilizer,
+		Bytes_Initilizer,
+		DoubleWords_Initilizer,
+	};
+
+	struct Assembly_Global_Initializer {
+		Assembly_Global_Initializer_Type Type;
+		std::vector<u8> Initializer_Data;
+	};
+
+	struct Assembly_Global {
+		std::string Name;
+		u64 Allocation_Size = 0;
+		Assembly_Global_Linkage Linkage;
+		Assembly_Global_Initializer Initializer;
+	};
+
 	enum class Assembler_Output_Mode {
 		COFF_Object,
 		PE_Executable,
@@ -311,6 +335,8 @@ namespace Glass
 
 		std::vector<Assembly_Dynamic_Library> libraries;
 		std::vector<Assembly_Import> imports;
+
+		std::vector<Assembly_Global> globals;
 	};
 
 	struct Intel_Syntax_Printer {
@@ -517,6 +543,9 @@ namespace Glass
 		void AssembleFuncRef(IRFuncRef* ir_func_ref);
 		void AssembleCallFuncRef(IRCallFuncRef* ir_call_func_ref);
 
+		void AssembleGlobalDeclare(IRGlobalDecl* ir_global);
+		void AssembleGlobalAddress(IRGlobalAddress* ir_global_addr);
+
 		void AssembleReturn(IRReturn* ir_return);
 
 		void AssembleConstValue(IRCONSTValue* ir_constant);
@@ -539,6 +568,7 @@ namespace Glass
 		std::vector<Assembly_Function*> Functions;
 		std::vector<Assembly_Instruction> Code;
 		std::vector<Assembly_Float_Constant> Floats;
+		std::vector<Assembly_Global> Globals;
 
 		std::string GetLabelName();
 

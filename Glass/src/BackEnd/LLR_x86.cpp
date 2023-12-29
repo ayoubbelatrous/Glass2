@@ -777,6 +777,7 @@ namespace Glass
 			assembly.imports = Imports;
 		}
 
+		assembly.globals = Globals;
 		assembly.floats = Floats;
 		assembly.strings = Strings;
 
@@ -954,6 +955,15 @@ namespace Glass
 		case IRNodeType::CallFuncRef:
 			AssembleCallFuncRef((IRCallFuncRef*)instruction);
 			break;
+
+		case IRNodeType::GlobDecl:
+			AssembleGlobalDeclare((IRGlobalDecl*)instruction);
+			break;
+
+		case IRNodeType::GlobAddress:
+			AssembleGlobalAddress((IRGlobalAddress*)instruction);
+			break;
+
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -2761,6 +2771,41 @@ namespace Glass
 		m_Data.Call_Stack_Pointer = 0;
 	}
 
+	void X86_BackEnd::AssembleGlobalDeclare(IRGlobalDecl* ir_global)
+	{
+		const VariableMetadata* global_variable_metadata = m_Metadata->GetVariableMetadataRecursive(1, ir_global->GlobID);
+
+		GS_CORE_ASSERT(global_variable_metadata);
+		GS_CORE_ASSERT(global_variable_metadata->Global);
+
+		GS_CORE_ASSERT(!global_variable_metadata->Foreign);
+
+		Assembly_Global global;
+		global.Allocation_Size = TypeSystem::GetTypeSize(global_variable_metadata->Tipe);
+		global.Name = global_variable_metadata->Name.Symbol;
+		global.Linkage = Assembly_Global_Linkage::External;
+
+		Assembly_Global_Initializer initializer;
+		initializer.Type = Assembly_Global_Initializer_Type::Zero_Initilizer;
+
+		global.Initializer = initializer;
+
+		Globals.push_back(global);
+	}
+
+	void X86_BackEnd::AssembleGlobalAddress(IRGlobalAddress* ir_global_addr)
+	{
+		const VariableMetadata* global_variable_metadata = m_Metadata->GetVariableMetadataRecursive(1, ir_global_addr->GlobID);
+
+		GS_CORE_ASSERT(global_variable_metadata);
+		GS_CORE_ASSERT(global_variable_metadata->Global);
+
+		auto result = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+		Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::Symbol(global_variable_metadata->Name.Symbol))));
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
 	{
 		Return_Counter++;
@@ -3472,6 +3517,17 @@ forward
 
 		for (Assembly_External_Symbol external : Assembly->externals) {
 			stream << "extrn '" << external.ExternalName << "' " << "as " << external.ExternalName << "\n";
+		}
+
+		stream << "\nsection '.bss' data writable readable\n";
+
+		for (Assembly_Global& global : Assembly->globals) {
+
+			GS_CORE_ASSERT(global.Allocation_Size);
+
+			if (global.Initializer.Type == Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << global.Name << " " << "rb " << global.Allocation_Size << "\n";
+			}
 		}
 
 		//data
