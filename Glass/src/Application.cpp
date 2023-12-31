@@ -137,6 +137,11 @@ namespace Glass
 			m_X86End = std::chrono::high_resolution_clock::now();
 		}
 
+
+		GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
+		GS_CORE_WARN("IR Generation Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_CompilerEnd - m_CompilerStart).count());
+		GS_CORE_WARN("X86_64 Backend Total Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(m_X86End - m_X86Start).count());
+
 		if (llvm && compilation_successful)
 		{
 			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
@@ -199,13 +204,8 @@ namespace Glass
 				}
 			}
 
-			GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
-			GS_CORE_WARN("Lexer Took: {} micro", std::chrono::duration_cast<std::chrono::microseconds>(m_LexerEnd - m_LexerStart).count());
-			GS_CORE_WARN("Parser Took: {} micro", std::chrono::duration_cast<std::chrono::microseconds>(m_ParserEnd - m_ParserStart).count());
 			GS_CORE_WARN("LLVM Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LLVMEnd - m_LLVMStart).count());
 			GS_CORE_WARN("Linker Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LinkerEnd - m_LinkerStart).count());
-			GS_CORE_WARN("IR Generation Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_CompilerEnd - m_CompilerStart).count());
-			GS_CORE_WARN("X86_64 Backend Took: {} micro s", std::chrono::duration_cast<std::chrono::microseconds>(m_X86End - m_X86Start).count());
 		}
 	}
 

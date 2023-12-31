@@ -4,9 +4,11 @@
 #include "BackEnd/TypeSystem.h"
 
 #include "math.h"
+#include <Windows.h>
 
 namespace Glass
 {
+
 	Assembly_Instruction Builder::Ret()
 	{
 		Assembly_Instruction instruction = {};
@@ -990,17 +992,20 @@ namespace Glass
 		End = std::chrono::high_resolution_clock::now();
 
 		FASM_Printer fasm_printer(&assembly);
+		std::chrono::steady_clock::time_point Print_Start = std::chrono::high_resolution_clock::now();
 		std::string fasm_output = fasm_printer.Print();
+		std::chrono::steady_clock::time_point Print_End = std::chrono::high_resolution_clock::now();
 
 		if (!std::filesystem::exists(".build")) {
 			std::filesystem::create_directory(".build");
 		}
 
+		std::chrono::steady_clock::time_point Write_Start = std::chrono::high_resolution_clock::now();
 		{
 			auto file_stream = std::ofstream(".build/fasm.s");
 			file_stream << fasm_output;
 		}
-
+		std::chrono::steady_clock::time_point Write_End = std::chrono::high_resolution_clock::now();
 
 		GS_CORE_WARN("Running Fasm");
 
@@ -1033,6 +1038,8 @@ namespace Glass
 
 		GS_CORE_WARN("Assembly Generation Took: {} milli s", std::chrono::duration_cast<std::chrono::milliseconds>(End - Start).count());
 		GS_CORE_WARN("FASM Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Fasm_End - Fasm_Start).count());
+		GS_CORE_WARN("Assembly Print Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Print_End - Print_Start).count());
+		//GS_CORE_WARN("Assembly Flush To File Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Write_End - Write_Start).count());
 		if (Use_Linker) {
 			GS_CORE_WARN("Linker Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Linker_End - Linker_Start).count());
 		}
@@ -1171,6 +1178,12 @@ namespace Glass
 		case IRNodeType::TypeInfo:
 			AssembleTypeInfo((IRTypeInfo*)instruction);
 			break;
+		case IRNodeType::Break:
+			AssembleBreak((IRBreak*)instruction);
+			break;
+		case IRNodeType::NullPtr:
+			AssembleNullPtr((IRNullPtr*)instruction);
+			break;
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -1182,17 +1195,24 @@ namespace Glass
 			auto register_value = GetRegisterValue(ir_register_value);
 			auto register_value_type = GetRegisterValueType(ir_register_value);
 
-			if (register_value->type != Op_Register) {
+			if (register_value_type == Register_Value_Type::Pointer_Address || register_value_type == Register_Value_Type::Stack_Address)
+			{
 				auto result_location = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
 
-				if (register_value_type != Register_Value_Type::Pointer_Address && register_value_type != Register_Value_Type::Stack_Address) {
-					GS_CORE_ASSERT(nullptr);
-				}
-
-				Code.push_back(Builder::Lea(result_location, Builder::De_Reference(register_value)));
-
+				auto lea = Builder::Lea(result_location, Builder::De_Reference(register_value));
+				lea.Comment = "register value";
+				Code.push_back(lea);
 				SetRegisterValue(result_location, CurrentRegister, Register_Value_Type::Pointer_Address);
 			}
+			else {
+				auto result_location = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+				auto move = Builder::Mov(result_location, register_value);
+				move.Comment = "register value";
+				Code.push_back(move);
+				SetRegisterValue(result_location, CurrentRegister, Register_Value_Type::Register_Value);
+			}
+
+			UseRegisterValue(ir_register_value);
 		}
 		break;
 		default:
@@ -1202,7 +1222,15 @@ namespace Glass
 
 	void X86_BackEnd::AssembleFunctionSymbol(IRFunction* ir_function)
 	{
-		const auto metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+		const FunctionMetadata* metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
+
+		if (metadata->PolyMorphic) {
+			for (auto& [overload, instance] : metadata->PolyMorphicInstantiations) {
+				AssembleFunctionSymbol(instance);
+			}
+			return;
+		}
+
 		const auto& name = metadata->Symbol.Symbol;
 
 		Assembly_Function* assembly = ASMA(Assembly_Function());
@@ -1250,6 +1278,13 @@ namespace Glass
 	{
 		const auto metadata = m_Metadata->GetFunctionMetadata(ir_function->ID);
 
+		if (metadata->PolyMorphic) {
+			for (auto& [overload, instance] : metadata->PolyMorphicInstantiations) {
+				AssembleFunction(instance);
+			}
+			return;
+		}
+
 		Code.clear();
 
 		m_Data.IR_RegisterValues.clear();
@@ -1278,13 +1313,6 @@ namespace Glass
 		}
 
 		Assembly_Function* assembly = m_Data.Functions[ir_function->ID];
-
-		Assembly_Operand* stack_size_constant = Builder::Constant_Integer(32);
-
-		Code.push_back(Builder::Push(Builder::Register(RBP)));
-		Code.push_back(Builder::Sub(Builder::Register(RSP), stack_size_constant));
-
-		Code.push_back(Builder::Lea(Builder::Register(RBP), Builder::De_Reference(Builder::OpAdd(Builder::Register(RSP), stack_size_constant))));
 
 		if (metadata->ReturnType != TypeSystem::GetVoid()) {
 
@@ -1340,6 +1368,11 @@ namespace Glass
 
 		for (auto instruction : ir_function->Instructions) {
 
+			if (Break_Encountered) {
+				Break_Encountered = false;
+				break;
+			}
+
 			if (Return_Encountered) {
 				Return_Encountered = false;
 				break;
@@ -1348,8 +1381,30 @@ namespace Glass
 			AssembleInstruction(instruction);
 		}
 
+
+		Assembly_Operand* stack_size_constant = Builder::Constant_Integer(32);
+
+		std::vector<Assembly_Instruction> prologue;
+
+		prologue.push_back(Builder::Push(Builder::Register(RBP)));
+		prologue.push_back(Builder::Sub(Builder::Register(RSP), stack_size_constant));
+		prologue.push_back(Builder::Lea(Builder::Register(RBP), Builder::De_Reference(Builder::OpAdd(Builder::Register(RSP), stack_size_constant))));
+
+		std::vector<std::pair<X86_Register, Assembly_Operand*>> saved_registers;
+
+		for (auto used_register : Current_Function_Used_Registers) {
+			X86_Register used_register_as_reg = (X86_Register)used_register;
+			if (!Is_Volatile(used_register_as_reg)) {
+
+				auto save_location = Builder::De_Reference(Stack_Alloc(TypeSystem::GetVoidPtr()), TypeSystem::GetVoidPtr());
+
+				prologue.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), save_location, Builder::Register(used_register_as_reg), "Save Register"));
+				saved_registers.push_back({ used_register_as_reg,save_location });
+			}
+		}
+
 		stack_size_constant->constant_integer.integer += m_Data.Stack_Size;
-		stack_size_constant->constant_integer.integer += m_Data.Call_Stack_Size + 8;
+		stack_size_constant->constant_integer.integer += m_Data.Call_Stack_Size + 32 + 8; // the push rbp offset + because the stack addressing works in reverse we must add this 8 here or atleast this how i understand
 		stack_size_constant->constant_integer.integer = (i64)align_to(stack_size_constant->constant_integer.integer, 16);
 
 		if (Return_Storage_Location) {
@@ -1368,20 +1423,32 @@ namespace Glass
 		if (metadata->Symbol.Symbol == "main" && Use_Linker == false) {
 
 			if (Return_Storage_Location) {
-				Builder::Mov(Builder::Register(ECX), Builder::De_Reference(Return_Storage_Location, TypeSystem::GetI32()));
+				Code.push_back(Builder::Mov(Builder::Register(ECX), Builder::De_Reference(Return_Storage_Location, TypeSystem::GetI32())));
 			}
 			else {
-				Builder::Mov(Builder::Register(ECX), Builder::Constant_Integer(0));
+				Code.push_back(Builder::Mov(Builder::Register(ECX), Builder::Constant_Integer(0)));
 			}
 
 			Code.push_back(Builder::Call(Builder::De_Reference(Builder::Symbol("ExitProcess"))));
+		}
+
+		for (int i = saved_registers.size() - 1; i >= 0; i--)
+		{
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), Builder::Register(saved_registers[i].first), saved_registers[i].second, "Reload"));
 		}
 
 		Code.push_back(Builder::Add(Builder::Register(RSP), stack_size_constant));
 		Code.push_back(Builder::Pop(Builder::Register(RBP)));
 		Code.push_back(Builder::Ret());
 
-		assembly->Code = Code;
+		for (auto& code : prologue) {
+			assembly->Code.push_back(code);
+		}
+
+		for (auto& code : Code) {
+			assembly->Code.push_back(code);
+		}
+
 		Function_Counter++;
 		Label_Counter = 0;
 	}
@@ -1401,6 +1468,8 @@ namespace Glass
 			{4, EAX},
 			{8, RAX},
 		};
+
+		Spill_All_Scratch();
 
 		std::vector<u64> argument_allocations;
 		std::vector <std::pair<Assembly_Operand*, Assembly_Operand*>> argument_allocations_registers;
@@ -1598,9 +1667,8 @@ namespace Glass
 				Code.push_back(Builder::Mov(Builder::De_Reference(new_return_location, metadata->ReturnType), return_location));
 
 				return_location = new_return_location;
+				SetRegisterValue(return_location, Register_Value_Type::Stack_Address);
 			}
-
-			SetRegisterValue(return_location, Register_Value_Type::Stack_Address);
 		}
 
 		for (auto allocation : argument_allocations) {
@@ -1723,7 +1791,7 @@ namespace Glass
 
 			register_value_type = Register_Value_Type::Register_Value;
 
-			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), new_object_value, object_value));
+			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), new_object_value, object_value, "member access"));
 
 			object_value = new_object_value;
 
@@ -1745,7 +1813,7 @@ namespace Glass
 			UseRegisterValue(ir_member_access->ObjectRegister);
 			Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister, object_value->bin_op.operand1->reg.Register);
 
-			SetRegisterValue(Builder::OpAdd(Builder::Register(object_value->bin_op.operand1->reg.Register), Builder::Constant_Integer(object_value->bin_op.operand2->constant_integer.integer + offset)), CurrentRegister, Register_Value_Type::Stack_Address);
+			SetRegisterValue(Builder::OpAdd(Builder::Register(object_value->bin_op.operand1->reg.Register), Builder::Constant_Integer(object_value->bin_op.operand2->constant_integer.integer + offset)), CurrentRegister, Register_Value_Type::Pointer_Address);
 		}
 		else if (register_value_type == Register_Value_Type::Register_Value) {
 
@@ -1823,7 +1891,7 @@ namespace Glass
 			if (register_value_type == Register_Value_Type::Register_Value) {
 
 				if (element_type_size < 8) {
-					SetRegisterValue(Builder::OpAdd(IR(*array_address_value), Builder::OpMul(IR(*array_index_value), Builder::Constant_Integer(element_type_size))), CurrentRegister, Register_Value_Type::Pointer_Address);
+					SetRegisterValue(Builder::OpAdd(IR(*array_address_value), Builder::OpMul(IR(*array_index_value), Builder::Constant_Integer(element_type_size))), CurrentRegister, Register_Value_Type::Register_Value);
 				}
 				else {
 					SetRegisterValue(Builder::OpAdd(IR(*array_address_value), Builder::Constant_Integer(element_type_size * array_index_value->constant_integer.integer)), CurrentRegister, Register_Value_Type::Pointer_Address);
@@ -1836,7 +1904,7 @@ namespace Glass
 		else {
 			Code.push_back(Builder::Mul(array_index_value, Builder::Constant_Integer(element_type_size)));
 			Code.push_back(Builder::Add(array_address_value, array_index_value));
-			SetRegisterValue(array_address_value, CurrentRegister, Register_Value_Type::Pointer_Address);
+			SetRegisterValue(array_address_value, CurrentRegister, Register_Value_Type::Register_Value);
 		}
 
 		UseRegisterValue(ir_array_access->ElementIndexRegister);
@@ -1845,8 +1913,22 @@ namespace Glass
 	void X86_BackEnd::AssembleLexicalBlock(IRLexBlock* ir_lex_block)
 	{
 		for (auto inst : ir_lex_block->Instructions) {
+
+			if (Break_Encountered) {
+				Break_Encountered = false;
+				break;
+			}
+
+			if (Return_Encountered) {
+				Return_Encountered = false;
+				break;
+			}
+
 			AssembleInstruction(inst);
 		}
+
+		Break_Encountered = false;
+		Return_Encountered = false;
 	}
 
 
@@ -1920,6 +2002,7 @@ namespace Glass
 	{
 		std::string skip_label_name = GetLabelName();
 		Assembly_Operand* skip_label = Builder::Symbol(skip_label_name);
+		Current_Skip_Target = skip_label;
 
 		auto condition_ir_register = m_Metadata->GetRegister(ir_if->ConditionRegister);
 
@@ -1956,12 +2039,42 @@ namespace Glass
 		Code.push_back(Builder::Build_Inst(jump_op_code, skip_label));
 
 		for (auto inst : ir_if->Instructions) {
+
+			if (Break_Encountered) {
+				Break_Encountered = false;
+				break;
+			}
+
+			if (Return_Encountered) {
+				Return_Encountered = false;
+				break;
+			}
 			AssembleInstruction(inst);
+		}
+
+		Break_Encountered = false;
+		Return_Encountered = false;
+
+		EndBlock();
+
+		Assembly_Operand* skip_else_label = nullptr;
+
+		if (ir_if->ElseBlock) {
+
+			std::string skip_else_label_name = GetLabelName();
+
+			skip_else_label = Builder::Symbol(skip_else_label_name);
+
+			Code.push_back(Builder::Build_Inst(I_Jmp, skip_else_label));
 		}
 
 		Code.push_back(Builder::Label(skip_label));
 
-		EndBlock();
+		if (ir_if->ElseBlock) {
+			AssembleInstruction(ir_if->ElseBlock);
+			Code.push_back(Builder::Label(skip_else_label));
+			EndBlock();
+		}
 	}
 
 	void X86_BackEnd::AssembleWhile(IRWhile* ir_while)
@@ -2012,9 +2125,27 @@ namespace Glass
 
 		Code.push_back(Builder::Build_Inst(jump_op_code, skip_label));
 
+		Skip_Target_Stack.push(skip_label);
+
 		for (auto inst : ir_while->Instructions) {
+
+			if (Break_Encountered) {
+				Break_Encountered = false;
+				break;
+			}
+
+			if (Return_Encountered) {
+				Return_Encountered = false;
+				break;
+			}
+
 			AssembleInstruction(inst);
 		}
+
+		Break_Encountered = false;
+		Return_Encountered = false;
+
+		Skip_Target_Stack.pop();
 
 		Code.push_back(Builder::Build_Inst(I_Jmp, start_label));
 
@@ -2046,7 +2177,7 @@ namespace Glass
 
 			SetRegisterValue(temp_phys_register, temp_register_id);
 
-			Code.push_back(MoveBasedOnType(store_type, temp_phys_register, data_register_value));
+			Code.push_back(MoveBasedOnType(store_type, temp_phys_register, data_register_value, "Store"));
 
 			UseRegisterValue(temp_register_id);
 
@@ -2096,17 +2227,31 @@ namespace Glass
 		auto type_size = TypeSystem::GetTypeSize(ir_load->Type);
 
 		auto pointer_register_value = GetRegisterValue(ir_load->AddressRegister);
+		auto pointer_register_value_type = GetRegisterValueType(ir_load->AddressRegister);
 
 		if (type_size <= 8) {
 			auto loaded_data_register = Allocate_Register(ir_load->Type, CurrentRegister);
-			Code.push_back(MoveBasedOnType(ir_load->Type, loaded_data_register, Builder::De_Reference(pointer_register_value, ir_load->Type)));
+
+			if (pointer_register_value_type == Register_Value_Type::Memory_Value) {
+				auto tmp_reg_id = CreateTempRegister(nullptr);
+				auto tmp_reg = Allocate_Register(TypeSystem::GetVoidPtr(), tmp_reg_id);
+				SetRegisterValue(tmp_reg, tmp_reg_id);
+				UseRegisterValue(tmp_reg_id);
+				Code.push_back(Builder::Mov(tmp_reg, pointer_register_value));
+
+				pointer_register_value = tmp_reg;
+			}
+
+			Code.push_back(MoveBasedOnType(ir_load->Type, loaded_data_register, Builder::De_Reference(pointer_register_value, ir_load->Type), ASMA("Load " + TypeSystem::PrintType(ir_load->Type))->data()));
 			SetRegisterValue(loaded_data_register, Register_Value_Type::Register_Value);
 		}
 		else {
 
 			auto pointer_type = TypeSystem::GetPtr(ir_load->Type, 1);
 			auto loaded_data_register = Allocate_Register(pointer_type, CurrentRegister);
-			Code.push_back(Builder::Lea(loaded_data_register, Builder::De_Reference(pointer_register_value, pointer_type)));
+			auto lea = Builder::Lea(loaded_data_register, Builder::De_Reference(pointer_register_value, pointer_type));
+			lea.Comment = "Load";
+			Code.push_back(lea);
 			SetRegisterValue(loaded_data_register, Register_Value_Type::Pointer_Address);
 		}
 
@@ -2451,9 +2596,13 @@ namespace Glass
 		Code.push_back(MoveBasedOnType(ir_eq->Type, result_location, a_value));
 
 		Code.push_back(Builder::Cmp(result_location, Builder::Constant_Integer(0)));
-		Code.push_back(Builder::SetE(result_location));
 
-		SetRegisterValue(result_location, Register_Value_Type::Register_Value);
+		auto register_family = register_to_family_map.at(result_location->reg.Register);
+		auto section = Builder::Register(register_family_map.at({ 1, register_family }));
+
+		Code.push_back(Builder::SetE(section));
+
+		SetRegisterValue(section, Register_Value_Type::Register_Value);
 
 		UseRegisterValue(ir_eq->RegisterA);
 		UseRegisterValue(ir_eq->RegisterB);
@@ -2601,22 +2750,16 @@ namespace Glass
 		auto pointer = GetRegisterValue(ir_ptr_2_int->PointerRegister);
 		UseRegisterValue(ir_ptr_2_int->PointerRegister);
 
-		auto result = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+		auto result = Allocate_Register(ir_ptr_2_int->Type, CurrentRegister);
 
-		Code.push_back(Builder::Mov(result, pointer));
+		GS_CORE_ASSERT(result->type == Op_Register);
 
-		if (from_type_size == to_type_size) {
-			SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
-		}
-		else {
+		auto integer_register_family = register_to_family_map.at(result->reg.Register);
+		auto section = register_family_map.at({ 8, integer_register_family });
 
-			GS_CORE_ASSERT(result->type == Op_Register);
+		Code.push_back(Builder::Mov(Builder::Register(section), pointer));
 
-			auto integer_register_family = register_to_family_map.at(result->reg.Register);
-			auto section = register_family_map.at({ to_type_size, integer_register_family });
-
-			SetRegisterValue(Builder::Register(section), CurrentRegister, Register_Value_Type::Register_Value);
-		}
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 	}
 
 	void X86_BackEnd::AssembleSextCast(IRSExtCast* ir_sext)
@@ -2631,11 +2774,18 @@ namespace Glass
 
 		auto result = Allocate_Register(ir_sext->Type, CurrentRegister);
 
-		if (from_type_size <= 2) {
-			Code.push_back(Builder::MovSX(result, integer));
+		auto integer_value_type = GetRegisterValueType(ir_sext->IntegerRegister);
+
+		if (integer_value_type != Register_Value_Type::Immediate_Value) {
+			if (from_type_size <= 2) {
+				Code.push_back(Builder::MovSX(result, integer));
+			}
+			else {
+				Code.push_back(Builder::MovSXD(result, integer));
+			}
 		}
 		else {
-			Code.push_back(Builder::MovSXD(result, integer));
+			Code.push_back(Builder::Mov(result, integer));
 		}
 
 		UseRegisterValue(ir_sext->IntegerRegister);
@@ -2683,16 +2833,18 @@ namespace Glass
 
 		auto integer = GetRegisterValue(ir_int_trunc->IntegerRegister);
 
-		auto result = Allocate_Register(ir_int_trunc->From, CurrentRegister);
-
-		Code.push_back(Builder::Mov(result, integer));
+		auto result = Allocate_Register(ir_int_trunc->Type, CurrentRegister);
 
 		GS_CORE_ASSERT(result->type == Op_Register);
 
 		auto integer_register_family = register_to_family_map.at(result->reg.Register);
-		auto section = register_family_map.at({ to_type_size, integer_register_family });
+		auto section = register_family_map.at({ from_type_size, integer_register_family });
 
-		SetRegisterValue(Builder::Register(section), CurrentRegister, Register_Value_Type::Register_Value);
+		auto the_move = Builder::Mov(Builder::Register(section), integer);
+		the_move.Comment = "int trunc cast";
+		Code.push_back(the_move);
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 
 		UseRegisterValue(ir_int_trunc->IntegerRegister);
 	}
@@ -3073,8 +3225,32 @@ namespace Glass
 
 		Code.push_back(Builder::Mul(result, argument_value));
 
-		Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::OpAdd(TypeInfo_Table_Label, result))));
+		if (!Use_Linker) {
+			Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::OpAdd(TypeInfo_Table_Label, result))));
+		}
+		else {
+
+			auto tmp_reg_id = CreateTempRegister(nullptr);
+			auto tmp_register = Allocate_Register(TypeSystem::GetVoidPtr(), tmp_reg_id);
+			SetRegisterValue(tmp_register, tmp_reg_id);
+			UseRegisterValue(tmp_reg_id);
+
+			Code.push_back(Builder::Lea(tmp_register, Builder::De_Reference(TypeInfo_Table_Label)));
+			Code.push_back(Builder::Add(result, tmp_register));
+		}
+
 		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
+	}
+
+	void X86_BackEnd::AssembleBreak(IRBreak* ir_break)
+	{
+		Break_Encountered = true;
+		Code.push_back(Builder::Build_Inst(I_Jmp, Skip_Target_Stack.top()));
+	}
+
+	void X86_BackEnd::AssembleNullPtr(IRNullPtr* ir_null_ptr)
+	{
+		SetRegisterValue(Builder::Constant_Integer(0), CurrentRegister, Register_Value_Type::Immediate_Value);
 	}
 
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)
@@ -3255,7 +3431,7 @@ namespace Glass
 		}
 	}
 
-	Assembly_Instruction X86_BackEnd::MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2)
+	Assembly_Instruction X86_BackEnd::MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2, const char* comment /*= nullptr*/)
 	{
 		GS_CORE_ASSERT(type);
 
@@ -3264,6 +3440,7 @@ namespace Glass
 		Assembly_Instruction instruction = {};
 		instruction.Operand1 = op1;
 		instruction.Operand2 = op2;
+		instruction.Comment = comment;
 
 		if (TypeSystem::IsFlt(type)) {
 			if (type_size == 4) {
@@ -3384,6 +3561,8 @@ namespace Glass
 				Register_Allocator_Data.allocations[ir_register] = allocation;
 				Register_Allocator_Data.family_to_allocation[family] = ir_register;
 
+				Push_Used_Register(physical_register);
+
 				return Builder::Register(allocation.reg);
 			}
 		}
@@ -3458,6 +3637,8 @@ namespace Glass
 
 			Register_Allocator_Data.allocations[ir_register] = allocation;
 			Register_Allocator_Data.family_to_allocation[family] = ir_register;
+
+			Push_Used_Register(x86_register);
 
 			return Builder::Register(allocation.reg);
 		}
@@ -3650,6 +3831,102 @@ namespace Glass
 		return Create_String_Constant(data, String_Id_Counter);
 	}
 
+	const std::set<u64> scratch_register_families = {
+		(u64)F_B,
+		(u64)F_R12,
+		(u64)F_R13,
+		(u64)F_R14,
+		(u64)F_R15,
+
+		(u64)XMM6,
+		(u64)XMM7,
+	};
+
+	void X86_BackEnd::Push_Used_Register(X86_Register physical_register)
+	{
+		X86_Register_Family register_family = register_to_family_map.at(physical_register);
+		Current_Function_Used_Registers.insert(register_family_map.at({ 8, register_family }));
+	}
+
+	void X86_BackEnd::Spill_All_Scratch()
+	{
+		for (auto& [family, used] : Register_Allocator_Data.allocated) {
+
+			if (used) {
+
+				auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
+
+				if (Is_Volatile(allocation.reg)) {
+
+					auto spillage_location = Stack_Alloc(allocation.type);
+					spillage_location = Builder::De_Reference(spillage_location, allocation.type);
+
+					auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+					Assembly_Instruction spill;
+
+					if (value_type == Register_Value_Type::Pointer_Address) {
+						Code.push_back(Builder::Lea(Builder::Register(allocation.reg), Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id))));
+						spill = Builder::Mov(spillage_location, Builder::Register(allocation.reg));
+					}
+					else {
+						spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+					}
+
+					m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+					m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
+
+					spill.Comment = "Save Scratch Register";
+
+					Code.push_back(spill);
+
+					allocation.spillage_location = spillage_location;
+					used = false;
+				}
+			}
+		}
+
+		for (auto& [family, used] : Register_Allocator_Data.allocated_floating) {
+
+			if (used) {
+
+				auto allocation = Register_Allocator_Data.allocations[Register_Allocator_Data.family_to_allocation[family]];
+
+				if (Is_Volatile(allocation.reg)) {
+					auto spillage_location = Stack_Alloc(allocation.type);
+					spillage_location = Builder::De_Reference(spillage_location, allocation.type);
+
+					auto value_type = m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id);
+
+					Assembly_Instruction spill;
+
+					if (value_type == Register_Value_Type::Pointer_Address) {
+						spill = Builder::Lea(spillage_location, Builder::De_Reference(m_Data.IR_RegisterValues.at(allocation.virtual_register_id)));
+					}
+					else {
+						spill = MoveBasedOnType(allocation.type, spillage_location, Builder::Register(allocation.reg));
+					}
+
+					spill.Comment = "Spillage";
+
+					Code.push_back(spill);
+
+					m_Data.IR_RegisterValues.at(allocation.virtual_register_id) = spillage_location;
+					m_Data.IR_RegisterValueTypes.at(allocation.virtual_register_id) = Register_Value_Type::Memory_Value;
+
+					allocation.spillage_location = spillage_location;
+					used = false;
+				}
+			}
+		}
+	}
+
+	bool X86_BackEnd::Is_Volatile(X86_Register physical_register)
+	{
+		X86_Register_Family register_family = register_to_family_map.at(physical_register);
+		return scratch_register_families.find((u64)register_family) == scratch_register_families.end();
+	}
+
 	bool X86_BackEnd::Are_Equal(Assembly_Operand* operand1, Assembly_Operand* operand2)
 	{
 		if (operand1->type != operand2->type) {
@@ -3692,7 +3969,11 @@ namespace Glass
 
 		if (Assembly->output_mode == Assembler_Output_Mode::COFF_Object) {
 			stream << "format MS64 COFF" << "\n" << "\n";
-			stream << "public main" << "\n" << "\n";
+
+			for (Assembly_Function& func : Assembly->functions) {
+				stream << "public " << func.Name << '\n';
+			}
+
 		}
 		else if (Assembly->output_mode == Assembler_Output_Mode::PE_Executable) {
 			stream << "format PE64 CONSOLE" << "\n" << "\n";
@@ -3795,7 +4076,6 @@ forward
 				if (i != Assembly->libraries.size() - 1) {
 					stream << ", \\ \n";
 				}
-
 			}
 
 			for (size_t i = 0; i < Assembly->libraries.size(); i++)
@@ -4313,6 +4593,11 @@ forward
 
 		case I_Setne:
 			stream << "setne ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
+		case I_Sete:
+			stream << "sete ";
 			PrintOperand(instruction.Operand1, stream);
 			break;
 

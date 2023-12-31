@@ -22,6 +22,7 @@ namespace Glass
 		Statement* CopyReturn(ReturnNode* ret);
 
 		Statement* CopyIf(IfNode* ifNode);
+		Statement* CopyElse(ElseNode* elseNode);
 		Statement* CopyWhile(WhileNode* whil);
 		Statement* CopyFor(ForNode* forNode);
 

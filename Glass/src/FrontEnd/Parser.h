@@ -21,6 +21,7 @@ namespace Glass
 		Statement* ParseDirective();
 
 		Statement* ParseIf();
+		ElseNode* ParseElse();
 		Statement* ParseWhile();
 		Statement* ParseFor();
 

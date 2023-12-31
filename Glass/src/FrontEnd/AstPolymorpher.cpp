@@ -42,6 +42,7 @@ namespace Glass
 		case NodeType::Cast:
 		case NodeType::SizeOf:
 		case NodeType::AutoCast:
+		case NodeType::Range:
 			PolyExpression((Expression*)stmt);
 			break;
 		case NodeType::TypeOf: {
@@ -70,11 +71,19 @@ namespace Glass
 		case NodeType::If:
 			PolyIf((IfNode*)stmt);
 			break;
+		case NodeType::Else:
+			PolyElse((ElseNode*)stmt);
+			break;
 		case NodeType::While:
 			PolyWhile((WhileNode*)stmt);
 			break;
 		case NodeType::Argument:
 			PolyArgument((ArgumentNode*)stmt);
+			break;
+		case NodeType::For:
+			PolyFor((ForNode*)stmt);
+			break;
+		case NodeType::Break:
 			break;
 		default:
 			GS_CORE_ASSERT(0);
@@ -90,10 +99,17 @@ namespace Glass
 		{
 		case NodeType::Identifier:
 		{
+			Identifier* as_identifier = (Identifier*)expr;
+			ReplaceIfMatch(as_identifier->Symbol.Symbol, (Expression**)&expr);
 		}
 		return;
 		case NodeType::MemberAccess:
 		{
+		}
+		return;
+		case NodeType::ArrayAccess:
+		{
+			PolyArrayAccess((ArrayAccess*)expr);
 		}
 		return;
 		case NodeType::BinaryExpression:
@@ -123,6 +139,10 @@ namespace Glass
 			PolyExpression(((AutoCastNode*)expr)->Expr);
 		}
 							   return;
+		case NodeType::Range: {
+			PolyRange(((RangeNode*)expr));
+		}
+							return;
 		}
 
 		GS_CORE_ASSERT(0);
@@ -146,7 +166,9 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyScope(ScopeNode* scope)
 	{
-		GS_CORE_ASSERT(0);
+		for (auto stmt : scope->GetStatements()) {
+			PolyStatement(stmt);
+		}
 	}
 
 	void ASTPolyMorpher::PolyArgumentList(ArgumentList* arg_list)
@@ -184,11 +206,29 @@ namespace Glass
 		for (auto stmt : ifNode->Scope->GetStatements()) {
 			PolyStatement(stmt);
 		}
+
+		if (ifNode->Else) {
+			PolyStatement(ifNode->Else);
+		}
+	}
+
+	void ASTPolyMorpher::PolyElse(ElseNode* elseNode)
+	{
+		PolyStatement(elseNode->statement);
 	}
 
 	void ASTPolyMorpher::PolyWhile(WhileNode* whil)
 	{
 		GS_CORE_ASSERT(0);
+	}
+
+	void ASTPolyMorpher::PolyFor(ForNode* forNode)
+	{
+		PolyExpression(forNode->Condition);
+
+		for (auto stmt : forNode->Scope->GetStatements()) {
+			PolyStatement(stmt);
+		}
 	}
 
 	void ASTPolyMorpher::PolyBinaryExpression(BinaryExpression* binExpr)
@@ -204,6 +244,11 @@ namespace Glass
 
 	void ASTPolyMorpher::PolyCallExpr(FunctionCall* expr)
 	{
+		if (expr->Function.Symbol == "type_info") {
+			PolyTypeExpr((TypeExpression**)&expr->Arguments[0]);
+			return;
+		}
+
 		for (auto arg : expr->Arguments) {
 			PolyExpression(arg);
 		}
@@ -213,6 +258,12 @@ namespace Glass
 	{
 		PolyTypeExpr(&cast->Type);
 		PolyExpression(cast->Expr);
+	}
+
+	void ASTPolyMorpher::PolyRange(RangeNode* range)
+	{
+		PolyExpression(range->Begin);
+		PolyExpression(range->End);
 	}
 
 	void ASTPolyMorpher::PolySizeOfExpr(SizeOfNode* size_of)
@@ -258,7 +309,8 @@ namespace Glass
 	}
 	void ASTPolyMorpher::PolyArrayAccess(ArrayAccess* expr)
 	{
-		GS_CORE_ASSERT(0);
+		PolyExpression(expr->Object);
+		PolyExpression(expr->Index);
 	}
 
 	void ASTPolyMorpher::PolyTypeExpression(TypeExpression** type)

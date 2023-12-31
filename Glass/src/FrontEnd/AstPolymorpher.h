@@ -22,7 +22,9 @@ namespace Glass
 		void PolyReturn(ReturnNode* ret);
 
 		void PolyIf(IfNode* ifNode);
+		void PolyElse(ElseNode* elseNode);
 		void PolyWhile(WhileNode* whil);
+		void PolyFor(ForNode* forNode);
 
 		void PolyExpression(Expression* expr);
 
@@ -31,6 +33,8 @@ namespace Glass
 		void PolyCallExpr(FunctionCall* expr);
 
 		void PolyCastExpr(CastNode* cast);
+
+		void PolyRange(RangeNode* range);
 
 		void PolySizeOfExpr(SizeOfNode* size_of);
 

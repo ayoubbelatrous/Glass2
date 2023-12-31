@@ -1468,11 +1468,6 @@ namespace Glass
 
 		auto condition_type = m_Metadata.GetExprType(condition->RegisterID);
 
-		// 			MSG_LOC(ifNode);
-		// 			FMT_WARN(
-		// 				"Expected if condition type to be a type convertable to 'bool' but instead its: {}", PrintType(condition_type));
-		// 		}
-
 		IRIf IF;
 		IF.ConditionRegister = condition->RegisterID;
 
@@ -1491,15 +1486,35 @@ namespace Glass
 
 			for (auto inst : register_stack)
 			{
-				lexical_block.Instructions.push_back(inst);
+				if (inst->GetType() != IRNodeType::RegisterValue) {
+					if (inst != nullptr) {
+						lexical_block.Instructions.push_back(inst);
+					}
+				}
 			}
 
 			if (!first_inst) {
 				continue;
 			}
 
-			lexical_block.Instructions.push_back(first_inst);
+			if (first_inst->GetType() != IRNodeType::RegisterValue) {
+				if (first_inst != nullptr) {
+					lexical_block.Instructions.push_back(first_inst);
+				}
+			}
 		}
+
+		auto register_stack = PoPIRRegisters();
+
+		for (auto inst : register_stack)
+		{
+			if (inst->GetType() != IRNodeType::RegisterValue) {
+				if (inst != nullptr) {
+					lexical_block.Instructions.push_back(inst);
+				}
+			}
+		}
+
 		m_Metadata.PopContext();
 		PopScope();
 
@@ -1509,13 +1524,36 @@ namespace Glass
 			IF.ElseBlock = StatementCodeGen(ifNode->Else);
 		}
 
-
 		return IR(IF);
 	}
 
 	IRInstruction* Compiler::ElseCodeGen(ElseNode* elseNode)
 	{
-		return StatementCodeGen(elseNode->Scope);
+		m_Metadata.PushContext(ContextScopeType::FUNC);
+
+		IRLexBlock lexical_block;
+
+		std::vector<IRInstruction*> Instructions;
+
+		PushScope();
+
+		auto code = StatementCodeGen(elseNode->statement);
+
+		auto Registers = PoPIRRegisters();
+
+		for (auto ir_register : Registers)
+		{
+			lexical_block.Instructions.push_back(ir_register);
+		}
+
+		lexical_block.Instructions.push_back(code);
+
+		PopScope();
+		m_Metadata.PopContext();
+
+		return IR(lexical_block);
+
+		return nullptr;
 	}
 
 	IRInstruction* Compiler::WhileCodeGen(const WhileNode* whileNode)
@@ -1565,15 +1603,24 @@ namespace Glass
 
 			for (auto ir_register : register_stack)
 			{
-				lexical_block.Instructions.push_back(ir_register);
+				if (ir_register->GetType() != IRNodeType::RegisterValue) {
+					if (ir_register != nullptr) {
+						lexical_block.Instructions.push_back(ir_register);
+					}
+				}
 			}
 
 			if (!inst) {
 				continue;
 			}
 
-			lexical_block.Instructions.push_back(inst);
+			if (inst->GetType() != IRNodeType::RegisterValue) {
+				if (inst != nullptr) {
+					lexical_block.Instructions.push_back(inst);
+				}
+			}
 		}
+
 		m_Metadata.PopContext();
 		PopScope();
 
@@ -1801,12 +1848,17 @@ namespace Glass
 			auto register_stack = PoPIRRegisters();
 			for (auto inst : register_stack)
 			{
-				while_inst->Instructions.push_back(inst);
+				if (inst->GetType() != IRNodeType::RegisterValue) {
+					while_inst->Instructions.push_back(inst);
+				}
 			}
 			if (!inst) {
 				continue;
 			}
-			while_inst->Instructions.push_back(inst);
+
+			if (inst->GetType() != IRNodeType::RegisterValue) {
+				while_inst->Instructions.push_back(inst);
+			}
 		}
 		m_Metadata.PopContext();
 		PopScope();
@@ -2556,10 +2608,6 @@ namespace Glass
 		std::vector<IRRegisterValue*> argumentValueRefs;
 		std::vector<TypeStorage*> argumentTypes;
 
-		// 		if (call->Function.Symbol == "print") {
-		// 			__debugbreak();
-		// 		}
-
 		for (size_t i = 0; i < call->Arguments.size(); i++)
 		{
 			auto argument_expr = call->Arguments[i];
@@ -2849,10 +2897,10 @@ namespace Glass
 			auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 			if (call_return_type != TypeSystem::GetVoid()) {
-				return CreateIRRegister(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+				return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID)), call_return_type);
 			}
 
-			return IR(IRFunctionCall(call_values, ir_func->ID));
+			return IR(IRFunctionCall(call_values, call_types, ir_func->ID));
 		}
 
 		ASTCopier copier(metadata->Ast);
@@ -2911,10 +2959,10 @@ namespace Glass
 		auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 		if (call_return_type != TypeSystem::GetVoid()) {
-			return CreateIRRegister(IR(IRFunctionCall(call_values, ir_func->ID)), call_return_type);
+			return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID)), call_return_type);
 		}
 
-		return IR(IRFunctionCall(call_values, ir_func->ID));
+		return IR(IRFunctionCall(call_values, call_types, ir_func->ID));
 	}
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
@@ -3096,9 +3144,30 @@ namespace Glass
 		}
 		else {
 
-			IRRegisterValue* expr_value = (IRRegisterValue*)ExpressionCodeGen(size_of->Expr);
-			TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->RegisterID);
-			size = m_Metadata.GetTypeSize(expr_type);
+			switch (size_of->Expr->GetType())
+			{
+			case NodeType::TE_TypeName:
+			case NodeType::TE_Pointer:
+			case NodeType::TE_Array:
+			case NodeType::TE_Func: {
+
+				auto as_type = TypeExpressionGetType((TypeExpression*)size_of->Expr);
+
+				if (as_type) {
+					size = m_Metadata.GetTypeSize(as_type);
+				}
+				else {
+					MSG_LOC(size_of->Expr);
+					FMT_WARN("uknown type '{}' inside sizeof");
+				}
+			}
+								  break;
+			default:
+				IRRegisterValue* expr_value = (IRRegisterValue*)ExpressionCodeGen(size_of->Expr);
+				TypeStorage* expr_type = m_Metadata.GetExprType(expr_value->RegisterID);
+				size = m_Metadata.GetTypeSize(expr_type);
+				break;
+			}
 		}
 
 		//@Gross
@@ -3199,8 +3268,13 @@ namespace Glass
 				lexical_block.Instructions.push_back(ir_register);
 			}
 
-			if (code != nullptr) {
-				lexical_block.Instructions.push_back(code);
+			if (!code)
+				continue;
+
+			if (code->GetType() != IRNodeType::RegisterValue) {
+				if (code != nullptr) {
+					lexical_block.Instructions.push_back(code);
+				}
 			}
 		}
 

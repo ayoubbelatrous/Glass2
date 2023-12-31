@@ -752,7 +752,7 @@ namespace Glass
 	{
 	public:
 
-		ScopeNode* Scope = nullptr;
+		Statement* statement = nullptr;
 
 		virtual NodeType GetType() const override
 		{
@@ -760,11 +760,11 @@ namespace Glass
 		}
 
 		virtual std::string ToString() const {
-			return "else" + Scope->ToString();
+			return "else";
 		}
 
 		virtual const Token& GetLocation() const override {
-			return Scope->GetLocation();
+			return statement->GetLocation();
 		}
 	};
 

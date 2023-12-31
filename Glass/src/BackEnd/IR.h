@@ -860,6 +860,11 @@ namespace Glass
 		{
 		}
 
+		IRFunctionCall(std::vector<IRInstruction*> arguments, std::vector<TypeStorage*> types, u64 funcID)
+			:Arguments(arguments), ArgumentTypes(types), FuncID(funcID)
+		{
+		}
+
 		virtual std::string ToString() const override {
 			return 	"CALL $" + std::to_string(FuncID) + "()";
 		}

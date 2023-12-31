@@ -56,6 +56,9 @@ namespace Glass
 		case NodeType::If:
 			return CopyIf((IfNode*)stmt);
 			break;
+		case NodeType::Else:
+			return CopyElse((ElseNode*)stmt);
+			break;
 		case NodeType::While:
 			return CopyWhile((WhileNode*)stmt);
 			break;
@@ -157,7 +160,20 @@ namespace Glass
 		new_if->Condition = (Expression*)CopyExpression(ifNode->Condition);
 		new_if->Scope = (ScopeNode*)CopyStatement(ifNode->Scope);
 
+		if (new_if->Else) {
+			new_if->Else = (ElseNode*)CopyStatement(ifNode->Else);
+		}
+
 		return new_if;
+	}
+
+	Statement* ASTCopier::CopyElse(ElseNode* elseNode)
+	{
+		ElseNode* new_else = Application::AllocateAstNode(*elseNode);
+
+		new_else->statement = CopyStatement(elseNode->statement);
+
+		return new_else;
 	}
 
 	Statement* ASTCopier::CopyWhile(WhileNode* whil)

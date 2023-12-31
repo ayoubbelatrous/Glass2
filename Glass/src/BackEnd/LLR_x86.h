@@ -471,12 +471,11 @@ namespace Glass
 	};
 
 	enum class Register_Value_Type {
-		Immediate_Value, // 50, 60 etc
-		Register_Value, // rax or 16
-		Memory_Value, // qword [rax + 16] or qword [rbp - 16] or dword [flt_60]
-
-		Stack_Address, // rbp - 4
-		Pointer_Address, // rbx + 4 rbx
+		Immediate_Value,	// 50, 60 etc
+		Register_Value,		// rax or 16
+		Memory_Value,		// qword [rax + 16] or qword [rbp - 16] or dword [flt_60]
+		Stack_Address,		// rbp - 4
+		Pointer_Address,	// rbx + 4 rbx
 	};
 
 	struct X86_BackEnd_Data
@@ -525,6 +524,7 @@ namespace Glass
 		void AssembleMemberAccess(IRMemberAccess* ir_member_access);
 		void AssembleArrayAccess(IRArrayAccess* ir_array_access);
 
+		void Spill_All_Scratch();
 		void EndBlock();
 
 		void AssembleLexicalBlock(IRLexBlock* ir_lex_block);
@@ -568,6 +568,9 @@ namespace Glass
 		void AssembleTypeValue(IRTypeValue* ir_type_value);
 		void AssembleTypeInfo(IRTypeInfo* ir_type_info);
 
+		void AssembleBreak(IRBreak* ir_break);
+		void AssembleNullPtr(IRNullPtr* ir_null_ptr);
+
 		void AssembleReturn(IRReturn* ir_return);
 
 		void AssembleConstValue(IRCONSTValue* ir_constant);
@@ -601,7 +604,7 @@ namespace Glass
 		Assembly_Operand* Alloc_Call_StackTop(TypeStorage* type);
 		Assembly_Operand* GetReturnRegister(TypeStorage* type);
 
-		Assembly_Instruction MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2);
+		Assembly_Instruction MoveBasedOnType(TypeStorage* type, Assembly_Operand* op1, Assembly_Operand* op2, const char* comment = nullptr);
 
 		u64 CurrentRegister = 0;
 		IRRegister* CurrentIrRegister = nullptr;
@@ -629,6 +632,12 @@ namespace Glass
 		Assembly_Operand* Create_String_Constant(const std::string& data, u64 id);
 		Assembly_Operand* Create_String_Constant(const std::string& data);
 
+		std::set<u64> Current_Function_Used_Registers;
+
+		void Push_Used_Register(X86_Register physical_register);
+
+		bool Is_Volatile(X86_Register physical_register);
+
 		bool Are_Equal(Assembly_Operand* operand1, Assembly_Operand* operand2);
 
 		Register_Allocation_Data Register_Allocator_Data;
@@ -637,7 +646,8 @@ namespace Glass
 
 		Assembly_Operand* Return_Storage_Location = nullptr;
 		u64 Return_Counter = 0;
-		bool Return_Encountered = 0;
+		bool Return_Encountered = false;
+		bool Break_Encountered = false;
 
 		u64 Temporary_Register_ID_Counter = 100000;
 		u64 Float_Constant_Counter = 0;
@@ -649,6 +659,9 @@ namespace Glass
 
 		u64 Current_Register_Lifetime = 0;
 
-		bool Use_Linker = false;
+		Assembly_Operand* Current_Skip_Target = nullptr;
+		std::stack<Assembly_Operand* > Skip_Target_Stack;
+
+		bool Use_Linker = true;
 	};
 }
