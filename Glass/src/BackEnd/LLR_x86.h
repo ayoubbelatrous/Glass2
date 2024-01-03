@@ -56,6 +56,9 @@ namespace Glass
 		I_CvtSS2SD,
 		I_CvtSD2SS,
 
+		I_UCOMISS,
+		I_UCOMISD,
+
 		I_CBW,
 		I_CWD,
 		I_CDQ,
@@ -69,6 +72,9 @@ namespace Glass
 		I_Setl,
 		I_Setg,
 
+		I_Seta,
+		I_Setb,
+
 		I_Setle,
 		I_Setge,
 
@@ -78,8 +84,14 @@ namespace Glass
 		I_Jg,
 		I_Jl,
 
+		I_Ja,
+		I_Jb,
+
 		I_Jle,
 		I_Jge,
+
+		I_Jbe,
+		I_Jae,
 
 		I_Jmp,
 
@@ -484,7 +496,9 @@ namespace Glass
 		std::unordered_map<u64, TypeStorage*> IR_RegisterTypes;
 		std::unordered_map<u64, u64> IR_RegisterLifetimes;
 		std::unordered_map<u64, Register_Value_Type> IR_RegisterValueTypes;
+
 		std::unordered_map<u64, Assembly_Function*> Functions;
+		std::unordered_map<u64, std::map<TSFunc*, Assembly_Function*>> FunctionOverloads;
 
 		std::unordered_map<std::string, u64> Library_Indices;
 
@@ -538,6 +552,7 @@ namespace Glass
 		void AssembleSub(IRSUB* ir_sub);
 		void AssembleMul(IRMUL* ir_mul);
 		void AssembleDiv(IRDIV* ir_div);
+		void AssembleSRem(IRSREM* ir_srem);
 
 		void AssembleAnd(IRAnd* ir_and);
 		void AssembleOr(IROr* ir_or);

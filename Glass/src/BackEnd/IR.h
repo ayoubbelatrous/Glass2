@@ -1054,6 +1054,7 @@ namespace Glass
 	//To be changed to branch
 	struct IRIf : public IRInstruction {
 		u64 ID = 0;
+		TypeStorage* ConditionType = nullptr;
 		u64 ConditionRegister = 0;
 		std::vector<IRInstruction*> Instructions;
 		IRInstruction* ElseBlock = nullptr;

@@ -1362,6 +1362,10 @@ namespace Glass
 		ret.Value = expr;
 		ret.Type = expr_type;
 
+		if (!ret.Type) {
+			ret.Type = TypeSystem::GetVoid();
+		}
+
 		return IR(ret);
 	}
 
@@ -1491,6 +1495,7 @@ namespace Glass
 
 		IRIf IF;
 		IF.ConditionRegister = condition->RegisterID;
+		IF.ConditionType = condition_type;
 
 		IRLexBlock lexical_block;
 
@@ -2272,6 +2277,12 @@ namespace Glass
 					call->FuncID = op_func_id;
 					call->Arguments.push_back(A);
 					call->Arguments.push_back(B);
+
+					GS_CORE_ASSERT(left_type);
+					GS_CORE_ASSERT(right_type);
+
+					call->ArgumentTypes.push_back(left_type);
+					call->ArgumentTypes.push_back(right_type);
 
 					IRRegisterValue* op_result = CreateIRRegister(call, op_func_metadata->ReturnType);
 
