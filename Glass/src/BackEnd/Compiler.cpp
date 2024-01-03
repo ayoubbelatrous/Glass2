@@ -1175,6 +1175,27 @@ namespace Glass
 
 			return assignment_store;
 		}
+		else {
+
+			auto type_size = TypeSystem::GetTypeSize(VariableType);
+
+			if (type_size <= 8) {
+
+				IRRegisterValue* zero_initializer = nullptr;
+
+				if (TypeSystem::IsPointer(VariableType)) {
+					zero_initializer = Create_Null(VariableType);
+				}
+				else {
+					zero_initializer = CreateConstant(VariableType->BaseID, 0, 0.0);
+				}
+
+				CreateStore(VariableType, variable_address_register->ID, zero_initializer);
+			}
+			else {
+				Create_Intrinsic_Memset(VariableType, variable_address_register->ID, 0);
+			}
+		}
 
 		return nullptr;
 	}
@@ -1751,7 +1772,7 @@ namespace Glass
 
 			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
 
-			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type)));
+			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type, index_type)));
 
 			CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID));
 
@@ -2497,6 +2518,12 @@ namespace Glass
 				return nullptr;
 			}
 
+			if (right_register->GetType() != IRNodeType::RegisterValue) {
+				MSG_LOC(right);
+				FMT_WARN("trying to assign to void");
+				return nullptr;
+			}
+
 			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
 			if (!member_access || !right_register) {
@@ -2967,9 +2994,11 @@ namespace Glass
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)
 	{
-		// 		if (!memberAccess->Object) {
-		// 			return nullptr;
-		// 		}
+		if (!memberAccess->Object) {
+			MSG_LOC(memberAccess->Member);
+			FMT_WARN("inferred member accesses are not implemented!");
+			return nullptr;
+		}
 
 		if (memberAccess->Object->GetType() == NodeType::Identifier) {
 
@@ -3006,7 +3035,7 @@ namespace Glass
 
 			bool l_value = false;
 
-			if (memberAccess->Object->GetType() == NodeType::Identifier) {
+			if (memberAccess->Object->GetType() == NodeType::Identifier || memberAccess->Object->GetType() == NodeType::MemberAccess) {
 				l_value = true;
 			}
 
@@ -3069,10 +3098,6 @@ namespace Glass
 			ir_mem_access.ObjectRegister = object_register_id;
 			ir_mem_access.MemberID = member_id;
 			ir_mem_access.ReferenceAccess = reference_access;
-
-			if (ir_mem_access.ObjectRegister == 214) {
-				__debugbreak();
-			}
 
 			auto address_register = CreateIRRegister();
 
@@ -3294,6 +3319,7 @@ namespace Glass
 		}
 
 		auto obj_expr_type = m_Metadata.GetExprType(object->RegisterID);
+		auto index_expr_type = m_Metadata.GetExprType(index->RegisterID);
 
 		if (!TypeSystem::IsPointer(obj_expr_type) && !TypeSystem::IsArray(obj_expr_type))
 		{
@@ -3328,8 +3354,6 @@ namespace Glass
 			object = GetExpressionByValue(arrayAccess->Object, object);
 		}
 
-		//@Todo add support for non pointer arrays
-
 		IRRegister* array_access_register = CreateIRRegister();
 
 		IRArrayAccess* ir_array_Access = IR(IRArrayAccess());
@@ -3340,6 +3364,7 @@ namespace Glass
 		ir_array_Access->ArrayAddress = object->RegisterID;
 		ir_array_Access->ElementIndexRegister = index->RegisterID;
 		ir_array_Access->Type = obj_expr_type;
+		ir_array_Access->Index_Type = index_expr_type;
 
 		array_access_register->Value = ir_array_Access;
 
@@ -3531,12 +3556,13 @@ namespace Glass
 
 	IRInstruction* Compiler::NullCodeGen()
 	{
-		auto null_ptr_register = CreateIRRegister();
-		null_ptr_register->Value = IR(IRNullPtr(IR_void, 1));
+		auto type = TypeSystem::GetVoidPtr();
 
-		m_Metadata.RegExprType(null_ptr_register->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_void), 1));
+		auto null_ptr_register_val = Create_Null(type);
 
-		return IR(IRRegisterValue(null_ptr_register->ID));
+		m_Metadata.RegExprType(null_ptr_register_val->RegisterID, type);
+
+		return null_ptr_register_val;
 	}
 
 	IRInstruction* Compiler::TypeInfoCodeGen(const FunctionCall* type_info_call)
@@ -3640,6 +3666,12 @@ namespace Glass
 		case NodeType::MemberAccess:
 		{
 			MemberAccess* member_access = (MemberAccess*)expr;
+
+			if (!member_access->Object) {
+				MSG_LOC(member_access->Member);
+				FMT_WARN("inferred member accesses are not implemented!");
+				return nullptr;
+			}
 
 			if (member_access->Object->GetType() == NodeType::Identifier) {
 
@@ -3912,6 +3944,20 @@ namespace Glass
 		auto store_register = CreateIRRegister();
 		store_register->Value = IR(IRStore(address, data, type));
 		return IR(IRRegisterValue(store_register->ID));
+	}
+
+	IRRegisterValue* Compiler::Create_Null(TypeStorage* type)
+	{
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = IR(IRNullPtr(type));
+		return IR(IRRegisterValue(ir_register->ID));
+	}
+
+	void Compiler::Create_Intrinsic_Memset(TypeStorage* type, u64 pointer_ir_register, u64 value)
+	{
+		auto ir_register = CreateIRRegister();
+		auto intrinsic_memset = IR(IRIntrinsicMemSet(type, pointer_ir_register, value));
+		ir_register->Value = intrinsic_memset;
 	}
 
 	IRRegisterValue* Compiler::CreateConstantInteger(u64 integer_base_type, i64 value)

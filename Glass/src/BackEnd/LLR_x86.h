@@ -500,7 +500,7 @@ namespace Glass
 
 		void Init();
 
-		std::string Mangle_Name(const std::string& name, TypeStorage* type);
+		std::string Mangle_Name(std::string name, TypeStorage* type);
 
 		void AssembleForeignLibraries();
 		void AssembleForeignImport(const FunctionMetadata* function);
@@ -542,11 +542,13 @@ namespace Glass
 		void AssembleAnd(IRAnd* ir_and);
 		void AssembleOr(IROr* ir_or);
 		void AssembleEqual(IREQ* ir_eq);
+		void AssembleNotEqual(IRNOTEQ* ir_not_eq);
 
 		void AssembleLesser(IRLesser* ir_lesser);
 		void AssembleGreater(IRGreater* ir_greater);
 
 		void AssembleBitAnd(IRBitAnd* ir_bit_and);
+		void AssembleBitOr(IRBitOr* ir_bit_or);
 
 		void AssemblePointerCast(IRPointerCast* ir_pointer_cast);
 		void AssembleInt2PCast(IRInt2PtrCast* ir_int_2_ptr);
@@ -570,6 +572,9 @@ namespace Glass
 
 		void AssembleBreak(IRBreak* ir_break);
 		void AssembleNullPtr(IRNullPtr* ir_null_ptr);
+		void AssembleIntrinsic_MemSet(IRIntrinsicMemSet* ir_memset);
+
+		void AssembleAnyArray(IRAnyArray* ir_any_array);
 
 		void AssembleReturn(IRReturn* ir_return);
 
@@ -601,6 +606,7 @@ namespace Glass
 		void Call_Memcpy();
 
 		Assembly_Operand* Stack_Alloc(TypeStorage* type);
+		Assembly_Operand* Stack_Alloc(u64 size);
 		Assembly_Operand* Alloc_Call_StackTop(TypeStorage* type);
 		Assembly_Operand* GetReturnRegister(TypeStorage* type);
 
@@ -613,6 +619,9 @@ namespace Glass
 		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id);
 		void SetRegisterValue(Assembly_Operand* register_value, u64 register_id, Register_Value_Type value_type);
 		u64 CreateTempRegister(Assembly_Operand* register_value);
+
+		std::tuple<Assembly_Operand*, u64> Allocate_Temp_Physical_Register(TypeStorage* type);
+		std::tuple<Assembly_Operand*, u64> Allocate_Temp_Physical_Register(TypeStorage* type, X86_Register physical_register);
 
 		Assembly_Operand* GetRegisterValue(u64 ir_register);
 		Assembly_Operand* GetRegisterValue(IRRegisterValue* ir_register);
@@ -642,10 +651,11 @@ namespace Glass
 
 		Register_Allocation_Data Register_Allocator_Data;
 
+		Assembly_Operand* Return_Label = nullptr;
+
 		Assembly_Operand* TypeInfo_Table_Label = nullptr;
 
 		Assembly_Operand* Return_Storage_Location = nullptr;
-		u64 Return_Counter = 0;
 		bool Return_Encountered = false;
 		bool Break_Encountered = false;
 
@@ -662,6 +672,6 @@ namespace Glass
 		Assembly_Operand* Current_Skip_Target = nullptr;
 		std::stack<Assembly_Operand* > Skip_Target_Stack;
 
-		bool Use_Linker = true;
+		bool Use_Linker = false;
 	};
 }

@@ -236,6 +236,14 @@ namespace Glass
 
 		Node.Scope = (ScopeNode*)ParseScope();
 
+		if (!Node.Scope) {
+			Abort("Expected Expression Or Scope!, Before: ");
+		}
+
+		if (Node.Scope->GetType() != NodeType::Scope) {
+			Abort("Expression if Statements not supported yet!, At: ");
+		}
+
 		Node.Else = ParseElse();
 
 		return Application::AllocateAstNode(Node);
@@ -761,6 +769,10 @@ namespace Glass
 			binExpr.Left = left;
 			binExpr.Right = right;
 
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
+
 			binExpr.OPerator = GetOperator(Op);
 
 			binExpr.OperatorToken = Op;
@@ -794,6 +806,10 @@ namespace Glass
 
 			binExpr.Left = left;
 			binExpr.Right = right;
+
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
 
 			binExpr.OPerator = GetOperator(Op);
 
@@ -829,6 +845,10 @@ namespace Glass
 
 			binExpr.Left = left;
 			binExpr.Right = right;
+
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
 
 			binExpr.OPerator = GetOperator(Op);
 
@@ -868,6 +888,10 @@ namespace Glass
 			binExpr.Left = left;
 			binExpr.Right = right;
 
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
+
 			binExpr.OPerator = GetOperator(Op);
 
 			binExpr.OperatorToken = Op;
@@ -899,6 +923,10 @@ namespace Glass
 
 			binExpr.Left = left;
 			binExpr.Right = right;
+
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
 
 			binExpr.OPerator = GetOperator(Op);
 
@@ -933,6 +961,10 @@ namespace Glass
 			binExpr.Left = left;
 			binExpr.Right = right;
 
+			if (!binExpr.Right) {
+				Abort("Expected Expression!, Before: ");
+			}
+
 			binExpr.OPerator = GetOperator(Op);
 
 			binExpr.OperatorToken = Op;
@@ -956,6 +988,10 @@ namespace Glass
 			NegateExpr Node;
 			Node.What = what;
 
+			if (!Node.What) {
+				Abort("Expected Expression!, Before: ");
+			}
+
 			what = (Expression*)AST(Node);
 		}
 		else {
@@ -977,6 +1013,10 @@ namespace Glass
 
 			RefNode Node;
 			Node.What = right;
+
+			if (!Node.What) {
+				Abort("Expected Expression!, Before: ");
+			}
 
 			right = (Expression*)AST(Node);
 		}
@@ -1000,6 +1040,10 @@ namespace Glass
 			DeRefNode Node;
 			Node.What = right;
 
+			if (!Node.What) {
+				Abort("Expected Expression!, Before: ");
+			}
+
 			right = (Expression*)AST(Node);
 		}
 		else {
@@ -1020,6 +1064,10 @@ namespace Glass
 			if (period.Type == TokenType::Period) {
 
 				Expression* right = ParseCallExpr();
+
+				if (!right) {
+					Abort("Expected member name after '.' , Before: ");
+				}
 
 				if (right->GetType() != NodeType::Identifier) {
 					Abort("Expected identifier after '.' , Instead Got: ");
@@ -1175,6 +1223,9 @@ namespace Glass
 
 				u32 i = 1;
 				while (true) {
+					if (At(i).Type == TokenType::OpenParen) {
+						break;
+					}
 					if (At(i).Type == TokenType::CloseParen) {
 						if (At(i + 1).Type == TokenType::Colon) {
 							var_decl = true;

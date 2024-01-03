@@ -254,6 +254,9 @@ namespace Glass
 		case NodeType::AutoCast:
 			return CopyAutoCast((AutoCastNode*)expr);
 			break;
+		case NodeType::NegateExpression:
+			return CopyNegate((NegateExpr*)expr);
+			break;
 		}
 
 		GS_CORE_ASSERT(0);
@@ -386,6 +389,13 @@ namespace Glass
 		AutoCastNode* new_cast = AST(AutoCastNode());
 		new_cast->Expr = (Expression*)CopyExpression(cast->Expr);
 		return new_cast;
+	}
+
+	Statement* ASTCopier::CopyNegate(NegateExpr* negate)
+	{
+		NegateExpr* new_negate = AST(NegateExpr());
+		new_negate->What = (Expression*)CopyExpression(negate->What);
+		return new_negate;
 	}
 
 	Statement* ASTCopier::CopyRef(RefNode* expr)

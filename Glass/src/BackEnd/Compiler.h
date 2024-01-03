@@ -115,6 +115,10 @@ namespace Glass
 		IRRegisterValue* CreateLoad(TypeStorage* type, u64 address);
 		IRRegisterValue* CreateStore(TypeStorage* type, u64 address, IRInstruction* data);
 
+		IRRegisterValue* Create_Null(TypeStorage* type);
+
+		void Create_Intrinsic_Memset(TypeStorage* type, u64 pointer_ir_register, u64 value);
+
 		IRRegisterValue* CreateConstantInteger(u64 integer_base_type, i64 value);
 		IRRegisterValue* CreateConstant(u64 base_type, i64 value_integer, double value_float);
 

@@ -1575,7 +1575,7 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::NullPtrCodeGen(const IRNullPtr* null_ptr)
 	{
-		return llvm::ConstantPointerNull::get((llvm::PointerType*)GetLLVMTypeFull(null_ptr->TypeID, null_ptr->Indirection));
+		return llvm::ConstantPointerNull::get((llvm::PointerType*)GetLLVMType(null_ptr->Type));
 	}
 
 	llvm::Value* LLVMBackend::IfCodeGen(const IRIf* _if)

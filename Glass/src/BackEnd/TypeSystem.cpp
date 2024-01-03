@@ -83,6 +83,14 @@ namespace Glass {
 		GS_CORE_ASSERT(indirection, "Cannot Have 0 Indirection");
 		GS_CORE_ASSERT(pointee);
 
+		if (pointee->Kind == TypeStorageKind::Pointer) {
+			indirection += IndirectionCount(pointee);
+
+			while (IndirectionCount(pointee)) {
+				pointee = ReduceIndirection((TSPtr*)pointee);
+			}
+		}
+
 		u64 hash = PtrHash(pointee->Hash, indirection);
 
 		auto it = m_Instance->m_Types.find(hash);
@@ -257,7 +265,7 @@ namespace Glass {
 			return 0;
 		}
 		else {
-			return ((TSPtr*)type)->Indirection;
+			return IndirectionCount(((TSPtr*)type)->Pointee) + ((TSPtr*)type)->Indirection;
 		}
 	}
 
@@ -370,6 +378,10 @@ namespace Glass {
 			if (!element) return nullptr;
 
 			type = TypeSystem::GetDynArray(element);
+		}
+
+		if (!type) {
+			type = TypeExpressionGetType(type_expr);
 		}
 
 		if (indirection) {

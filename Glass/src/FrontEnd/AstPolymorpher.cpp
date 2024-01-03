@@ -107,6 +107,10 @@ namespace Glass
 		{
 		}
 		return;
+		case NodeType::NegateExpression:
+		{
+		}
+		return;
 		case NodeType::ArrayAccess:
 		{
 			PolyArrayAccess((ArrayAccess*)expr);

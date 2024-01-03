@@ -42,6 +42,7 @@ namespace Glass
 
 		Statement* CopyCast(CastNode* cast);
 		Statement* CopyAutoCast(AutoCastNode* cast);
+		Statement* CopyNegate(NegateExpr* negate);
 		Statement* CopyRef(RefNode* expr);
 		Statement* CopyDeRef(DeRefNode* expr);
 

@@ -107,6 +107,7 @@ namespace Glass
 		RegisterValue,
 
 		ConstValue,
+		Intrinsic_MemSet,
 
 		Alloca,
 		ArrayAllocate,
@@ -238,12 +239,11 @@ namespace Glass
 
 	struct IRNullPtr : public IRInstruction {
 
-		IRNullPtr(u64 type_id, u64 indirection)
-			:TypeID(type_id), Indirection(indirection)
+		IRNullPtr(TypeStorage* type)
+			:Type(type)
 		{}
 
-		u64 TypeID = -1;
-		u64 Indirection = -1;
+		TypeStorage* Type = nullptr;
 
 		virtual std::string ToString() const {
 			return "NullPtr";
@@ -287,6 +287,21 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::ConstValue;
+		}
+	};
+
+	struct IRIntrinsicMemSet : public IRInstruction {
+
+		IRIntrinsicMemSet(TypeStorage* type, u64 pointer_ir_register, u64 value)
+			:Type(type), Pointer_Ir_Register(pointer_ir_register), Value(value)
+		{}
+
+		TypeStorage* Type = nullptr;
+		u64 Pointer_Ir_Register = -1;
+		u64 Value = 0;
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::Intrinsic_MemSet;
 		}
 	};
 
@@ -1002,12 +1017,13 @@ namespace Glass
 
 		u64 ArrayAddress;
 		u64 ElementIndexRegister;
-		TypeStorage* Type;
+		TypeStorage* Type = nullptr;
+		TypeStorage* Index_Type = nullptr;
 
 		IRArrayAccess() = default;
 
-		IRArrayAccess(u64 array_address, u64 element_index_register, TypeStorage* type)
-			:ArrayAddress(array_address), ElementIndexRegister(element_index_register), Type(type)
+		IRArrayAccess(u64 array_address, u64 element_index_register, TypeStorage* type, TypeStorage* index_type)
+			:ArrayAddress(array_address), ElementIndexRegister(element_index_register), Type(type), Index_Type(index_type)
 		{
 		}
 
