@@ -128,6 +128,8 @@ namespace Glass {
 		static TypeStorage* GetType();
 		static TypeStorage* GetArray();
 
+		static TypeStorage* GetString();
+
 		static std::string PrintType(TypeStorage* type);
 
 	private:

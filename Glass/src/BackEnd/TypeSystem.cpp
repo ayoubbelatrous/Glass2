@@ -193,6 +193,11 @@ namespace Glass {
 		return GetBasic(IR_array);
 	}
 
+	TypeStorage* TypeSystem::GetString()
+	{
+		return GetBasic(IR_string);
+	}
+
 	std::string TypeSystem::PrintType(TypeStorage* type)
 	{
 		if (type->Kind == TypeStorageKind::Pointer) {

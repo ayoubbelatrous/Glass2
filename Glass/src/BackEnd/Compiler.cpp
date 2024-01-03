@@ -195,6 +195,9 @@ namespace Glass
 				if (stmt_Struct->Name.Symbol == "GlobalDef_Function") {
 					generate_base_struct(stmt_Struct, IR_globaldef_function, GetStructID());
 				}
+				if (stmt_Struct->Name.Symbol == "string") {
+					generate_base_struct(stmt_Struct, IR_string, GetStructID());
+				}
 			}
 			if (node_type == NodeType::Enum) {
 
@@ -2085,19 +2088,6 @@ namespace Glass
 		return IR(IRRegisterValue(ir_register->ID));
 	}
 
-	// 	IRInstruction* Compiler::NumericLiteralCodeGen(const NumericLiteral* numericLiteral)
-	// 	{
-	// 		IRRegister* ir_register = CreateIRRegister();
-	// 
-	// 		ir_register->Value = IR(IRCONSTValue());
-	// 
-	// 		IRCONSTValue* Constant = (IRCONSTValue*)ir_register->Value;
-
-	// 		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetBasic(Constant->Type));
-	// 
-	// 		return IR(IRRegisterValue(ir_register->ID));
-	// 	}
-
 	IRInstruction* Compiler::StringLiteralCodeGen(const StringLiteral* stringLiteral)
 	{
 		IRData* data = CreateIRData();
@@ -2106,22 +2096,26 @@ namespace Glass
 		{
 			data->Data.push_back(c);
 		}
+		auto data_ir_register = CreateIRRegister();
+		data_ir_register->Value = IR(IRDataValue(0, data->ID));
 
-		auto ir_register = CreateIRRegister();
-		ir_register->Value = IR(IRDataValue(0, data->ID));
+		auto c_string_ty = TypeSystem::GetPtr(TypeSystem::GetU8(), 1);
 
-		IRRegisterValue ir_register_val;
-
-		ir_register_val.RegisterID = ir_register->ID;
-
+		if (m_AutoCastTargetType == c_string_ty)
 		{
-			Type type;
-			type.ID = IR_u8;
-			type.Pointer = 1;
-			m_Metadata.RegExprType(ir_register_val.RegisterID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_u8), type.Pointer));
+			m_Metadata.RegExprType(data_ir_register->ID, c_string_ty);
+			return IR(IRRegisterValue(data_ir_register->ID));
 		}
+		else {
 
-		return IR(ir_register_val);
+			auto count_ir_register = CreateConstantInteger(IR_u64, data->Data.size());
+
+			auto string_initializer = Create_String_Initializer(data_ir_register->ID, count_ir_register->RegisterID);
+
+			m_Metadata.RegExprType(string_initializer->RegisterID, TypeSystem::GetString());
+
+			return string_initializer;
+		}
 	}
 
 	IRInstruction* Compiler::BinaryExpressionCodeGen(const BinaryExpression* binaryExpr)
@@ -3332,10 +3326,11 @@ namespace Glass
 		auto obj_expr_type = m_Metadata.GetExprType(object->RegisterID);
 		auto index_expr_type = m_Metadata.GetExprType(index->RegisterID);
 
-		if (!TypeSystem::IsPointer(obj_expr_type) && !TypeSystem::IsArray(obj_expr_type))
+		if (!TypeSystem::IsPointer(obj_expr_type) && !TypeSystem::IsArray(obj_expr_type) && obj_expr_type != TypeSystem::GetString())
 		{
 			PushMessage(CompilerMessage{ PrintTokenLocation(arrayAccess->Object->GetLocation()), MessageType::Error });
 			PushMessage(CompilerMessage{ "type of expression must be a pointer type in order to be accessed by the [] operator", MessageType::Warning });
+			return nullptr;
 		}
 
 		if (TypeSystem::IsArray(obj_expr_type)) {
@@ -3358,6 +3353,30 @@ namespace Glass
 			auto element_ty = TypeSystem::GetPtr(TypeSystem::GetArrayElementTy(obj_expr_type), 1);
 			data_member_access_pointer_cast_register->Value = IR(IRPointerCast(element_ty, data_member_access_load_register->RegisterID));
 			object = IR(IRRegisterValue(data_member_access_pointer_cast_register->ID));
+
+			obj_expr_type = element_ty;
+		}
+		else if (obj_expr_type == TypeSystem::GetString()) {
+
+			const StructMetadata* string_struct = m_Metadata.GetStructFromType(IR_string);
+
+			IRMemberAccess* data_member_access = IR(IRMemberAccess());
+			data_member_access->MemberID = string_struct->FindMember("data");
+			data_member_access->ObjectRegister = object->RegisterID;
+			data_member_access->StructID = m_Metadata.GetStructIDFromType(IR_string);
+			data_member_access->ReferenceAccess = false;
+
+			auto data_member_access_register = CreateIRRegister();
+			data_member_access_register->Value = data_member_access;
+
+			auto u8_ptr_ty = TypeSystem::GetPtr(TypeSystem::GetU8(), 1);
+
+			auto data_member_access_load_register =
+				CreateLoad(u8_ptr_ty, data_member_access_register->ID);
+
+			auto element_ty = u8_ptr_ty;
+
+			object = IR(IRRegisterValue(data_member_access_load_register->RegisterID));
 
 			obj_expr_type = element_ty;
 		}
@@ -3961,6 +3980,13 @@ namespace Glass
 	{
 		auto ir_register = CreateIRRegister();
 		ir_register->Value = IR(IRNullPtr(type));
+		return IR(IRRegisterValue(ir_register->ID));
+	}
+
+	IRRegisterValue* Compiler::Create_String_Initializer(u64 data_register_id, u64 count_register_id)
+	{
+		auto ir_register = CreateIRRegister();
+		ir_register->Value = IR(IRStringInitializer(data_register_id, count_register_id));
 		return IR(IRRegisterValue(ir_register->ID));
 	}
 

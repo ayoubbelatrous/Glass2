@@ -1244,6 +1244,10 @@ namespace Glass
 			AssembleAnyArray((IRAnyArray*)instruction);
 			break;
 
+		case IRNodeType::String_Initializer:
+			AssembleString_Initializer((IRStringInitializer*)instruction);
+			break;
+
 		case IRNodeType::RegisterValue:
 		{
 			IRRegisterValue* ir_register_value = (IRRegisterValue*)instruction;
@@ -3871,6 +3875,32 @@ namespace Glass
 		Code.push_back(Builder::Lea(result, Builder::De_Reference(any_array_struct)));
 
 		SetRegisterValue(result, CurrentRegister);
+	}
+
+	void X86_BackEnd::AssembleString_Initializer(IRStringInitializer* ir_string_initializer)
+	{
+		auto result = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
+
+		auto data_register_value = GetRegisterValue(ir_string_initializer->Data_Register_ID);
+		auto count_register_value = GetRegisterValue(ir_string_initializer->Count_Register_ID);
+
+		const StructMetadata* string_struct_metadata = m_Metadata->GetStructFromType(TypeSystem::GetString()->BaseID);
+		GS_CORE_ASSERT(string_struct_metadata);
+
+		const MemberMetadata& string_struct_data_member = string_struct_metadata->Members[string_struct_metadata->FindMember("data")];
+		const MemberMetadata& string_struct_count_member = string_struct_metadata->Members[string_struct_metadata->FindMember("count")];
+
+		auto storage = Stack_Alloc(TypeSystem::GetString());
+
+		auto string_struct_data_member_offset = Builder::OpSub(Builder::Register(RBP), Builder::Constant_Integer(storage->bin_op.operand2->constant_integer.integer - string_struct_data_member.Offset));
+		auto string_struct_count_member_offset = Builder::OpSub(Builder::Register(RBP), Builder::Constant_Integer(storage->bin_op.operand2->constant_integer.integer - string_struct_count_member.Offset));
+
+		Code.push_back(Builder::Mov(Builder::De_Reference(string_struct_data_member_offset, TypeSystem::GetVoidPtr()), data_register_value));
+		Code.push_back(Builder::Mov(Builder::De_Reference(string_struct_count_member_offset, TypeSystem::GetU64()), count_register_value));
+
+		Code.push_back(Builder::Lea(result, Builder::De_Reference(storage)));
+
+		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 	}
 
 	void X86_BackEnd::AssembleReturn(IRReturn* ir_return)

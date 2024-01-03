@@ -3,6 +3,11 @@ struct Any {
 	void* 	data				;
 };
 
+struct string {
+	u8* 	data				;
+	u64 	count				;
+};
+
 struct Array {
 	u64 	count				;
 	void* 	data				;
@@ -29,6 +34,12 @@ struct TypeInfo {
 struct TypeInfo_Enum_Member {
 	u8* name					;
 	u64 value					;
+	u64 pad0;
+	u64 pad1;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
+	u64 pad5;
 };
 
 struct TypeInfo_Enum {
@@ -36,6 +47,9 @@ struct TypeInfo_Enum {
 	TypeInfo_Flags flags			;
 	u64 size						;
 	TypeInfo_Enum_Member[..] members;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Pointer {
@@ -43,24 +57,42 @@ struct TypeInfo_Pointer {
 	TypeInfo_Flags flags		;
 	Type type				    ;
 	u64 indirection				;
+	u64 pad1;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Dyn_Array {
 	u8* name					;
 	TypeInfo_Flags flags		;
 	Type type				    ;
+	u64 pad0;
+	u64 pad1;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Function {
-	Type return_type			;
+	u8* name					;
 	TypeInfo_Flags flags		;
+	Type return_type			;
 	Type[..] parameters			;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Member {
 	u8* name					;
 	Type type					;
 	u64 offset					;
+	u64 pad0;
+	u64 pad1;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Struct {
@@ -68,12 +100,20 @@ struct TypeInfo_Struct {
 	TypeInfo_Flags flags		;
 	u64 size					;
 	TypeInfo_Member[..] members ;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct TypeInfo_Func_Param {
 	u8* name					;
 	Type type 					;
 	bool variadic				;
+	u64 pad0;
+	u64 pad1;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };
 
 struct GlobalDef_Function {
@@ -81,4 +121,7 @@ struct GlobalDef_Function {
 	u8* mangled_name				 	;
 	Type signature					 	;
 	TypeInfo_Func_Param[..] parameters	;
+	u64 pad2;
+	u64 pad3;
+	u64 pad4;
 };

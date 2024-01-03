@@ -591,6 +591,8 @@ namespace Glass
 
 		void AssembleAnyArray(IRAnyArray* ir_any_array);
 
+		void AssembleString_Initializer(IRStringInitializer* ir_string_initializer);
+
 		void AssembleReturn(IRReturn* ir_return);
 
 		void AssembleConstValue(IRCONSTValue* ir_constant);

@@ -51,6 +51,8 @@ namespace Glass
 		IR_typeinfo_func_param,
 		IR_globaldef_function,
 
+		IR_string,
+
 		IR_typeinfo,
 	};
 
@@ -95,6 +97,8 @@ namespace Glass
 
 		IR_typeinfo_func_param,
 		IR_globaldef_function,
+
+		IR_string,
 
 		IR_typeinfo,
 	};
@@ -186,6 +190,8 @@ namespace Glass
 
 		Label,
 		Iterator,
+
+		String_Initializer,
 
 		LexicalBlock,
 
@@ -306,7 +312,6 @@ namespace Glass
 	};
 
 	struct IRRegisterValue : public IRInstruction {
-		u64 ID = 0;
 		u64 RegisterID = 0;
 
 		IRRegisterValue() = default;
@@ -1562,6 +1567,20 @@ namespace Glass
 
 		virtual IRNodeType GetType() const {
 			return IRNodeType::Iterator;
+		}
+	};
+
+	struct IRStringInitializer : public IRInstruction {
+
+		IRStringInitializer(u64 data_register_id, u64 count_register_id)
+			: Data_Register_ID(data_register_id), Count_Register_ID(count_register_id)
+		{}
+
+		u64 Data_Register_ID = -1;
+		u64 Count_Register_ID = -1;
+
+		virtual IRNodeType GetType() const {
+			return IRNodeType::String_Initializer;
 		}
 	};
 }
