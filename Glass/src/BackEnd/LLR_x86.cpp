@@ -5004,6 +5004,128 @@ forward
 		}
 	}
 
+	std::string GetJumpInstructionName(Assembly_Op_Code opcode)
+	{
+		switch (opcode)
+		{
+		case I_Je:   return "je";
+		case I_Jne:  return "jne";
+		case I_Jg:   return "jg";
+		case I_Jl:   return "jl";
+		case I_Jge:  return "jge";
+		case I_Ja:   return "ja";
+		case I_Jb:   return "jb";
+		case I_Jbe:  return "jbe";
+		case I_Jae:  return "jae";
+		case I_Jle:  return "jle";
+		case I_Jmp:  return "jmp";
+		default:     return "unknown_jump";
+		}
+	}
+
+	std::string GetSetInstructionName(Assembly_Op_Code opcode)
+	{
+		switch (opcode)
+		{
+		case I_Setne: return "setne";
+		case I_Sete:  return "sete";
+		case I_Setg:  return "setg";
+		case I_Setl:  return "setl";
+		case I_Seta:  return "seta";
+		case I_Setb:  return "setb";
+		default:      return "unknown_set";
+		}
+	}
+
+	std::string GetSignExtensionInstructionName(Assembly_Op_Code opcode)
+	{
+		switch (opcode)
+		{
+		case I_CBW: return "cbw";
+		case I_CWD: return "cwd";
+		case I_CDQ: return "cdq";
+		case I_CQO: return "cqo";
+		default:    return "unknown_sign_extension";
+		}
+	}
+
+	std::string GetFloatingPointInstructionName(Assembly_Op_Code opcode, const std::string& baseName)
+	{
+		switch (opcode)
+		{
+		case I_UCOMISS: return baseName + "s";
+		case I_UCOMISD: return baseName + "d";
+		default:        return "unknown_floating_point";
+		}
+	}
+
+	void PrintArithmeticInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
+	{
+		switch (opcode)
+		{
+		case I_Add:   stream << "add "; break;
+		case I_AddSS: stream << "addss "; break;
+		case I_AddSD: stream << "addsd "; break;
+		case I_Sub:   stream << "sub "; break;
+		case I_SubSS: stream << "subss "; break;
+		case I_SubSD: stream << "subsd "; break;
+		case I_IDiv:  stream << "idiv "; break;
+		case I_Div:   stream << "div "; break;
+		case I_IMul:  stream << "imul "; break;
+		case I_MulSS: stream << "mulss "; break;
+		case I_MulSD: stream << "mulsd "; break;
+		case I_DivSS: stream << "divss "; break;
+		case I_DivSD: stream << "divsd "; break;
+		default:      stream << "unknown_arithmetic "; break;
+		}
+		Intel_Syntax_Printer::PrintOperand(&op1, stream);
+		if (opcode != I_IDiv && opcode != I_Div)
+		{
+			stream << ", ";
+			Intel_Syntax_Printer::PrintOperand(&op2, stream);
+		}
+	}
+
+	void PrintMoveInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
+	{
+		switch (opcode)
+		{
+		case I_Mov:   stream << "mov "; break;
+		case I_MovD:  stream << "movd "; break;
+		case I_MovQ:  stream << "movq "; break;
+		case I_MovSS: stream << "movss "; break;
+		case I_MovSD: stream << "movsd "; break;
+		case I_MovZX: stream << "movzx "; break;
+		case I_MovSX: stream << "movsx "; break;
+		case I_MovSXD: stream << "movsxd "; break;
+		case I_Lea:   stream << "lea "; break;
+		case I_CvtSI2SS: stream << "cvtsi2ss "; break;
+		case I_CvtSI2SD: stream << "cvtsi2sd "; break;
+		case I_CvtSS2SI: stream << "cvtss2si "; break;
+		case I_CvtSD2SI: stream << "cvtsd2si "; break;
+		case I_CvtSS2SD: stream << "cvtss2sd "; break;
+		case I_CvtSD2SS: stream << "cvtsd2ss "; break;
+		default:        stream << "unknown_move "; break;
+		}
+		Intel_Syntax_Printer::PrintOperand(&op1, stream);
+		stream << ", ";
+		Intel_Syntax_Printer::PrintOperand(&op2, stream);
+	}
+
+	void PrintComparisonInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
+	{
+		switch (opcode)
+		{
+		case I_Cmp: stream << "cmp "; break;
+		case I_And: stream << "and "; break;
+		case I_Or:  stream << "or "; break;
+		default:    stream << "unknown_comparison "; break;
+		}
+		Intel_Syntax_Printer::PrintOperand(&op1, stream);
+		stream << ", ";
+		Intel_Syntax_Printer::PrintOperand(&op2, stream);
+	}
+
 	void Intel_Syntax_Printer::PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream)
 	{
 		switch (instruction.OpCode)
@@ -5012,9 +5134,71 @@ forward
 			PrintOperand(instruction.Operand1, stream);
 			stream << ':';
 			break;
-		case I_Ret:
-			stream << "ret";
+		case I_Je:
+		case I_Jne:
+		case I_Jg:
+		case I_Jl:
+		case I_Jge:
+		case I_Ja:
+		case I_Jb:
+		case I_Jbe:
+		case I_Jae:
+		case I_Jle:
+		case I_Jmp:
+			stream << GetJumpInstructionName(instruction.OpCode) << " ";
+			PrintOperand(instruction.Operand1, stream);
 			break;
+
+		case I_Add:
+		case I_AddSS:
+		case I_AddSD:
+		case I_Sub:
+		case I_SubSS:
+		case I_SubSD:
+		case I_IDiv:
+		case I_Div:
+		case I_IMul:
+		case I_MulSS:
+		case I_MulSD:
+		case I_DivSS:
+		case I_DivSD:
+			PrintArithmeticInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
+			break;
+
+		case I_Mov:
+		case I_MovD:
+		case I_MovQ:
+		case I_MovSS:
+		case I_MovSD:
+		case I_MovZX:
+		case I_MovSX:
+		case I_MovSXD:
+		case I_Lea:
+		case I_CvtSI2SS:
+		case I_CvtSI2SD:
+		case I_CvtSS2SI:
+		case I_CvtSD2SI:
+		case I_CvtSS2SD:
+		case I_CvtSD2SS:
+			PrintMoveInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
+			break;
+
+		case I_Cmp:
+		case I_And:
+		case I_Or:
+			PrintComparisonInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
+			break;
+
+		case I_Setne:
+		case I_Sete:
+		case I_Setg:
+		case I_Setl:
+		case I_Seta:
+		case I_Setb:
+			stream << GetSetInstructionName(instruction.OpCode) << " ";
+			PrintOperand(instruction.Operand1, stream);
+			break;
+
 		case I_Push:
 			stream << "push ";
 			PrintOperand(instruction.Operand1, stream);
@@ -5023,333 +5207,29 @@ forward
 			stream << "pop ";
 			PrintOperand(instruction.Operand1, stream);
 			break;
-
-		case I_Add:
-			stream << "add ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
+		case I_Ret:
+			stream << "ret";
 			break;
-		case I_AddSS:
-			stream << "addss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_AddSD:
-			stream << "addsd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_Sub:
-			stream << "sub ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_SubSS:
-			stream << "subss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_SubSD:
-			stream << "subsd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_IDiv:
-			stream << "idiv ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Div:
-			stream << "div ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_IMul:
-			stream << "imul ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_MulSS:
-			stream << "mulss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_MulSD:
-			stream << "mulsd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_DivSS:
-			stream << "divss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		case I_DivSD:
-			stream << "divsd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_Mov:
-			stream << "mov ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovD:
-			stream << "movd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovQ:
-			stream << "movq ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovSS:
-			stream << "movss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovSD:
-			stream << "movsd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovZX:
-			stream << "movzx ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovSX:
-			stream << "movsx ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_MovSXD:
-			stream << "movsxd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_Lea:
-			stream << "lea ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_CvtSI2SS:
-			stream << "cvtsi2ss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_CvtSI2SD:
-			stream << "cvtsi2sd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-
-		case I_CvtSS2SI:
-			stream << "cvtss2si ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_CvtSD2SI:
-			stream << "cvtsd2si ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_CvtSS2SD:
-			stream << "cvtss2sd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_CvtSD2SS:
-			stream << "cvtsd2ss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_UCOMISS:
-			stream << "ucomiss ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_UCOMISD:
-			stream << "ucomisd ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
 		case I_Call:
 			stream << "call ";
 			PrintOperand(instruction.Operand1, stream);
 			break;
-
 		case I_CBW:
-			stream << "cbw";
-			break;
 		case I_CWD:
-			stream << "cwd";
-			break;
 		case I_CDQ:
-			stream << "cdq";
-			break;
 		case I_CQO:
-			stream << "cqo";
+			stream << GetSignExtensionInstructionName(instruction.OpCode);
 			break;
 
-		case I_Cmp:
-			stream << "cmp ";
+		case I_UCOMISS:
+		case I_UCOMISD:
+			stream << GetFloatingPointInstructionName(instruction.OpCode, "ucomis") << " ";
 			PrintOperand(instruction.Operand1, stream);
 			stream << ", ";
 			PrintOperand(instruction.Operand2, stream);
 			break;
-
-		case I_And:
-			stream << "and ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_Or:
-			stream << "or ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-
-		case I_Setne:
-			stream << "setne ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Sete:
-			stream << "sete ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Setg:
-			stream << "setg ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Setl:
-			stream << "setl ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Seta:
-			stream << "seta ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Setb:
-			stream << "setb ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Je:
-			stream << "je ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jne:
-			stream << "jne ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jg:
-			stream << "jg ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jl:
-			stream << "jl ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jge:
-			stream << "jge ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Ja:
-			stream << "ja ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jb:
-			stream << "jb ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jbe:
-			stream << "jbe ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jae:
-			stream << "jae ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jle:
-			stream << "jle ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Jmp:
-			stream << "jmp ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
 		default:
-			GS_CORE_ASSERT(nullptr, "Un Implemented Assembly Instruction");
+			GS_CORE_ASSERT(nullptr, "Unimplemented Assembly Instruction");
 			break;
 		}
 	}
