@@ -2597,21 +2597,27 @@ namespace Glass
 			}
 
 			ResetLikelyConstantType();
+			m_AutoCastTargetType = nullptr;
 
 			result = store;
 		}
 		if (left->GetType() == NodeType::ArrayAccess)
 		{
-			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
 			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
-
-			if (!right_register)
-				return nullptr;
 
 			if (!left_register)
 				return nullptr;
 
 			left_type = m_Metadata.GetExprType(left_register->RegisterID);
+
+			SetLikelyConstantType(left_type->BaseID);
+			m_AutoCastTargetType = left_type;
+
+			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
+
+			if (!right_register)
+				return nullptr;
+
 			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
 			IRStore* store = IR(IRStore());
@@ -2620,20 +2626,32 @@ namespace Glass
 				store->AddressRegister = left_register->RegisterID;
 				store->Type = right_type;
 			}
+
 			result = store;
+
+			ResetLikelyConstantType();
+			m_AutoCastTargetType = nullptr;
 		}
 		if (left->GetType() == NodeType::DeReference)
 		{
 			auto left_register = (IRRegisterValue*)ExpressionCodeGen(left);
-			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
 
-			if (!left_register || !right_register) {
+			if (!left_register) {
 				return nullptr;
 			}
 
-			auto left_type_code_gen = m_Metadata.GetExprType(left_register->RegisterID);
 
-			left_type = TypeSystem::ReduceIndirection((TSPtr*)left_type_code_gen);
+			left_type = TypeSystem::ReduceIndirection((TSPtr*)m_Metadata.GetExprType(left_register->RegisterID));
+
+			SetLikelyConstantType(left_type->BaseID);
+			m_AutoCastTargetType = left_type;
+
+			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
+
+			if (!right_register) {
+				return nullptr;
+			}
+
 			right_type = m_Metadata.GetExprType(right_register->RegisterID);
 
 			IRStore* store = IR(IRStore());
@@ -3711,12 +3729,6 @@ namespace Glass
 
 		return IR(IRRegisterValue(rvalue_ptr_storage->ID));
 	}
-
-	//@DeDef
-	//Its located here mainly for type checking
-	//the llvm backend nor the c backend need any changes to the value of the pointer
-	//because we use store and load everything is referred to by address
-	//we just have to select either to load or to store by AssignmentCodeGen or GetExpressionByValue
 
 	IRInstruction* Compiler::DeRefCodeGen(const DeRefNode* deRefNode)
 	{

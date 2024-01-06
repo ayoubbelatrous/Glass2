@@ -10,33 +10,36 @@ namespace Glass
 	{
 		TokenType Type = At().Type;
 
+		auto expected_semicolon = [this]() {
+			if (ExpectedToken(TokenType::SemiColon)) {
+				Abort("Expected ';' After Statement Instead Got");
+			}
+			Consume();
+		};
+
 		switch (Type)
 		{
-		case TokenType::Pound:
+		case TokenType::Pound: {
 			Consume();
-			return ParseDirective();
-			break;
-		case TokenType::StringLiteral:
-		case TokenType::NumericLiteral:
-			return ParseExpression();
-			break;
+			auto directive = ParseDirective();
+			//expected_semicolon();
+			return directive;
+		}
 		case TokenType::Symbol:
 			if (At().Symbol == FN_KWRD) {
 				return ParseFunction();
 			}
 			else if (At().Symbol == "return")
 			{
-				return ParseReturn();
+				auto ret = ParseReturn();
+				expected_semicolon();
+				return ret;
 			}
 			else if (At().Symbol == "struct")
 			{
 				auto struct_ = ParseStruct();
 
-				if (ExpectedToken(TokenType::SemiColon)) {
-					Abort("Expected a ';' after struct declaration, Instead Got: ");
-				}
-
-				Consume();
+				expected_semicolon();
 
 				return struct_;
 			}
@@ -46,7 +49,11 @@ namespace Glass
 			}
 			else if (At().Symbol == "enum")
 			{
-				return ParseEnum();
+				auto enm = ParseEnum();
+
+				expected_semicolon();
+
+				return enm;
 			}
 			else if (At().Symbol == "while")
 			{
@@ -61,7 +68,8 @@ namespace Glass
 				BreakNode Node;
 
 				Node.BR = Consume();
-				Consume();
+
+				expected_semicolon();
 
 				return Application::AllocateAstNode(Node);
 			}
@@ -93,16 +101,18 @@ namespace Glass
 				}
 
 				if (var_decl) {
-					return ParseVarDecl();
+					auto var = ParseVarDecl();
+					expected_semicolon();
+					return var;
 				}
 
 				bool var_decl_infer = At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Assign;
 
 				if (var_decl_infer) {
-					return ParseVarDeclInfer();
+					auto var = ParseVarDeclInfer();
+					expected_semicolon();
+					return var;
 				}
-
-				return ParseExpression();
 			}
 			break;
 		case TokenType::OpenCurly:
@@ -114,17 +124,26 @@ namespace Glass
 			return nullptr;
 		}
 		break;
+		case TokenType::SemiColon:
+		{
+			Consume();
+			return ParseStatement();
+		}
+		break;
 		case TokenType::BOL:
 			Consume();
 			return ParseStatement();
 			break;
+		case TokenType::E_OF:
+			return nullptr;
+			break;
 		}
 
-		//if (ExpectedToken(TokenType::SemiColon)) {
-		//	Abort("Expected ';' After Statement Instead Got")
-		//}
+		auto expr = ParseExpression();
 
-		return ParseExpression();
+		expected_semicolon();
+
+		return expr;
 	}
 
 	Statement* Parser::ParseDirective()
@@ -180,7 +199,7 @@ namespace Glass
 			Consume();
 
 			LoadNode Node;
-			Node.FileName = (StringLiteral*)ParseStatement();
+			Node.FileName = (StringLiteral*)ParseExpression();
 
 			if (Node.FileName == nullptr) {
 				Abort("Expected A File Name after #load directive");
@@ -288,6 +307,10 @@ namespace Glass
 
 		Node.Condition = ParseExpression();
 
+		if (Node.Condition == nullptr) {
+			Abort("Expected something After 'for', Instead Got: ");
+		}
+
 		if (At(0).Type == TokenType::Colon) {
 			Consume();
 
@@ -297,10 +320,6 @@ namespace Glass
 
 			Node.Named_Iterator = Node.Condition;
 			Node.Condition = ParseExpression();
-		}
-
-		if (Node.Condition == nullptr) {
-			Abort("Expected something After 'for', Instead Got: ");
 		}
 
 		Node.Scope = (ScopeNode*)ParseScope();
@@ -575,7 +594,7 @@ namespace Glass
 		while (At().Type != TokenType::CloseCurly)
 		{
 
-			Expression* expression = ParseExpression();
+			Expression* expression = (Expression*)ParseStatement();
 
 			if (expression == nullptr) {
 				break;
@@ -597,12 +616,6 @@ namespace Glass
 
 		Consume();
 
-		if (ExpectedToken(TokenType::SemiColon)) {
-			Abort("Expected a ';', Instead Got: ");
-		}
-
-		Consume();
-
 		return AST(Node);
 	}
 
@@ -617,6 +630,7 @@ namespace Glass
 
 		while (At().Type != TokenType::CloseCurly) {
 			auto stmt = ParseStatement();
+
 			if (stmt != nullptr)
 				Node.PushStatement(stmt);
 		}
@@ -1234,6 +1248,7 @@ namespace Glass
 		{
 		case TokenType::SemiColon:
 		{
+			return nullptr;
 			Consume();
 			return ParseStatement();
 		}
