@@ -1611,8 +1611,11 @@ namespace Glass
 		if (!condition)
 			return nullptr;
 
+		auto condition_type = m_Metadata.GetExprType(condition->RegisterID);
+
 		IRWhile WHILE;
 		WHILE.ConditionRegisterID = condition->RegisterID;
+		WHILE.ConditionType = condition_type;
 
 		WHILE.ConditionBlock = condition_registers;
 
@@ -1773,20 +1776,9 @@ namespace Glass
 
 			auto generated_register = GetRegister(generated->RegisterID);
 
-			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
-			IRRegisterValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
-
-			auto index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
-
-			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
-
-			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type, index_type)));
-
-			CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID));
-
 			auto end = CreateLoad(index_type, CreateMemberAccess("Array", "count", generated->RegisterID)->RegisterID);
 
-			index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
+			auto index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
 			IRRegisterValue* cmp_inst = CreateIRRegister(IR(IRLesser(index_load, end, index_type)));
 
 			IRRegister* cmp_register = m_Metadata.GetRegister(cmp_inst->RegisterID);
@@ -1798,6 +1790,26 @@ namespace Glass
 			for (auto inst : register_stack) {
 				iterator->ConditionBlock.push_back(inst);
 			}
+			PopScope();
+		}
+
+		//Start:
+		{
+			PushScope();
+
+			auto index_load = CreateLoad(index_type, iterator->IteratorIndex->RegisterID);
+
+			auto data_member_type = TypeSystem::GetPtr(TypeSystem::GetVoid(), 1);
+			IRRegisterValue* data_member = CreateLoad(data_member_type, CreateMemberAccess("Array", "data", generated->RegisterID)->RegisterID);
+			auto casted_data = CreatePointerCast(TypeSystem::IncreaseIndirection(element_type), data_member->RegisterID);
+			auto data_pointer = CreateIRRegister(IR(IRArrayAccess(casted_data->RegisterID, index_load->RegisterID, element_type, index_type)));
+			CreateStore(element_type, iterator->IteratorIt->RegisterID, CreateLoad(element_type, data_pointer->RegisterID));
+
+			auto register_stack = PoPIRRegisters();
+			for (auto inst : register_stack) {
+				iterator->StartBlock.push_back(inst);
+			}
+
 			PopScope();
 		}
 
@@ -1854,8 +1866,42 @@ namespace Glass
 		PushScope();
 		m_Metadata.PushContext(ContextScopeType::FUNC);
 
+		std::string iterator_name = "it";
+
+		if (forNode->Named_Iterator)
+		{
+			if (forNode->Named_Iterator->GetType() != NodeType::Identifier)
+			{
+				MSG_LOC(forNode->Named_Iterator);
+				FMT_WARN("for loop expected named iterator to be a identifier");
+				return nullptr;
+			}
+
+			auto as_ident = (Identifier*)forNode->Named_Iterator;
+
+			SymbolType symbol_type = m_Metadata.GetSymbolType(as_ident->Symbol.Symbol);
+
+			if (symbol_type != SymbolType::None)
+			{
+				MSG_LOC(as_ident);
+				FMT_WARN("variable '{}' name already taken, pick another one!", as_ident->Symbol.Symbol);
+				return nullptr;
+			}
+
+			const VariableMetadata* variable_metadata = m_Metadata.GetVariableMetadata(m_Metadata.GetVariable(as_ident->Symbol.Symbol));
+
+			if (variable_metadata != nullptr)
+			{
+				MSG_LOC(as_ident);
+				FMT_WARN(fmt::format("variable '{}' is already defined", as_ident->Symbol.Symbol));
+				return nullptr;
+			}
+
+			iterator_name = as_ident->Symbol.Symbol;
+		}
+
 		m_Metadata.RegisterVariable(m_Metadata.GetRegister(iterator->IteratorIndex->RegisterID), "it_index");
-		m_Metadata.RegisterVariable(m_Metadata.GetRegister(iterator->IteratorIt->RegisterID), "it");
+		m_Metadata.RegisterVariable(m_Metadata.GetRegister(iterator->IteratorIt->RegisterID), iterator_name);
 
 		VariableMetadata it_index_metadata;
 		it_index_metadata.Tipe = iterator->IndexTy;
@@ -1867,9 +1913,13 @@ namespace Glass
 		VariableMetadata it_metadata;
 		it_metadata.Tipe = iterator->ItTy;
 		it_metadata.Name = forNode->Condition->GetLocation();
-		it_metadata.Name.Symbol = "it";
+		it_metadata.Name.Symbol = iterator_name;
 		m_Metadata.RegisterVariableMetadata(iterator->IteratorIt->RegisterID, it_metadata);
 		((IRAlloca*)m_Metadata.GetRegister(iterator->IteratorIt->RegisterID)->Value)->VarMetadata = m_Metadata.GetVariableMetadata(iterator->IteratorIt->RegisterID);
+
+		for (auto inst : iterator->StartBlock) {
+			while_inst->Instructions.push_back(inst);
+		}
 
 		for (const Statement* stmt : forNode->Scope->GetStatements())
 		{
@@ -2892,6 +2942,10 @@ namespace Glass
 
 					if (assumed_type) {
 						SetLikelyConstantType(assumed_type->BaseID);
+						m_AutoCastTargetType = assumed_type;
+					}
+					else {
+						m_AutoCastTargetType = nullptr;
 					}
 				}
 
@@ -2899,6 +2953,7 @@ namespace Glass
 
 				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
 					ResetLikelyConstantType();
+					m_AutoCastTargetType = nullptr;
 				}
 
 				if (!argument_value)

@@ -69,6 +69,19 @@ namespace Glass {
 		return -1;
 	}
 
+	uint32_t roundToNextPowerOf2(unsigned int num) {
+		if ((num & (num - 1)) == 0) {
+			return num;
+		}
+
+		uint32_t power = 1;
+		while (power < num) {
+			power <<= 1;
+		}
+
+		return power;
+	}
+
 	void MetaData::ComputeStructSizeAlignOffsets(StructMetadata* metadata)
 	{
 		u64 size = 0;
@@ -86,10 +99,6 @@ namespace Glass {
 		}
 
 		i64 offset = 0;
-		// 
-		// 		if (metadata->Name.Symbol == "SDL_Keysym") {
-		// 			__debugbreak();
-		// 		}
 
 		for (MemberMetadata& member : metadata->Members) {
 			auto member_size = (i64)GetTypeSize(member.Type);
@@ -106,7 +115,6 @@ namespace Glass {
 			else {
 				offset += member_size;
 			}
-
 		}
 
 		size = ((alignment - (offset % alignment)) % alignment) + offset;
@@ -116,8 +124,9 @@ namespace Glass {
 			size += finalPadding;
 
 			GS_CORE_ASSERT(size % alignment == 0);
-
 		}
+
+		size = roundToNextPowerOf2(size);
 
 		metadata->Size = size;
 		metadata->Alignment = alignment;

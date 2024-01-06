@@ -815,6 +815,9 @@ namespace Glass
 	{
 	public:
 
+		Expression* Named_Iterator = nullptr;
+		Expression* Named_Iterator_Index = nullptr;
+
 		Expression* Condition = nullptr;
 		ScopeNode* Scope = nullptr;
 

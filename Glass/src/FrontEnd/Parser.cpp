@@ -24,7 +24,7 @@ namespace Glass
 			if (At().Symbol == FN_KWRD) {
 				return ParseFunction();
 			}
-			else if (At().Symbol == "ret" || At().Symbol == "return")
+			else if (At().Symbol == "return")
 			{
 				return ParseReturn();
 			}
@@ -285,13 +285,29 @@ namespace Glass
 		Consume();
 
 		ForNode Node;
+
 		Node.Condition = ParseExpression();
+
+		if (At(0).Type == TokenType::Colon) {
+			Consume();
+
+			if (Node.Condition->GetType() != NodeType::Identifier) {
+				Abort("expected an identifier as the named iterator, Instead Got ");
+			}
+
+			Node.Named_Iterator = Node.Condition;
+			Node.Condition = ParseExpression();
+		}
 
 		if (Node.Condition == nullptr) {
 			Abort("Expected something After 'for', Instead Got: ");
 		}
 
 		Node.Scope = (ScopeNode*)ParseScope();
+
+		if (!Node.Scope) {
+			Abort("for Expected Statement, Instead Got: ");
+		}
 
 		return Application::AllocateAstNode(Node);
 	}
@@ -426,6 +442,10 @@ namespace Glass
 
 		if (ExpectedToken(TokenType::Symbol)) {
 			Abort("Expected a variable name after type Instead Got");
+		}
+
+		if (At().Symbol == "if" || At().Symbol == "for" || At().Symbol == "struct" || At().Symbol == "enum" || At().Symbol == "fn" || At().Symbol == "return") {
+			Abort("Invalid variable name:");
 		}
 
 		Node.Symbol = Consume();
@@ -589,7 +609,7 @@ namespace Glass
 	Statement* Parser::ParseScope()
 	{
 		if (ExpectedToken(TokenType::OpenCurly)) {
-			return ParseStatement();
+			return nullptr;
 		}
 
 		ScopeNode Node;
@@ -635,6 +655,10 @@ namespace Glass
 
 		if (ExpectedToken(TokenType::Symbol)) {
 			Abort("Expected a argument name after type Instead Got");
+		}
+
+		if (At().Symbol == "if" || At().Symbol == "for" || At().Symbol == "struct" || At().Symbol == "enum" || At().Symbol == "fn" || At().Symbol == "return") {
+			Abort("Invalid argument name:");
 		}
 
 		Node.Symbol = Consume();
@@ -1263,6 +1287,10 @@ namespace Glass
 		break;
 		case TokenType::Symbol:
 		{
+			if (At().Symbol == "if" || At().Symbol == "for" || At().Symbol == "struct" || At().Symbol == "enum" || At().Symbol == "fn" || At().Symbol == "return") {
+				Abort("Invalid expression level name:");
+			}
+
 			if (At().Symbol == "cast") {
 				return ParseCastExpr();
 			}

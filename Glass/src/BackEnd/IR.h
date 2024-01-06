@@ -1078,6 +1078,7 @@ namespace Glass
 	struct IRWhile : public IRInstruction {
 		u64 ID = 0;
 		u64 ConditionRegisterID = 0;
+		TypeStorage* ConditionType = nullptr;
 		std::vector<IRRegister*> ConditionBlock;
 		std::vector<IRInstruction*> Instructions;
 
@@ -1553,6 +1554,7 @@ namespace Glass
 
 		std::vector<IRRegister*> ConditionBlock;
 		std::vector<IRRegister*> IncrementorBlock;
+		std::vector<IRRegister*> StartBlock;
 		u64 ConditionRegisterID;
 
 		IRRegisterValue* IteratorIndex;

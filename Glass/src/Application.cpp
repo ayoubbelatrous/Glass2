@@ -129,7 +129,7 @@ namespace Glass
 		std::chrono::steady_clock::time_point m_LinkerStart;
 		std::chrono::steady_clock::time_point m_LinkerEnd;
 
-		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst());
+		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst(), !m_Options.NoLink);
 		if (compilation_successful)
 		{
 			m_X86Start = std::chrono::high_resolution_clock::now();

@@ -111,7 +111,6 @@ namespace Glass
 		F_SP,
 
 		F_A,
-		F_B,
 
 		F_R10,
 		F_R11,
@@ -119,6 +118,8 @@ namespace Glass
 		F_R13,
 		F_R14,
 		F_R15,
+
+		F_B,
 
 		F_C,
 		F_D,
@@ -510,7 +511,7 @@ namespace Glass
 	class X86_BackEnd
 	{
 	public:
-		X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata);
+		X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata, bool use_linker = false);
 
 		void Init();
 
@@ -689,6 +690,6 @@ namespace Glass
 		Assembly_Operand* Current_Skip_Target = nullptr;
 		std::stack<Assembly_Operand* > Skip_Target_Stack;
 
-		bool Use_Linker = false;
+		bool Use_Linker = true;
 	};
 }
