@@ -54,6 +54,14 @@ namespace Glass
 		Modulo,			// '%'
 		Divide,			// '/'
 
+		AddAssign,		// '+='
+		SubAssign,		// '-='
+		MulAssign,		// '*='
+		DivAssign,		// '/='
+
+		BitAndAssign,	// '&='
+		BitOrAssign,	// '|='
+
 		Assign,			// '='
 
 		StringLiteral,

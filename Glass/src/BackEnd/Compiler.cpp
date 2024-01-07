@@ -1101,15 +1101,10 @@ namespace Glass
 
 			VariableType = TypeExpressionGetType(variableNode->Type);
 
-
-			if (!VariableType) {
-				return nullptr;
+			if (VariableType) {
+				SetLikelyConstantType(VariableType);
+				m_AutoCastTargetType = VariableType;
 			}
-
-			u64 assignment_type_id = VariableType->BaseID;
-			SetLikelyConstantType(assignment_type_id);
-
-			m_AutoCastTargetType = VariableType;
 		}
 
 		if (variableNode->Assignment != nullptr)
@@ -1137,6 +1132,11 @@ namespace Glass
 			PushMessage(CompilerMessage{ PrintTokenLocation(variableNode->Type->GetLocation()), MessageType::Error });
 			PushMessage(CompilerMessage{ fmt::format("variable is of unknown type"), MessageType::Warning });
 			return nullptr;
+		}
+
+		if (!TypeSystem::GetTypeSize(VariableType)) {
+			MSG_LOC(variableNode);
+			FMT_WARN("variable cannot be assigned a type with size 0: {}", PrintType(VariableType));
 		}
 
 		if (variableNode->Assignment) {
@@ -1218,7 +1218,7 @@ namespace Glass
 		}
 		TypeStorage* constant_type = TypeExpressionGetType(variableNode->Type);
 
-		SetLikelyConstantType(constant_type->BaseID);
+		SetLikelyConstantType(constant_type);
 		m_AutoCastTargetType = constant_type;
 
 		IRInstruction* assignment = GetExpressionByValue(variableNode->Assignment);
@@ -1326,7 +1326,7 @@ namespace Glass
 				memcpy(&global->Initializer->Data, &as_numeric_literal->Val.Int, sizeof(double));
 			}
 
-			global->Initializer->Type = Type->BaseID;
+			global->Initializer->Constant_Type = Type;
 		}
 
 		return global;
@@ -1340,7 +1340,7 @@ namespace Glass
 		TypeStorage* expr_type = nullptr;
 
 		if (returnNode->Expr) {
-			SetLikelyConstantType(GetExpectedReturnType()->BaseID);
+			SetLikelyConstantType(GetExpectedReturnType());
 
 			expr = (IRRegisterValue*)GetExpressionByValue(returnNode->Expr);
 			UN_WRAP(expr);
@@ -2085,9 +2085,9 @@ namespace Glass
 
 		IRCONSTValue* Constant = (IRCONSTValue*)ir_register->Value;
 
-		u64 likely_constant_type = GetLikelyConstantType();
+		auto likely_constant_type = GetLikelyConstantType();
 
-		if (likely_constant_type == -1) {
+		if (likely_constant_type == nullptr) {
 			if (numericLiteral->type == NumericLiteral::Type::Float)
 			{
 				likely_constant_type = GetLikelyConstantFloatType();
@@ -2103,7 +2103,7 @@ namespace Glass
 			}
 		}
 		else {
-			auto type_flags = m_Metadata.GetTypeFlags(likely_constant_type);
+			auto type_flags = TypeSystem::GetTypeFlags(likely_constant_type);
 
 			if (type_flags & TypeFlag::FLAG_FLOATING_TYPE) {
 
@@ -2130,10 +2130,9 @@ namespace Glass
 			}
 		}
 
-		Constant->Type = likely_constant_type;
+		Constant->Constant_Type = likely_constant_type;
 
-
-		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetBasic(Constant->Type));
+		m_Metadata.RegExprType(ir_register->ID, Constant->Constant_Type);
 
 		return IR(IRRegisterValue(ir_register->ID));
 	}
@@ -2170,7 +2169,15 @@ namespace Glass
 
 	IRInstruction* Compiler::BinaryExpressionCodeGen(const BinaryExpression* binaryExpr)
 	{
-		if (binaryExpr->OPerator == Operator::Assign)
+		auto OPerator = binaryExpr->OPerator;
+
+		if (OPerator == Operator::AddAssign || OPerator == Operator::SubAssign
+			|| OPerator == Operator::MulAssign || OPerator == Operator::DivAssign
+			|| OPerator == Operator::BitAndAssign || OPerator == Operator::BitOrAssign) {
+			return OpAssignmentCodeGen(binaryExpr);
+		}
+
+		if (OPerator == Operator::Assign)
 		{
 			return AssignmentCodeGen(binaryExpr);
 		}
@@ -2190,7 +2197,8 @@ namespace Glass
 
 			left_type = m_Metadata.GetExprType(A->RegisterID);
 
-			SetLikelyConstantType(left_type->BaseID);
+			m_AutoCastTargetType = left_type;
+			SetLikelyConstantType(left_type);
 		}
 
 		if (binaryExpr->Right->GetType() != NodeType::NumericLiteral) {
@@ -2200,7 +2208,8 @@ namespace Glass
 			}
 			right_type = m_Metadata.GetExprType(B->RegisterID);
 
-			SetLikelyConstantType(right_type->BaseID);
+			m_AutoCastTargetType = right_type;
+			SetLikelyConstantType(right_type);
 		}
 
 		if (left_type == nullptr) {
@@ -2213,6 +2222,7 @@ namespace Glass
 		}
 
 		ResetLikelyConstantType();
+		m_AutoCastTargetType = nullptr;
 
 		if (!A || !B)
 		{
@@ -2339,6 +2349,12 @@ namespace Glass
 
 		TypeStorage* result_type = left_type;
 		TypeStorage* op_type = left_type;
+
+		if (!TypeSystem::StrictPromotion(right_type, left_type)) {
+			PushMessage(CompilerMessage{ PrintTokenLocation((binaryExpr->OperatorToken)), MessageType::Error });
+			FMT_WARN("incompatible types in {1}: '{0}' {1} '{2}'", PrintType(left_type), binaryExpr->OperatorToken.Symbol, PrintType(right_type));
+			return nullptr;
+		}
 
 		switch (binaryExpr->OPerator)
 		{
@@ -2521,7 +2537,7 @@ namespace Glass
 
 				const auto metadata = m_Metadata.GetVariableMetadata(var_register_id);
 
-				SetLikelyConstantType(metadata->Tipe->BaseID);
+				SetLikelyConstantType(metadata->Tipe);
 
 				m_AutoCastTargetType = metadata->Tipe;
 				IRRegisterValue* right_val = (IRRegisterValue*)GetExpressionByValue(binaryExpr->Right);
@@ -2563,7 +2579,7 @@ namespace Glass
 
 			left_type = m_Metadata.GetExprType(member_access->RegisterID);
 
-			SetLikelyConstantType(left_type->BaseID);
+			SetLikelyConstantType(left_type);
 			m_AutoCastTargetType = left_type;
 
 			IRRegisterValue* right_register = (IRRegisterValue*)GetExpressionByValue(right);
@@ -2610,7 +2626,7 @@ namespace Glass
 
 			left_type = m_Metadata.GetExprType(left_register->RegisterID);
 
-			SetLikelyConstantType(left_type->BaseID);
+			SetLikelyConstantType(left_type);
 			m_AutoCastTargetType = left_type;
 
 			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
@@ -2643,7 +2659,7 @@ namespace Glass
 
 			left_type = TypeSystem::ReduceIndirection((TSPtr*)m_Metadata.GetExprType(left_register->RegisterID));
 
-			SetLikelyConstantType(left_type->BaseID);
+			SetLikelyConstantType(left_type);
 			m_AutoCastTargetType = left_type;
 
 			auto right_register = (IRRegisterValue*)GetExpressionByValue(right);
@@ -2669,11 +2685,59 @@ namespace Glass
 
 		if (!TypeSystem::StrictPromotion(right_type, left_type)) {
 			MSG_LOC(binaryExpr);
-			FMT_WARN("incompatible types in assignment: '{}' = '{}'", PrintType(left_type), PrintType(right_type));
+			FMT_WARN("incompatible types in assignment: '{}' {} '{}'", PrintType(left_type), binaryExpr->OperatorToken.Symbol, PrintType(right_type));
 			return nullptr;
 		}
 
 		return CreateIRRegister(result);
+	}
+
+	IRInstruction* Compiler::OpAssignmentCodeGen(const BinaryExpression* binaryExpr)
+	{
+		Operator OPerator;
+
+		switch (binaryExpr->OPerator)
+		{
+
+		case Operator::AddAssign:
+			OPerator = Operator::Add;
+			break;
+		case Operator::SubAssign:
+			OPerator = Operator::Subtract;
+			break;
+		case Operator::MulAssign:
+			OPerator = Operator::Multiply;
+			break;
+		case Operator::DivAssign:
+			OPerator = Operator::Divide;
+			break;
+
+		case Operator::BitAndAssign:
+			OPerator = Operator::BitAnd;
+			break;
+
+		case Operator::BitOrAssign:
+			OPerator = Operator::BitOr;
+			break;
+		default:
+			break;
+		}
+
+		BinaryExpression operation_binary_expression;
+		operation_binary_expression.Left = binaryExpr->Left;
+		operation_binary_expression.Right = binaryExpr->Right;
+		operation_binary_expression.OPerator = OPerator;
+		operation_binary_expression.OperatorToken = binaryExpr->OperatorToken;
+		auto operation = IR(operation_binary_expression);
+
+		BinaryExpression assignment_binary_expression;
+		assignment_binary_expression.Left = binaryExpr->Left;
+		assignment_binary_expression.Right = operation;
+		assignment_binary_expression.OPerator = Operator::Assign;
+		assignment_binary_expression.OperatorToken = binaryExpr->OperatorToken;
+		auto assignment = IR(assignment_binary_expression);
+
+		return AssignmentCodeGen(assignment);
 	}
 
 	IRInstruction* Compiler::FunctionCallCodeGen(const FunctionCall* call)
@@ -2714,7 +2778,7 @@ namespace Glass
 
 			if (!metadata->IsOverloaded()) {
 				if (i < metadata->Arguments.size()) {
-					SetLikelyConstantType(metadata->Arguments[i].Type->BaseID);
+					SetLikelyConstantType(metadata->Arguments[i].Type);
 					m_AutoCastTargetType = metadata->Arguments[i].Type;
 				}
 			}
@@ -2959,7 +3023,7 @@ namespace Glass
 					auto assumed_type = TypeExpressionGetType(call_parameter->Type);
 
 					if (assumed_type) {
-						SetLikelyConstantType(assumed_type->BaseID);
+						SetLikelyConstantType(assumed_type);
 						m_AutoCastTargetType = assumed_type;
 					}
 					else {
@@ -3211,7 +3275,7 @@ namespace Glass
 		node.Val.Int = Value;
 		node.type = NumericLiteral::Type::Int;
 
-		SetLikelyConstantType(IR_u64);
+		SetLikelyConstantType(TypeSystem::GetU64());
 		IRRegisterValue* result = (IRRegisterValue*)NumericLiteralCodeGen(AST(node));
 		ResetLikelyConstantType();
 
@@ -3322,7 +3386,7 @@ namespace Glass
 
 		u64 index = 0;
 		for (auto arg : call->Arguments) {
-			SetLikelyConstantType(((TSFunc*)callee_type)->Arguments[index]->BaseID);
+			SetLikelyConstantType(((TSFunc*)callee_type)->Arguments[index]);
 			auto argument_code = GetExpressionByValue(arg);
 			ResetLikelyConstantType();
 
@@ -3660,6 +3724,10 @@ namespace Glass
 	IRInstruction* Compiler::NullCodeGen()
 	{
 		auto type = TypeSystem::GetVoidPtr();
+
+		if (m_AutoCastTargetType != nullptr) {
+			type = m_AutoCastTargetType;
+		}
 
 		auto null_ptr_register_val = Create_Null(type);
 
@@ -4068,17 +4136,17 @@ namespace Glass
 	{
 		IRCONSTValue* Constant = IR(IRCONSTValue());;
 
-		Constant->Type = integer_base_type;
+		Constant->Constant_Type = TypeSystem::GetBasic(integer_base_type);
 		memcpy(&Constant->Data, &value, sizeof(i64));
 
-		return CreateIRRegister(Constant, TypeSystem::GetBasic(Constant->Type));
+		return CreateIRRegister(Constant, Constant->Constant_Type);
 	}
 
 	IRRegisterValue* Compiler::CreateConstant(u64 base_type, i64 value_integer, double value_float)
 	{
 		IRCONSTValue* Constant = IR(IRCONSTValue());
 
-		Constant->Type = base_type;
+		Constant->Constant_Type = TypeSystem::GetBasic(base_type);
 
 		if (m_Metadata.GetTypeFlags(base_type) & FLAG_FLOATING_TYPE) {
 			memcpy(&Constant->Data, &value_float, sizeof(double));
@@ -4087,7 +4155,7 @@ namespace Glass
 			memcpy(&Constant->Data, &value_integer, sizeof(i64));
 		}
 
-		return CreateIRRegister(Constant, TypeSystem::GetBasic(Constant->Type));
+		return CreateIRRegister(Constant, Constant->Constant_Type);
 	}
 
 	IRRegisterValue* Compiler::CreateCopy(TypeStorage* type, IRRegisterValue* loaded_value)
@@ -4284,7 +4352,7 @@ namespace Glass
 
 			*left_type = m_Metadata.GetExprType((*A)->RegisterID);
 
-			SetLikelyConstantType((*left_type)->BaseID);
+			SetLikelyConstantType((*left_type));
 		}
 
 		if (right->GetType() != NodeType::NumericLiteral) {
@@ -4312,7 +4380,7 @@ namespace Glass
 
 			*right_type = m_Metadata.GetExprType((*B)->RegisterID);
 
-			SetLikelyConstantType((*right_type)->BaseID);
+			SetLikelyConstantType((*right_type));
 		}
 
 		if (*left_type == nullptr) {

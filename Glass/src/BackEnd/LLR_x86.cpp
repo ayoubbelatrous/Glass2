@@ -4096,11 +4096,11 @@ namespace Glass
 
 	void X86_BackEnd::AssembleConstValue(IRCONSTValue* ir_constant)
 	{
-		if (!TypeSystem::IsFlt(TypeSystem::GetBasic(ir_constant->Type))) {
+		if (!TypeSystem::IsFlt(ir_constant->Constant_Type)) {
 			SetRegisterValue(Builder::Constant_Integer(*(i64*)ir_constant->Data), Register_Value_Type::Immediate_Value);
 		}
 		else {
-			auto type_size = TypeSystem::GetTypeSize(TypeSystem::GetBasic(ir_constant->Type));
+			auto type_size = TypeSystem::GetTypeSize(ir_constant->Constant_Type);
 
 			double data = *(double*)ir_constant->Data;
 

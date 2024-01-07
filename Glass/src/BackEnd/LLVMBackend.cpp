@@ -1132,19 +1132,19 @@ namespace Glass
 
 	llvm::Value* LLVMBackend::ConstValueCodeGen(const IRCONSTValue* constant)
 	{
-		auto llvm_Type = GetLLVMType(constant->Type);
+		auto llvm_Type = GetLLVMType(constant->Constant_Type);
 
-		if (m_Metadata->GetTypeFlags(constant->Type) & FLAG_FLOATING_TYPE) {
+		if (TypeSystem::GetTypeFlags(constant->Constant_Type) & FLAG_FLOATING_TYPE) {
 
 			double data = 0;
 			memcpy(&data, &constant->Data, sizeof(double));
 
 			llvm::Type* floatType = nullptr;
 
-			if (constant->Type == IR_float || constant->Type == IR_f32) {
+			if (constant->Constant_Type == TypeSystem::GetBasic(IR_float) || constant->Constant_Type == TypeSystem::GetBasic(IR_f32)) {
 				floatType = llvm::Type::getFloatTy(*m_LLVMContext);
 			}
-			else if (constant->Type == IR_f64) {
+			else if (constant->Constant_Type == TypeSystem::GetBasic(IR_f64)) {
 				floatType = llvm::Type::getDoubleTy(*m_LLVMContext);
 			}
 
@@ -1155,7 +1155,7 @@ namespace Glass
 
 		memcpy(&data, &constant->Data, sizeof(i64));
 
-		bool is_unsigned = m_Metadata->GetTypeFlags(constant->Type) & FLAG_UNSIGNED_TYPE;
+		bool is_unsigned = TypeSystem::GetTypeFlags(constant->Constant_Type) & FLAG_UNSIGNED_TYPE;
 
 		if (is_unsigned) {
 			return llvm::ConstantInt::get(llvm_Type, data, false);

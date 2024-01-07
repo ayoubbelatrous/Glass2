@@ -68,6 +68,14 @@ namespace Glass
 
 		Assign,
 
+		AddAssign,
+		SubAssign,
+		MulAssign,
+		DivAssign,
+
+		BitOrAssign,
+		BitAndAssign,
+
 		Not,
 
 		Equal,

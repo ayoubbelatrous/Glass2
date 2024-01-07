@@ -131,24 +131,57 @@ namespace Glass
 			}
 			else {
 
-				if (accumulator[0] == '=' || accumulator[0] == '!' || accumulator[0] == '<' || accumulator[0] == '>') {
+				auto c = accumulator[0];
+
+				if (c == '=' || c == '!' || c == '<' || c == '>'
+					|| c == '+' || c == '-' || c == '*' || c == '/' || c == '&' || c == '|') {
 					if (accumulator.size() > 1) {
-						if (accumulator == "==") {
+						if (accumulator == "==")
+						{
 							return TokenType::Equal;
 						}
-						if (accumulator == "!=") {
+						else if (accumulator == "!=")
+						{
 							return TokenType::NotEqual;
 						}
-						if (accumulator == ">=") {
+						else if (accumulator == ">=")
+						{
 							return TokenType::GreaterEq;
 						}
-						if (accumulator == "<=") {
+						else if (accumulator == "<=")
+						{
 							return TokenType::LesserEq;
+						}
+
+						else if (accumulator == "+=")
+						{
+							return TokenType::AddAssign;
+						}
+						else if (accumulator == "-=")
+						{
+							return TokenType::SubAssign;
+						}
+						else if (accumulator == "*=")
+						{
+							return TokenType::MulAssign;
+						}
+						else if (accumulator == "/=")
+						{
+							return TokenType::DivAssign;
+						}
+
+						else if (accumulator == "&=")
+						{
+							return TokenType::BitAndAssign;
+						}
+						else if (accumulator == "|=")
+						{
+							return TokenType::BitOrAssign;
 						}
 					}
 				}
 
-				auto it = token_to_type.find(accumulator[0]);
+				auto it = token_to_type.find(c);
 
 				if (it != token_to_type.end()) {
 					return it->second;
@@ -324,7 +357,7 @@ namespace Glass
 						accumulator.push_back(c);
 					}
 
-					if (c == '=' || c == '!' || c == '<' || c == '>') {
+					if (c == '=' || c == '!' || c == '<' || c == '>' || c == '+' || c == '-' || c == '*' || c == '/' || c == '&' || c == '|') {
 						auto next_c = m_Source[location];
 						if (next_c == '=') {
 							double_char_operator_mode = true;

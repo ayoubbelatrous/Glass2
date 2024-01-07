@@ -72,6 +72,7 @@ namespace Glass
 		IRInstruction* StringLiteralCodeGen(const StringLiteral* stringLiteral);
 		IRInstruction* BinaryExpressionCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* AssignmentCodeGen(const BinaryExpression* binaryExpr);
+		IRInstruction* OpAssignmentCodeGen(const BinaryExpression* binaryExpr);
 		IRInstruction* FunctionCallCodeGen(const FunctionCall* call);
 
 		IRInstruction* CallPolyMorphicFunction(const FunctionCall* call);
@@ -360,8 +361,8 @@ namespace Glass
 			m_ConstantIntegerLikelyType = IR_int;
 		}
 
-		u64 GetLikelyConstantIntegerType() {
-			return m_ConstantIntegerLikelyType;
+		TypeStorage* GetLikelyConstantIntegerType() {
+			return TypeSystem::GetBasic(m_ConstantIntegerLikelyType);
 		}
 
 		void SetLikelyConstantFloatType(u64 float_type) {
@@ -372,26 +373,23 @@ namespace Glass
 			m_ConstantFloatLikelyType = IR_float;
 		}
 
-		u64 GetLikelyConstantFloatType() {
-			return m_ConstantFloatLikelyType;
+		TypeStorage* GetLikelyConstantFloatType() {
+			return TypeSystem::GetBasic(m_ConstantFloatLikelyType);
 		}
 
-		void SetLikelyConstantType(u64 type_id) {
-			u64 assignment_type_id = type_id;
-			u64 assignment_type_flags = m_Metadata.GetTypeFlags(assignment_type_id);
+		void SetLikelyConstantType(TypeStorage* type) {
 
-			if (assignment_type_flags & FLAG_NUMERIC_TYPE)
-			{
-				m_ConstantLikelyType = assignment_type_id;
-			}
+			u64 type_flags = TypeSystem::GetTypeFlags(type);
+
+			m_ConstantLikelyType = type;
 		}
 
-		u64 GetLikelyConstantType() {
+		TypeStorage* GetLikelyConstantType() {
 			return m_ConstantLikelyType;
 		}
 
 		void ResetLikelyConstantType() {
-			m_ConstantLikelyType = -1;
+			m_ConstantLikelyType = nullptr;
 			ResetLikelyConstantIntegerType();
 			ResetLikelyConstantFloatType();
 		}
@@ -418,7 +416,7 @@ namespace Glass
 
 		DBGSourceLoc m_CurrentDBGLoc;
 
-		u64 m_ConstantLikelyType = -1;
+		TypeStorage* m_ConstantLikelyType = nullptr;
 		u64 m_ConstantIntegerLikelyType = IR_int;
 		u64 m_ConstantFloatLikelyType = IR_float;
 

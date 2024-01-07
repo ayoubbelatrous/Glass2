@@ -792,7 +792,11 @@ namespace Glass
 		auto is_assignment_op = [](Operator op) -> bool {
 			if (op == Operator::Invalid)
 				return false;
-			if (op == Operator::Assign)
+
+			if (op == Operator::Assign ||
+				op == Operator::AddAssign || op == Operator::SubAssign
+				|| op == Operator::MulAssign || op == Operator::DivAssign
+				|| op == Operator::BitAndAssign || op == Operator::BitOrAssign)
 				return true;
 
 			return false;

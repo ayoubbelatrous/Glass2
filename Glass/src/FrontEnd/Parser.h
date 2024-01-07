@@ -77,11 +77,24 @@ namespace Glass
 			case TokenType::Multiply:
 				return Operator::Multiply;
 				break;
-			case TokenType::Modulo:
-				return Operator::Modulo;
-				break;
 			case TokenType::Divide:
 				return Operator::Divide;
+				break;
+
+			case TokenType::AddAssign:
+				return Operator::AddAssign;
+				break;
+			case TokenType::SubAssign:
+				return Operator::SubAssign;
+				break;
+			case TokenType::MulAssign:
+				return Operator::MulAssign;
+				break;
+			case TokenType::DivAssign:
+				return Operator::DivAssign;
+				break;
+			case TokenType::Modulo:
+				return Operator::Modulo;
 				break;
 			case TokenType::Assign:
 				return Operator::Assign;
@@ -112,6 +125,12 @@ namespace Glass
 				break;
 			case TokenType::Pipe:
 				return Operator::BitOr;
+				break;
+			case TokenType::BitAndAssign:
+				return Operator::BitAndAssign;
+				break;
+			case TokenType::BitOrAssign:
+				return Operator::BitOrAssign;
 				break;
 			case TokenType::Symbol:
 			{
