@@ -43,13 +43,9 @@ namespace Glass
 		case NodeType::SizeOf:
 		case NodeType::AutoCast:
 		case NodeType::Range:
+		case NodeType::TypeOf:
 			PolyExpression((Expression*)stmt);
 			break;
-		case NodeType::TypeOf: {
-			TypeOfNode* type_of = (TypeOfNode*)stmt;
-			PolyExpression(type_of->What);
-		}
-							 break;
 		case NodeType::ArgumentList: {
 			PolyArgumentList((ArgumentList*)stmt);
 		}
@@ -102,7 +98,30 @@ namespace Glass
 			Identifier* as_identifier = (Identifier*)expr;
 			ReplaceIfMatch(as_identifier->Symbol.Symbol, (Expression**)&expr);
 		}
-		return;
+		case NodeType::TE_TypeName: {
+			TypeExpressionTypeName* as_type_name = (TypeExpressionTypeName*)expr;
+			ReplaceIfMatch(as_type_name->Symbol.Symbol, (Expression**)&expr);
+		}
+								  return;
+		case NodeType::TE_Pointer: {
+			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)expr;
+			PolyExpression(as_pointer->Pointee);
+		}
+								 return;
+		case NodeType::TE_Array: {
+			TypeExpressionArray* as_array = (TypeExpressionArray*)expr;
+			PolyExpression(as_array->ElementType);
+		}
+							   return;
+		case NodeType::TE_Func: {
+			TypeExpressionFunc* as_func = (TypeExpressionFunc*)expr;
+			PolyExpression(as_func->ReturnType);
+
+			for (auto type_arg : as_func->Arguments) {
+				PolyExpression(type_arg);
+			}
+		}
+							  return;
 		case NodeType::MemberAccess:
 		{
 		}
@@ -147,6 +166,11 @@ namespace Glass
 			PolyRange(((RangeNode*)expr));
 		}
 							return;
+		case NodeType::TypeOf: {
+			TypeOfNode* type_of = (TypeOfNode*)expr;
+			PolyExpression(type_of->What);
+		}
+							 return;
 		}
 
 		GS_CORE_ASSERT(0);

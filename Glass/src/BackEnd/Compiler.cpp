@@ -597,8 +597,12 @@ namespace Glass
 		for (const Statement* a : fnNode->GetArgList()->GetArguments())
 		{
 			ArgumentNode* parameter = (ArgumentNode*)a;
+
 			poly_morphic |= parameter->PolyMorphic;
-			poly_morphic |= parameter->Type->GetType() == NodeType::TE_Dollar;
+
+			std::vector<TypeExpression*> results;
+			TypeExpressionGetPolyMorphicTypeNames(parameter->Type, results);
+			poly_morphic |= results.size() != 0;
 
 			ASTArguments.push_back(parameter);
 		}
@@ -2995,7 +2999,7 @@ namespace Glass
 			ArgumentNode* call_parameter = metadata->ASTArguments[i];
 			Expression* call_argument = call->Arguments[i];
 
-			if (call_parameter->PolyMorphic) //PlaceHolder until we add proper constants system
+			if (call_parameter->PolyMorphic)
 			{
 				auto argument_value = GetExpressionByValue(call_argument);
 
@@ -3019,7 +3023,14 @@ namespace Glass
 			}
 			else {
 
-				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
+				bool has_dollar_typename = false;
+
+				std::vector<TypeExpression*> dollar_type_names;
+				TypeExpressionGetPolyMorphicTypeNames(call_parameter->Type, dollar_type_names);
+
+				has_dollar_typename = dollar_type_names.size() != 0;
+
+				if (!has_dollar_typename) {
 					auto assumed_type = TypeExpressionGetType(call_parameter->Type);
 
 					if (assumed_type) {
@@ -3033,7 +3044,7 @@ namespace Glass
 
 				auto argument_value = GetExpressionByValue(call_argument);
 
-				if (call_parameter->Type->GetType() != NodeType::TE_Dollar) {
+				if (!has_dollar_typename) {
 					ResetLikelyConstantType();
 					m_AutoCastTargetType = nullptr;
 				}
@@ -3046,9 +3057,60 @@ namespace Glass
 				call_values.push_back(argument_value);
 				call_types.push_back(argument_type);
 
-				if (call_parameter->Type->GetType() == NodeType::TE_Dollar) {
-					TypeExpressionTypeName* polymorphic_selector_name = (TypeExpressionTypeName*)((TypeExpressionDollar*)call_parameter->Type)->TypeName;
-					replacements[polymorphic_selector_name->Symbol.Symbol] = TypeGetTypeExpression(argument_type);
+				if (has_dollar_typename) { // TODO: pattern match for more than one types ($T,$S) Struct($K,$V)
+
+					TypeExpression* decomposed = call_parameter->Type;
+					TypeStorage* matched_type = argument_type;
+
+					while (true)
+					{
+						if (decomposed->GetType() == NodeType::TE_Pointer) {
+							TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)decomposed;
+
+							if (TypeSystem::IndirectionCount(matched_type) < as_pointer->Indirection) {
+								MSG_LOC(call_argument);
+								FMT_WARN("failed to match polymorphic argument: different levels of indirection ({}) <- {}", as_pointer->Indirection, TypeSystem::IndirectionCount(matched_type));
+								MSG_LOC(as_pointer->Pointee);
+								return nullptr;
+							}
+
+							matched_type = TypeSystem::ReduceIndirection((TSPtr*)matched_type, as_pointer->Indirection);
+							decomposed = as_pointer->Pointee;
+						}
+						else if (decomposed->GetType() == NodeType::TE_Dollar) {
+							break;
+						}
+						else if (decomposed->GetType() == NodeType::TE_TypeName) {
+							break;
+						}
+						else if (decomposed->GetType() == NodeType::Identifier) {
+							break;
+						}
+						else if (decomposed->GetType() == NodeType::TE_Func) {
+							GS_CORE_ASSERT(nullptr);
+							return nullptr;
+						}
+						else if (decomposed->GetType() == NodeType::TE_Array) {
+							TypeExpressionArray* as_array = (TypeExpressionArray*)decomposed;
+
+							if (!TypeSystem::IsArray(matched_type)) {
+								MSG_LOC(call_argument);
+								FMT_WARN("failed to match polymorphic argument: needed a dynamic array of this {} instead", PrintType(matched_type));
+								MSG_LOC(as_array->ElementType);
+								return nullptr;
+							}
+
+							decomposed = as_array->ElementType;
+							matched_type = TypeSystem::GetArrayElementTy(matched_type);
+						}
+						else {
+							GS_CORE_ASSERT(nullptr);
+							return nullptr;
+						}
+					}
+
+					TypeExpressionTypeName* polymorphic_selector_name = (TypeExpressionTypeName*)dollar_type_names[0];
+					replacements[polymorphic_selector_name->Symbol.Symbol] = TypeGetTypeExpression(matched_type);
 				}
 			}
 		}
@@ -3088,7 +3150,7 @@ namespace Glass
 		for (auto& [name, expr] : replacements) {
 			auto type = TypeExpressionGetType((TypeExpression*)expr);
 			GS_CORE_ASSERT(type);
-			name_mangling.append(PrintType(type));
+			name_mangling.append(TypeSystem::PrintTypeNoSpecialCharacters(type));
 		}
 
 		ast_copy_as_function->Symbol.Symbol = ast_copy_as_function->Symbol.Symbol + name_mangling;
@@ -3586,13 +3648,9 @@ namespace Glass
 		}
 
 		IRRegister* ir_register = CreateIRRegister();
+		ir_register->Value = IR(IRTypeValue(type_of_type));
 
-		IRTypeOf type_of;
-		type_of.Type = type_of_type;
-
-		ir_register->Value = IR(type_of);
-
-		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetPtr(TypeSystem::GetBasic(IR_typeinfo), 1));
+		m_Metadata.RegExprType(ir_register->ID, TypeSystem::GetType());
 
 		return IR(IRRegisterValue(ir_register->ID));
 	}
@@ -4236,6 +4294,35 @@ namespace Glass
 	TypeStorage* Compiler::TypeExpressionGetType(TypeExpression* type_expr)
 	{
 		return TypeSystem::TypeExpressionGetType(type_expr);
+	}
+
+	void Compiler::TypeExpressionGetPolyMorphicTypeNames(TypeExpression* type_expr, std::vector<TypeExpression*>& results)
+	{
+		if (type_expr->GetType() == NodeType::TE_Pointer) {
+			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)type_expr;
+			TypeExpressionGetPolyMorphicTypeNames(as_pointer->Pointee, results);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Dollar) {
+			TypeExpressionDollar* as_dollar = (TypeExpressionDollar*)type_expr;
+			results.push_back(as_dollar->TypeName);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_TypeName) {
+		}
+
+		if (type_expr->GetType() == NodeType::Identifier) {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Func) {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		if (type_expr->GetType() == NodeType::TE_Array) {
+			TypeExpressionArray* as_array = (TypeExpressionArray*)type_expr;
+			TypeExpressionGetPolyMorphicTypeNames(as_array->ElementType, results);
+		}
 	}
 
 	TypeExpression* Compiler::TypeGetTypeExpression(TypeStorage* type)

@@ -33,10 +33,8 @@ namespace Glass
 		case NodeType::Call:
 		case NodeType::Cast:
 		case NodeType::AutoCast:
-			return CopyExpression((Expression*)stmt);
-			break;
 		case NodeType::TypeOf:
-			return CopyTypeOf((TypeOfNode*)stmt);
+			return CopyExpression((Expression*)stmt);
 			break;
 		case NodeType::ArgumentList:
 			return CopyArgumentList((ArgumentList*)stmt);
@@ -256,6 +254,9 @@ namespace Glass
 			break;
 		case NodeType::NegateExpression:
 			return CopyNegate((NegateExpr*)expr);
+			break;
+		case NodeType::TypeOf:
+			return CopyTypeOf((TypeOfNode*)expr);
 			break;
 		}
 

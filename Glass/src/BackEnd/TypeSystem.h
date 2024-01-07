@@ -92,6 +92,7 @@ namespace Glass {
 
 		static TypeStorage* IncreaseIndirection(TypeStorage* type);
 		static TypeStorage* ReduceIndirection(TSPtr* pointer);
+		static TypeStorage* ReduceIndirection(TSPtr* pointer, u16 level);
 		static u16 IndirectionCount(TypeStorage* type);
 
 		static bool IsFlt(TypeStorage* type);
@@ -131,6 +132,7 @@ namespace Glass {
 		static TypeStorage* GetString();
 
 		static std::string PrintType(TypeStorage* type);
+		static std::string PrintTypeNoSpecialCharacters(TypeStorage* type);
 
 	private:
 

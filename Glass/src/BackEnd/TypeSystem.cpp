@@ -241,6 +241,49 @@ namespace Glass {
 		}
 	}
 
+	std::string TypeSystem::PrintTypeNoSpecialCharacters(TypeStorage* type)
+	{
+		if (type->Kind == TypeStorageKind::Pointer) {
+			auto as_pointer = (TSPtr*)type;
+			std::string stars;
+
+			for (size_t i = 0; i < as_pointer->Indirection; i++) {
+				stars.push_back('p');
+			}
+
+			return fmt::format("{}{}", PrintTypeNoSpecialCharacters(as_pointer->Pointee), stars);
+		}
+
+		if (type->Kind == TypeStorageKind::DynArray) {
+			auto as_array = (TSDynArray*)type;
+			return fmt::format("{}Dyn_Array", PrintTypeNoSpecialCharacters(as_array->ElementType));
+		}
+
+		if (type->Kind == TypeStorageKind::Base) {
+			return m_Instance->m_Metadata.GetType(type->BaseID);
+		}
+
+		if (type->Kind == TypeStorageKind::Function) {
+			auto as_func = (TSFunc*)type;
+
+			std::string arguments;
+			std::string return_type;
+
+			for (size_t i = 0; i < as_func->Arguments.size(); i++) {
+				if (i != 0) {
+					arguments.append("_");
+				}
+				arguments.append(PrintTypeNoSpecialCharacters(as_func->Arguments[i]));
+			}
+
+			if (as_func->ReturnType) {
+				return_type = "rt" + PrintTypeNoSpecialCharacters(as_func->ReturnType);
+			}
+
+			return fmt::format("fn{}{}", arguments, return_type);
+		}
+	}
+
 	TypeStorage* TypeSystem::IncreaseIndirection(TypeStorage* type)
 	{
 		if (type->Kind == TypeStorageKind::Pointer) {
@@ -257,6 +300,18 @@ namespace Glass {
 		GS_CORE_ASSERT(pointer->Kind == TypeStorageKind::Pointer);
 
 		if (pointer->Indirection - 1 != 0) {
+			return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);
+		}
+		else {
+			return pointer->Pointee;
+		}
+	}
+
+	TypeStorage* TypeSystem::ReduceIndirection(TSPtr* pointer, u16 level)
+	{
+		GS_CORE_ASSERT(pointer->Kind == TypeStorageKind::Pointer);
+
+		if (pointer->Indirection - level != 0) {
 			return TypeSystem::GetPtr(pointer->Pointee, pointer->Indirection - 1);
 		}
 		else {

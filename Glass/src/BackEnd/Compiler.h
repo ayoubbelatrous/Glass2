@@ -138,6 +138,7 @@ namespace Glass
 		IRData* CreateIRData();
 
 		TypeStorage* TypeExpressionGetType(TypeExpression* type_expr);
+		void TypeExpressionGetPolyMorphicTypeNames(TypeExpression* type_expr, std::vector<TypeExpression*>& results);
 
 		TypeExpression* TypeGetTypeExpression(TypeStorage* type);
 

@@ -364,24 +364,6 @@ namespace Glass
 				continue;
 			}
 
-			if (tk_type == TokenType::Dollar) {
-
-				if (current) {
-					return current;
-				}
-
-				Consume();
-
-				current = (TypeExpression*)ParseTypeExpr();
-
-				auto dollar = AST(TypeExpressionDollar());
-
-				dollar->TypeName = current;
-				current = dollar;
-
-				continue;
-			}
-
 			if (tk_type == TokenType::OpenBracket) {
 
 				Consume();
@@ -410,6 +392,31 @@ namespace Glass
 				}
 
 				current = AST(array);
+				continue;
+			}
+
+			if (tk_type == TokenType::Dollar) {
+
+				if (current) {
+					return current;
+				}
+
+				Consume();
+
+				if (At().Type == TokenType::Symbol) {
+
+					auto dollar = AST(TypeExpressionDollar());
+
+					TypeExpressionTypeName type_name;
+					type_name.Symbol = Consume();
+
+					dollar->TypeName = IR(type_name);
+					current = dollar;
+				}
+				else {
+					Abort("Expected name after '$', Instead Got:");
+				}
+
 				continue;
 			}
 
