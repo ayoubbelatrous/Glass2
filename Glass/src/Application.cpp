@@ -129,7 +129,8 @@ namespace Glass
 		std::chrono::steady_clock::time_point m_LinkerStart;
 		std::chrono::steady_clock::time_point m_LinkerEnd;
 
-		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst(), !m_Options.NoLink);
+		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst(), !m_Options.NoLink, m_Options.assembler);
+
 		if (compilation_successful)
 		{
 			m_X86Start = std::chrono::high_resolution_clock::now();
@@ -250,6 +251,7 @@ namespace Glass
 		bool modeOutput = false;
 		bool modeCIncludes = false;
 		bool modeCLibs = false;
+		bool modeAssemblerSelect = false;
 
 		bool modal = false;
 
@@ -293,6 +295,9 @@ namespace Glass
 					options.NoLink = true;
 					modal = false;
 				}
+				if (arg == "-asm") {
+					modeAssemblerSelect = true;
+				}
 
 				continue;
 			}
@@ -301,11 +306,31 @@ namespace Glass
 
 				if (modeOutput) {
 					if (FindStringIC(arg, "-")) {
-						FatalAbort(ExitCode::InvalidCommandLineInput, "Expected A Valid Output Path After -o Instead Got Nothing");
+						FatalAbort(ExitCode::InvalidCommandLineInput, "Expected A Valid Output Path After -o");
 					}
 					else {
 						options.Output = arg;
 						modeOutput = false;
+					}
+				}
+
+				if (modeAssemblerSelect) {
+					if (FindStringIC(arg, "-")) {
+						FatalAbort(ExitCode::InvalidCommandLineInput, "Expected A Valid Assembler Name After -asm options are: fasm, clang");
+					}
+					else {
+
+						if (arg == "fasm") {
+							options.assembler = Fasm;
+						}
+						else if (arg == "clang") {
+							options.assembler = Clang_Asm;
+						}
+						else {
+							FatalAbort(ExitCode::InvalidCommandLineInput, fmt::format("unknown assembler selected: {}", arg));
+						}
+
+						modeAssemblerSelect = false;
 					}
 				}
 

@@ -117,16 +117,19 @@ namespace Glass {
 			}
 		}
 
-		size = ((alignment - (offset % alignment)) % alignment) + offset;
+
+		size = offset;
+
+		i64 finalPadding = (alignment - ((size) % alignment)) % alignment;
+		size += finalPadding;
 
 		if (size != 0 && alignment != 0) {
-			size_t finalPadding = (alignment - (size % alignment)) % alignment;
-			size += finalPadding;
-
 			GS_CORE_ASSERT(size % alignment == 0);
 		}
 
-		size = roundToNextPowerOf2(size);
+		if (size == 6) {
+			size = 8;
+		}
 
 		metadata->Size = size;
 		metadata->Alignment = alignment;

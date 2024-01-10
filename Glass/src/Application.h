@@ -17,12 +17,19 @@ namespace Glass
 		C
 	};
 
+	enum CodeGen_Assembler {
+		Fasm = 0,
+		Clang_Asm
+	};
+
 	struct ApplicationOptions {
 
 		std::vector<fs_path> Files;
 		std::string Output;
 		CompilerTargetArch TargetArchitecture = CompilerTargetArch::X86_64;
 		CompilerTarget CompilerTarget = CompilerTarget::C;
+
+		CodeGen_Assembler assembler = CodeGen_Assembler::Fasm;
 
 		bool GenerateDebugInfo = false;
 		bool Verbose = true;

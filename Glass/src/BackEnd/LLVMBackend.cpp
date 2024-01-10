@@ -213,7 +213,6 @@ namespace Glass
 
 			const EnumMetadata& enum_metadata = enum_pair.second;
 
-			//@Speed store enum type id in the enum metadata struct
 			//@Compat this will fail when we add modules
 
 			u64 type_id = m_Metadata->GetType(enum_metadata.Name.Symbol);

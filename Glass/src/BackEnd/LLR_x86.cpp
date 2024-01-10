@@ -8,7 +8,6 @@
 
 namespace Glass
 {
-
 	Assembly_Instruction Builder::Ret()
 	{
 		Assembly_Instruction instruction = {};
@@ -355,74 +354,6 @@ namespace Glass
 		return ASMA(operand);
 	}
 
-	std::unordered_map<X86_Register, std::string> Register_Names = {
-		{X86_Register::RBP,"rbp"},
-		{X86_Register::RSP,"rsp"},
-
-		{X86_Register::AL,"al"},
-		{X86_Register::BL,"bl"},
-		{X86_Register::CL,"cl"},
-		{X86_Register::DL,"dl"},
-		{X86_Register::R8b,"r8b"},
-		{X86_Register::R9b,"r9b"},
-		{X86_Register::R10b,"r10b"},
-		{X86_Register::R11b,"r11b"},
-		{X86_Register::R12b,"r12b"},
-		{X86_Register::R13b,"r13b"},
-		{X86_Register::R14b,"r14b"},
-		{X86_Register::R15b,"r15b"},
-
-
-		{X86_Register::AX,"ax"},
-		{X86_Register::BX,"bx"},
-		{X86_Register::CX,"cx"},
-		{X86_Register::DX,"dx"},
-		{X86_Register::R8w,"r8w"},
-		{X86_Register::R9w,"r9w"},
-		{X86_Register::R10w,"r10w"},
-		{X86_Register::R11w,"r11w"},
-		{X86_Register::R12w,"r12w"},
-		{X86_Register::R13w,"r13w"},
-		{X86_Register::R14w,"r14w"},
-		{X86_Register::R15w,"r15w"},
-
-		{X86_Register::EAX,"eax"},
-		{X86_Register::EBX,"ebx"},
-		{X86_Register::ECX,"ecx"},
-		{X86_Register::EDX,"edx"},
-		{X86_Register::R8d,"r8d"},
-		{X86_Register::R9d,"r9d"},
-		{X86_Register::R10d,"r10d"},
-		{X86_Register::R11d,"r11d"},
-		{X86_Register::R12d,"r12d"},
-		{X86_Register::R13d,"r13d"},
-		{X86_Register::R14d,"r14d"},
-		{X86_Register::R15d,"r15d"},
-
-		{X86_Register::RAX,"rax"},
-		{X86_Register::RBX,"rbx"},
-		{X86_Register::RCX,"rcx"},
-		{X86_Register::RDX,"rdx"},
-		{X86_Register::R8,"r8"},
-		{X86_Register::R9,"r9"},
-		{X86_Register::R10,"r10"},
-		{X86_Register::R11,"r11"},
-		{X86_Register::R12,"r12"},
-		{X86_Register::R13,"r13"},
-		{X86_Register::R14,"r14"},
-		{X86_Register::R15,"r15"},
-
-		{X86_Register::XMM0,"xmm0"},
-		{X86_Register::XMM1,"xmm1"},
-		{X86_Register::XMM2,"xmm2"},
-		{X86_Register::XMM3,"xmm3"},
-		{X86_Register::XMM4,"xmm4"},
-		{X86_Register::XMM5,"xmm5"},
-		{X86_Register::XMM6,"xmm6"},
-		{X86_Register::XMM7,"xmm7"},
-
-	};
-
 	const std::map<std::pair<u64, X86_Register_Family>, X86_Register> register_family_map = {
 		{{1,F_A},AL},
 		{{2,F_A},AX},
@@ -567,8 +498,9 @@ namespace Glass
 		{XMM7,F_X7},
 	};
 
-	X86_BackEnd::X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata, bool use_linker /*= false*/)
-		: m_TranslationUnit(translation_unit), m_Metadata(metadata), Use_Linker(use_linker)
+	X86_BackEnd::X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata, bool use_linker /*= false*/, CodeGen_Assembler assembler /*= CodeGen_Assembler::Fasm*/)
+
+		: m_TranslationUnit(translation_unit), m_Metadata(metadata), Use_Linker(use_linker), assembler(assembler)
 	{
 		Init();
 	}
@@ -965,11 +897,19 @@ namespace Glass
 
 	void X86_BackEnd::Assemble()
 	{
-
 		std::chrono::steady_clock::time_point Start;
 		std::chrono::steady_clock::time_point End;
 
 		Start = std::chrono::high_resolution_clock::now();
+
+		if (assembler == Clang_Asm) {
+			Rip_Relative = true;
+			Use_Linker = true;
+		}
+
+		if (assembler == Fasm) {
+			Rip_Relative = false;
+		}
 
 		AssembleTypeInfoTable();
 
@@ -1003,13 +943,33 @@ namespace Glass
 			}
 		}
 
-		Assembly_File assembly;
+		End = std::chrono::high_resolution_clock::now();
 
-		if (Use_Linker) {
-			assembly.externals = Externals;
-			assembly.output_mode = Assembler_Output_Mode::COFF_Object;
+		GS_CORE_WARN("Assembly Generation Took: {} milli s", std::chrono::duration_cast<std::chrono::milliseconds>(End - Start).count());
+
+		if (!std::filesystem::exists(".build")) {
+			std::filesystem::create_directory(".build");
+		}
+
+		if (assembler == Fasm) {
+			AssembleFasm();
+		}
+		else if (assembler == Clang_Asm) {
+			AssembleClang_Asm();
 		}
 		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+	}
+
+	void X86_BackEnd::AssembleFasm()
+	{
+		Assembly_File assembly;
+
+		assembly.externals = Externals;
+		assembly.output_mode = Assembler_Output_Mode::COFF_Object;
+
+		if (!Use_Linker) {
 			assembly.output_mode = Assembler_Output_Mode::PE_Executable;
 			assembly.libraries = Dynamic_Libraries;
 			assembly.imports = Imports;
@@ -1024,21 +984,16 @@ namespace Glass
 			assembly.functions.push_back(*func);
 		}
 
-		End = std::chrono::high_resolution_clock::now();
-
 		FASM_Printer fasm_printer(&assembly);
-		std::chrono::steady_clock::time_point Print_Start = std::chrono::high_resolution_clock::now();
-		std::string fasm_output = fasm_printer.Print();
-		std::chrono::steady_clock::time_point Print_End = std::chrono::high_resolution_clock::now();
 
-		if (!std::filesystem::exists(".build")) {
-			std::filesystem::create_directory(".build");
-		}
+		std::chrono::steady_clock::time_point Print_Start = std::chrono::high_resolution_clock::now();
+		std::string fasm_printer_output = fasm_printer.Print();
+		std::chrono::steady_clock::time_point Print_End = std::chrono::high_resolution_clock::now();
 
 		std::chrono::steady_clock::time_point Write_Start = std::chrono::high_resolution_clock::now();
 		{
 			auto file_stream = std::ofstream(".build/fasm.s");
-			file_stream << fasm_output;
+			file_stream << fasm_printer_output;
 		}
 		std::chrono::steady_clock::time_point Write_End = std::chrono::high_resolution_clock::now();
 
@@ -1049,6 +1004,7 @@ namespace Glass
 		std::chrono::steady_clock::time_point Fasm_End = std::chrono::high_resolution_clock::now();
 
 		std::chrono::steady_clock::time_point Linker_Start = std::chrono::high_resolution_clock::now();
+
 		if (Use_Linker)
 		{
 			GS_CORE_WARN("Running Linker On Fasm Output");
@@ -1079,13 +1035,42 @@ namespace Glass
 
 		std::chrono::steady_clock::time_point Linker_End = std::chrono::high_resolution_clock::now();
 
-		GS_CORE_WARN("Assembly Generation Took: {} milli s", std::chrono::duration_cast<std::chrono::milliseconds>(End - Start).count());
 		GS_CORE_WARN("FASM Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Fasm_End - Fasm_Start).count());
 		GS_CORE_WARN("Assembly Print Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Print_End - Print_Start).count());
-		//GS_CORE_WARN("Assembly Flush To File Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Write_End - Write_Start).count());
 		if (Use_Linker) {
 			GS_CORE_WARN("Linker Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Linker_End - Linker_Start).count());
 		}
+	}
+
+	void X86_BackEnd::AssembleClang_Asm()
+	{
+		Assembly_File assembly;
+
+		assembly.externals = Externals;
+		assembly.output_mode = Assembler_Output_Mode::COFF_Object;
+
+		assembly.globals = Globals;
+		assembly.floats = Floats;
+		assembly.strings = Strings;
+		assembly.type_info_table = Program_Assembly_TypeInfo_Table;
+
+		for (auto func : Functions) {
+			assembly.functions.push_back(*func);
+		}
+
+		Clang_Assembler_Printer clang_printer(&assembly);
+		std::string clang_printer_output = clang_printer.Print();
+
+		{
+			auto file_stream = std::ofstream(".build/clang.s");
+			file_stream << clang_printer_output;
+		}
+
+		std::chrono::steady_clock::time_point Clang_Start = std::chrono::high_resolution_clock::now();
+		int fasm_result = system("clang .build/clang.s");
+		std::chrono::steady_clock::time_point Clang_End = std::chrono::high_resolution_clock::now();
+
+		GS_CORE_WARN("Clang Assembler Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Clang_End - Clang_Start).count());
 	}
 
 	void X86_BackEnd::AssembleInstruction(IRInstruction* instruction)
@@ -2414,6 +2399,7 @@ namespace Glass
 		auto pointer_register_value_type = GetRegisterValueType(ir_load->AddressRegister);
 
 		if (type_size <= 8) {
+
 			auto loaded_data_register = Allocate_Register(ir_load->Type, CurrentRegister);
 
 			if (pointer_register_value_type == Register_Value_Type::Memory_Value) {
@@ -2433,6 +2419,17 @@ namespace Glass
 
 			auto pointer_type = TypeSystem::GetPtr(ir_load->Type, 1);
 			auto loaded_data_register = Allocate_Register(pointer_type, CurrentRegister);
+
+			if (pointer_register_value_type == Register_Value_Type::Memory_Value) {
+				auto tmp_reg_id = CreateTempRegister(nullptr);
+				auto tmp_reg = Allocate_Register(TypeSystem::GetVoidPtr(), tmp_reg_id);
+				SetRegisterValue(tmp_reg, tmp_reg_id);
+				UseRegisterValue(tmp_reg_id);
+				Code.push_back(Builder::Mov(tmp_reg, pointer_register_value));
+
+				pointer_register_value = tmp_reg;
+			}
+
 			auto lea = Builder::Lea(loaded_data_register, Builder::De_Reference(pointer_register_value, pointer_type));
 			lea.Comment = "Load";
 			Code.push_back(lea);
@@ -3831,7 +3828,17 @@ namespace Glass
 		GS_CORE_ASSERT(global_variable_metadata->Global);
 
 		auto result = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
-		Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::Symbol(global_variable_metadata->Name.Symbol))));
+
+		Assembly_Instruction lea;
+
+		if (Rip_Relative) {
+			lea = Builder::Lea(result, Builder::De_Reference(Builder::OpAdd(Builder::Register(RIP), Builder::Symbol(global_variable_metadata->Name.Symbol))));
+		}
+		else {
+			lea = Builder::Lea(result, Builder::De_Reference(Builder::Symbol(global_variable_metadata->Name.Symbol)));
+		}
+
+		Code.push_back(lea);
 
 		SetRegisterValue(result, CurrentRegister, Register_Value_Type::Register_Value);
 	}
@@ -3864,7 +3871,13 @@ namespace Glass
 			SetRegisterValue(tmp_register, tmp_reg_id);
 			UseRegisterValue(tmp_reg_id);
 
-			Code.push_back(Builder::Lea(tmp_register, Builder::De_Reference(TypeInfo_Table_Label)));
+			if (!Rip_Relative) {
+				Code.push_back(Builder::Lea(tmp_register, Builder::De_Reference(TypeInfo_Table_Label)));
+			}
+			else {
+				Code.push_back(Builder::Lea(tmp_register, Builder::De_Reference(Builder::OpAdd(Builder::Register(RIP), TypeInfo_Table_Label))));
+			}
+
 			Code.push_back(Builder::Add(result, tmp_register));
 		}
 
@@ -4125,7 +4138,14 @@ namespace Glass
 
 		auto address_register = Allocate_Register(TypeSystem::GetVoidPtr(), CurrentRegister);
 
-		auto lea = Builder::Lea(address_register, Builder::De_Reference(data_location));
+		Assembly_Instruction lea;
+
+		if (Rip_Relative) {
+			lea = Builder::Lea(address_register, Builder::De_Reference(Builder::OpAdd(Builder::Register(RIP), data_location)));
+		}
+		else {
+			lea = Builder::Lea(address_register, Builder::De_Reference(data_location));
+		}
 
 		lea.Comment = "load string";
 
@@ -4348,7 +4368,7 @@ namespace Glass
 			if (!used) {
 				used = true;
 
-				X86_Register physical_register = register_family_map.at({ type_size, family });;
+				X86_Register physical_register = register_family_map.at({ type_size, family });
 
 				Register_Allocation allocation = { };
 
@@ -4772,7 +4792,6 @@ namespace Glass
 			for (Assembly_Function& func : Assembly->functions) {
 				stream << "public " << func.Name << '\n';
 			}
-
 		}
 		else if (Assembly->output_mode == Assembler_Output_Mode::PE_Executable) {
 			stream << "format PE64 CONSOLE" << "\n" << "\n";
@@ -4959,7 +4978,7 @@ forward
 				stream << ", ";
 			}
 
-			Intel_Syntax_Printer::PrintOperand(entry.elements[0], stream);
+			intel_syntax_printer.PrintOperand(entry.elements[0], stream);
 		}
 
 		stream << "\n";
@@ -4976,7 +4995,7 @@ forward
 
 			for (size_t j = 0; j < 8; j++)
 			{
-				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
 
 				if (j != 7) {
 					stream << ", ";
@@ -4998,7 +5017,7 @@ forward
 
 			for (size_t j = 0; j < 8; j++)
 			{
-				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
 
 				if (j != 7) {
 					stream << ", ";
@@ -5021,7 +5040,7 @@ forward
 
 			for (size_t j = 0; j < 8; j++)
 			{
-				Intel_Syntax_Printer::PrintOperand(entry.elements[j], stream);
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
 
 				if (j != 7) {
 					stream << ", ";
@@ -5116,288 +5135,6 @@ forward
 		return stream.str();
 	}
 
-	void Intel_Syntax_Printer::PrintOperand(const Assembly_Operand* operand, std::stringstream& stream)
-	{
-		static const std::unordered_map<Assembly_Size, std::string> wordness_map = {
-			{asm_none, ""},
-			{asm_byte,"byte "},
-			{asm_word,"word "},
-			{asm_dword,"dword "},
-			{asm_qword,"qword "},
-		};
-
-		switch (operand->type)
-		{
-		case Op_Register:
-			stream << Register_Names.at(operand->reg.Register);
-			break;
-		case Op_Constant_Integer:
-			stream << operand->constant_integer.integer;
-			break;
-
-		case Op_Sub:
-			PrintOperand(operand->bin_op.operand1, stream);
-			stream << " - ";
-			PrintOperand(operand->bin_op.operand2, stream);
-			break;
-
-		case Op_Add:
-			PrintOperand(operand->bin_op.operand1, stream);
-			stream << " + ";
-			PrintOperand(operand->bin_op.operand2, stream);
-			break;
-
-		case Op_Mul:
-			PrintOperand(operand->bin_op.operand1, stream);
-			stream << " * ";
-			PrintOperand(operand->bin_op.operand2, stream);
-			break;
-
-		case Op_De_Reference:
-			stream << wordness_map.at(operand->de_reference.wordness);
-			stream << '[';
-			PrintOperand(operand->de_reference.operand, stream);
-			stream << ']';
-			break;
-		case Op_Symbol:
-			stream << operand->symbol.symbol;
-			break;
-		default:
-			GS_CORE_ASSERT(nullptr, "Un Implemented Operand Instruction");
-			break;
-		}
-	}
-
-	std::string GetJumpInstructionName(Assembly_Op_Code opcode)
-	{
-		switch (opcode)
-		{
-		case I_Je:   return "je";
-		case I_Jne:  return "jne";
-		case I_Jg:   return "jg";
-		case I_Jl:   return "jl";
-		case I_Jge:  return "jge";
-		case I_Ja:   return "ja";
-		case I_Jb:   return "jb";
-		case I_Jbe:  return "jbe";
-		case I_Jae:  return "jae";
-		case I_Jle:  return "jle";
-		case I_Jmp:  return "jmp";
-		default:     return "unknown_jump";
-		}
-	}
-
-	std::string GetSetInstructionName(Assembly_Op_Code opcode)
-	{
-		switch (opcode)
-		{
-		case I_Setne: return "setne";
-		case I_Sete:  return "sete";
-		case I_Setg:  return "setg";
-		case I_Setl:  return "setl";
-		case I_Seta:  return "seta";
-		case I_Setb:  return "setb";
-		default:      return "unknown_set";
-		}
-	}
-
-	std::string GetSignExtensionInstructionName(Assembly_Op_Code opcode)
-	{
-		switch (opcode)
-		{
-		case I_CBW: return "cbw";
-		case I_CWD: return "cwd";
-		case I_CDQ: return "cdq";
-		case I_CQO: return "cqo";
-		default:    return "unknown_sign_extension";
-		}
-	}
-
-	std::string GetFloatingPointInstructionName(Assembly_Op_Code opcode, const std::string& baseName)
-	{
-		switch (opcode)
-		{
-		case I_UCOMISS: return baseName + "s";
-		case I_UCOMISD: return baseName + "d";
-		default:        return "unknown_floating_point";
-		}
-	}
-
-	void PrintArithmeticInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
-	{
-		switch (opcode)
-		{
-		case I_Add:   stream << "add "; break;
-		case I_AddSS: stream << "addss "; break;
-		case I_AddSD: stream << "addsd "; break;
-		case I_Sub:   stream << "sub "; break;
-		case I_SubSS: stream << "subss "; break;
-		case I_SubSD: stream << "subsd "; break;
-		case I_IDiv:  stream << "idiv "; break;
-		case I_Div:   stream << "div "; break;
-		case I_IMul:  stream << "imul "; break;
-		case I_MulSS: stream << "mulss "; break;
-		case I_MulSD: stream << "mulsd "; break;
-		case I_DivSS: stream << "divss "; break;
-		case I_DivSD: stream << "divsd "; break;
-		default:      stream << "unknown_arithmetic "; break;
-		}
-		Intel_Syntax_Printer::PrintOperand(&op1, stream);
-		if (opcode != I_IDiv && opcode != I_Div)
-		{
-			stream << ", ";
-			Intel_Syntax_Printer::PrintOperand(&op2, stream);
-		}
-	}
-
-	void PrintMoveInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
-	{
-		switch (opcode)
-		{
-		case I_Mov:   stream << "mov "; break;
-		case I_MovD:  stream << "movd "; break;
-		case I_MovQ:  stream << "movq "; break;
-		case I_MovSS: stream << "movss "; break;
-		case I_MovSD: stream << "movsd "; break;
-		case I_MovZX: stream << "movzx "; break;
-		case I_MovSX: stream << "movsx "; break;
-		case I_MovSXD: stream << "movsxd "; break;
-		case I_Lea:   stream << "lea "; break;
-		case I_CvtSI2SS: stream << "cvtsi2ss "; break;
-		case I_CvtSI2SD: stream << "cvtsi2sd "; break;
-		case I_CvtSS2SI: stream << "cvtss2si "; break;
-		case I_CvtSD2SI: stream << "cvtsd2si "; break;
-		case I_CvtSS2SD: stream << "cvtss2sd "; break;
-		case I_CvtSD2SS: stream << "cvtsd2ss "; break;
-		default:        stream << "unknown_move "; break;
-		}
-		Intel_Syntax_Printer::PrintOperand(&op1, stream);
-		stream << ", ";
-		Intel_Syntax_Printer::PrintOperand(&op2, stream);
-	}
-
-	void PrintComparisonInstruction(Assembly_Op_Code opcode, std::stringstream& stream, const Assembly_Operand& op1, const Assembly_Operand& op2)
-	{
-		switch (opcode)
-		{
-		case I_Cmp: stream << "cmp "; break;
-		case I_And: stream << "and "; break;
-		case I_Or:  stream << "or "; break;
-		default:    stream << "unknown_comparison "; break;
-		}
-		Intel_Syntax_Printer::PrintOperand(&op1, stream);
-		stream << ", ";
-		Intel_Syntax_Printer::PrintOperand(&op2, stream);
-	}
-
-	void Intel_Syntax_Printer::PrintInstruction(const Assembly_Instruction& instruction, std::stringstream& stream)
-	{
-		switch (instruction.OpCode)
-		{
-		case I_Label:
-			PrintOperand(instruction.Operand1, stream);
-			stream << ':';
-			break;
-		case I_Je:
-		case I_Jne:
-		case I_Jg:
-		case I_Jl:
-		case I_Jge:
-		case I_Ja:
-		case I_Jb:
-		case I_Jbe:
-		case I_Jae:
-		case I_Jle:
-		case I_Jmp:
-			stream << GetJumpInstructionName(instruction.OpCode) << " ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Add:
-		case I_AddSS:
-		case I_AddSD:
-		case I_Sub:
-		case I_SubSS:
-		case I_SubSD:
-		case I_IDiv:
-		case I_Div:
-		case I_IMul:
-		case I_MulSS:
-		case I_MulSD:
-		case I_DivSS:
-		case I_DivSD:
-			PrintArithmeticInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
-			break;
-
-		case I_Mov:
-		case I_MovD:
-		case I_MovQ:
-		case I_MovSS:
-		case I_MovSD:
-		case I_MovZX:
-		case I_MovSX:
-		case I_MovSXD:
-		case I_Lea:
-		case I_CvtSI2SS:
-		case I_CvtSI2SD:
-		case I_CvtSS2SI:
-		case I_CvtSD2SI:
-		case I_CvtSS2SD:
-		case I_CvtSD2SS:
-			PrintMoveInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
-			break;
-
-		case I_Cmp:
-		case I_And:
-		case I_Or:
-			PrintComparisonInstruction(instruction.OpCode, stream, *instruction.Operand1, *instruction.Operand2);
-			break;
-
-		case I_Setne:
-		case I_Sete:
-		case I_Setg:
-		case I_Setl:
-		case I_Seta:
-		case I_Setb:
-			stream << GetSetInstructionName(instruction.OpCode) << " ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-
-		case I_Push:
-			stream << "push ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-		case I_Pop:
-			stream << "pop ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-		case I_Ret:
-			stream << "ret";
-			break;
-		case I_Call:
-			stream << "call ";
-			PrintOperand(instruction.Operand1, stream);
-			break;
-		case I_CBW:
-		case I_CWD:
-		case I_CDQ:
-		case I_CQO:
-			stream << GetSignExtensionInstructionName(instruction.OpCode);
-			break;
-
-		case I_UCOMISS:
-		case I_UCOMISD:
-			stream << GetFloatingPointInstructionName(instruction.OpCode, "ucomis") << " ";
-			PrintOperand(instruction.Operand1, stream);
-			stream << ", ";
-			PrintOperand(instruction.Operand2, stream);
-			break;
-		default:
-			GS_CORE_ASSERT(nullptr, "Unimplemented Assembly Instruction");
-			break;
-		}
-	}
-
 	void FASM_Printer::PrintCode(std::stringstream& stream)
 	{
 		stream << "\n";
@@ -5413,12 +5150,224 @@ forward
 					stream << "\t";
 				}
 
-				Intel_Syntax_Printer::PrintInstruction(code, stream);
+				intel_syntax_printer.PrintInstruction(code, stream);
 
 				if (code.Comment) {
 					stream << "\t; ";
 					stream << code.Comment;
 				}
+
+				stream << "\n";
+			}
+			stream << "\n";
+			stream << "\n";
+		}
+	}
+
+	Clang_Assembler_Printer::Clang_Assembler_Printer(Assembly_File* assembly)
+		:Assembly(assembly)
+	{
+		intel_syntax_printer.dot_at_label = false;
+		intel_syntax_printer.ptr_at_deref = true;
+	}
+
+	std::string Clang_Assembler_Printer::Print()
+	{
+		std::stringstream stream;
+
+		if (Assembly->output_mode == Assembler_Output_Mode::COFF_Object) {
+
+		}
+		else {
+			GS_CORE_ASSERT(nullptr);
+		}
+
+		for (Assembly_Function& func : Assembly->functions) {
+			stream << ".def " << func.Name << '\n';
+			stream << ".scl  2\n";
+			stream << ".type 32;\n";
+			stream << ".endef\n";
+
+			stream << ".globl " << func.Name << '\n';
+			stream << '\n';
+		}
+
+		stream << ".addrsig\n";			// emit address significance table
+
+		for (Assembly_External_Symbol external : Assembly->externals) {
+			stream << ".addrsig_sym " << external.ExternalName << '\n';
+		}
+
+		//@Strings
+		stream << ".section	.rdata,\"dr\"\n";			// readonly data section
+		for (Assembly_String_Constant& constant_string : Assembly->strings) {
+			stream << "str_" << constant_string.id << ":\n";
+
+			stream << ".asciz \"" << constant_string.value << "\"\n";
+		}
+
+		//@TypeInfo
+		stream << Assembly->type_info_table.External_Func_Type_Parameters_Array_Name << ":\n";
+		stream << ".quad ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Func_Type_Parameters_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Func_Type_Parameters_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			intel_syntax_printer.PrintOperand(entry.elements[0], stream);
+		}
+
+		stream << "\n";
+
+		stream << Assembly->type_info_table.External_Enum_Members_Array_Name << ":\n";
+		stream << ".quad ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Enum_Members_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Enum_Members_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
+		stream << Assembly->type_info_table.External_Members_Array_Name << ":\n";
+		stream << ".quad ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Members_Array.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Members_Array[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
+
+		stream << Assembly->type_info_table.External_Variable_Name << ":\n";
+		stream << ".quad ";
+
+		for (size_t i = 0; i < Assembly->type_info_table.Entries.size(); i++)
+		{
+			auto& entry = Assembly->type_info_table.Entries[i];
+
+			if (i != 0) {
+				stream << ", ";
+			}
+
+			for (size_t j = 0; j < 8; j++)
+			{
+				intel_syntax_printer.PrintOperand(entry.elements[j], stream);
+
+				if (j != 7) {
+					stream << ", ";
+				}
+			}
+		}
+
+		stream << "\n";
+
+		//@Globals
+		for (Assembly_Global& global : Assembly->globals) {
+			if (global.Initializer.Type == Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << "\n.bss\n";
+				break;
+			}
+		}
+
+		for (Assembly_Global& global : Assembly->globals) {
+
+			GS_CORE_ASSERT(global.Allocation_Size);
+
+			if (global.Initializer.Type == Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << global.Name << ":\n";
+				stream << ".zero " << global.Allocation_Size << '\n';
+			}
+		}
+
+		for (Assembly_Global& global : Assembly->globals) {
+			if (global.Initializer.Type != Assembly_Global_Initializer_Type::Zero_Initilizer) {
+				stream << "\n.data\n";
+				break;
+			}
+		}
+
+		for (Assembly_Global& global : Assembly->globals) {
+
+			GS_CORE_ASSERT(global.Allocation_Size);
+
+			if (global.Initializer.Type != Assembly_Global_Initializer_Type::Zero_Initilizer) {
+
+				stream << global.Name << ":\n";
+
+				if (global.Initializer.Type == Assembly_Global_Initializer_Type::Bytes_Initilizer) {
+
+					stream << ".byte ";
+
+					for (size_t i = 0; i < global.Initializer.Initializer_Data.size(); i++)
+					{
+						stream << fmt::format("{}", global.Initializer.Initializer_Data[i]);
+
+						if (i != global.Initializer.Initializer_Data.size() - 1) {
+							stream << ", ";
+						}
+					}
+					stream << "\n";
+				}
+				else {
+					GS_CORE_ASSERT(nullptr);
+				}
+			}
+		}
+
+
+		PrintCode(stream);
+
+		return stream.str();
+	}
+
+	void Clang_Assembler_Printer::PrintCode(std::stringstream& stream)
+	{
+		stream << "\n";
+		stream << ".text\n";
+		stream << "\n";
+		stream << ".p2align	4, 0x90\n"; // align 16 with 0x90 (nop)
+		stream << ".intel_syntax noprefix\n";
+
+		for (Assembly_Function& asm_function : Assembly->functions) {
+			stream << asm_function.Name << ":" << "\n";
+
+			for (auto& code : asm_function.Code) {
+
+				if (code.OpCode != I_Label) {
+					stream << "\t";
+				}
+
+				intel_syntax_printer.PrintInstruction(code, stream);
 
 				stream << "\n";
 			}

@@ -525,9 +525,6 @@ namespace Glass
 		if (At().Type != TokenType::SemiColon) {
 			Node.Expr = ParseExpression();
 		}
-		else {
-			Consume();
-		}
 
 		return Application::AllocateAstNode(Node);
 	}
