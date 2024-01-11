@@ -13,6 +13,8 @@
 
 #include "BackEnd/LLR_X86.h"
 
+#include "FrontEnd/Frontend.h";
+
 namespace Glass
 {
 	Application::Application(const CommandLineArgs& CmdLineArgs)
@@ -27,186 +29,28 @@ namespace Glass
 			FatalAbort(ExitCode::InvalidCommandLineInput, "No Input Source Files!");
 		}
 
-		if (m_Options.Verbose) {
-			for (auto& file : m_Options.Files) {
-				GS_CORE_INFO("Compiling: {}", file);
-			}
-		}
+		Front_End front_end = Front_End(m_Options);
+		front_end.Compile();
 
+		for (size_t i = 0; i < front_end.Data.Messages.size(); i++)
 		{
-			auto compiler_files = GenerateCompilationFiles(m_Options.Files);
+			Front_End_Message& message = front_end.Data.Messages[i];
 
-			for (CompilerFile& comp_file : compiler_files) {
-				m_Sources[comp_file.GetID()] = comp_file;
-			}
-		}
-
-		{
-			m_LexerStart = std::chrono::high_resolution_clock::now();
-			for (auto& [id, comp_file] : m_Sources)
+			switch (message.Message_Type)
 			{
-				Lexer lexer(comp_file.GetSource(), comp_file.GetPath());
-
-				comp_file.SetTokens(lexer.Lex());
+			case Message_Error:
+				GS_CORE_ERROR("{}", message.Message);
+				break;
+			case Message_Warning:
+				GS_CORE_WARN("{}", message.Message);
+				break;
+			case Message_Info:
+				GS_CORE_INFO("{}", message.Message);
+				break;
+			default:
+				GS_CORE_ASSERT(nullptr, "un reachable!");
+				break;
 			}
-			m_LexerEnd = std::chrono::high_resolution_clock::now();
-		}
-		{
-			m_ParserStart = std::chrono::high_resolution_clock::now();
-			for (auto& [id, comp_file] : m_Sources)
-			{
-				Parser parser(comp_file);
-				auto ast = parser.CreateAST();
-
-				comp_file.SetAST(ast);
-			}
-			m_ParserEnd = std::chrono::high_resolution_clock::now();
-		}
-
-		std::vector<CompilerFile*> compiler_files;
-
-		for (auto& [id, comp_file] : m_Sources)
-		{
-			compiler_files.push_back(&comp_file);
-		}
-
-		Compiler compiler(compiler_files);
-
-		IRTranslationUnit* code;
-
-		bool compilation_successful = true;
-
-		{
-			m_CompilerStart = std::chrono::high_resolution_clock::now();
-			code = compiler.CodeGen();
-			m_CompilerEnd = std::chrono::high_resolution_clock::now();
-
-			if (m_Options.DumpIR)
-			{
-				for (const auto inst : code->Instructions) {
-					std::string inst_string = inst->ToString();
-					GS_CORE_INFO("\n" + inst_string);
-				}
-			}
-
-			for (const CompilerMessage& msg : compiler.GetMessages()) {
-
-				MessageType Type = msg.Type;
-
-				if (Type == MessageType::Error) {
-					compilation_successful = false;
-				}
-
-				switch (Type)
-				{
-				case MessageType::Info:
-					GS_CORE_INFO(msg.message);
-					break;
-				case MessageType::Warning:
-					GS_CORE_WARN(msg.message);
-					break;
-				case MessageType::Error:
-					GS_CORE_ERROR(msg.message);
-					break;
-				default:
-					break;
-				}
-			}
-		}
-
-		if (!m_Options.DumpIR) {
-			GS_CORE_INFO("IR Generation Done");
-		}
-
-		bool llvm = false;
-
-		std::chrono::steady_clock::time_point m_LLVMStart;
-		std::chrono::steady_clock::time_point m_LLVMEnd;
-
-		std::chrono::steady_clock::time_point m_X86Start;
-		std::chrono::steady_clock::time_point m_X86End;
-
-		std::chrono::steady_clock::time_point m_LinkerStart;
-		std::chrono::steady_clock::time_point m_LinkerEnd;
-
-		X86_BackEnd x86_backend = X86_BackEnd(code, &compiler.GetMetadataNonConst(), !m_Options.NoLink, m_Options.assembler);
-
-		if (compilation_successful)
-		{
-			m_X86Start = std::chrono::high_resolution_clock::now();
-			x86_backend.Assemble();
-			m_X86End = std::chrono::high_resolution_clock::now();
-		}
-
-
-		GS_CORE_WARN("Lines Processed: {}", g_LinesProcessed);
-		GS_CORE_WARN("IR Generation Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_CompilerEnd - m_CompilerStart).count());
-		GS_CORE_WARN("X86_64 Backend Total Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(m_X86End - m_X86Start).count());
-
-		if (llvm && compilation_successful)
-		{
-			LLVMBackend llvm_backend = LLVMBackend(&compiler.GetMetadata(), code);
-
-			m_LLVMStart = std::chrono::high_resolution_clock::now();
-			llvm_backend.Compile();
-			m_LLVMEnd = std::chrono::high_resolution_clock::now();
-
-			std::string libraries_cmd;
-
-			for (auto& library : m_Options.CLibs) {
-
-				auto lib_as_path = fs_path(library);
-
-				if (lib_as_path.extension().empty()) {
-					libraries_cmd += "-l" + library + ' ';
-				}
-				else {
-					libraries_cmd += library + ' ';
-				}
-			}
-
-			std::string input_name = "output.obj";
-			std::string exe_name = "a.exe";
-			std::string output_type = "";
-			std::string output_name = "a.exe";
-
-			std::string linker_cmd;
-
-			if (m_Options.OutputDll) {
-				output_type = "-shared";
-				output_name = "a.dll";
-			}
-
-			//linker_cmd = fmt::format("ld.exe {} -lmsvcrt {} -o a.exe", input_name, libraries);
-			linker_cmd = fmt::format("clang.exe -g {} {} {} -o {}", output_type, input_name, libraries_cmd, output_name);
-
-			if (!m_Options.NoLink && llvm)
-			{
-				GS_CORE_WARN("Running: {}", linker_cmd);
-
-				m_LinkerStart = std::chrono::high_resolution_clock::now();
-				int lnk_result = system(linker_cmd.c_str());
-				m_LinkerEnd = std::chrono::high_resolution_clock::now();
-
-				if (lnk_result != 0) {
-					GS_CORE_ERROR("Error: During Execution of Command");
-				}
-				else {
-					GS_CORE_WARN("CodeGen Done: {}", linker_cmd);
-					if (m_Options.Run) {
-
-						GS_CORE_INFO("Running: {}", exe_name);
-						int run_result = system(exe_name.c_str());
-
-						if (run_result != 0) {
-							GS_CORE_ERROR("Execution Of Program Existed With Code: {}", run_result);
-						}
-					}
-				}
-			}
-
-			GS_CORE_WARN("LLVM Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LLVMEnd - m_LLVMStart).count());
-			GS_CORE_WARN("Linker Took: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(m_LinkerEnd - m_LinkerStart).count());
 		}
 	}
 
