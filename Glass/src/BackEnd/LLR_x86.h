@@ -8,6 +8,52 @@
 
 namespace Glass
 {
+	struct DIE_CU {
+		u16 FileName_Str_Idx;
+		u16 Directory_Str_Idx;
+		u16 CompilerName_Str_Idx;
+	};
+
+	struct DIE_File {
+		std::string FileName;
+		std::string Directory;
+	};
+
+	struct DIE_Procedure {
+		u16 Name_Str_Idx;
+		TSFunc* Signature = nullptr;
+
+		DBGSourceLoc Definition_Src_Loc;
+
+		DBGSourceLoc Begin_Src_Loc;
+		DBGSourceLoc End_Src_Loc;
+		u32 End_Prologue_Inst_Idx = -1;
+		u32 Begin_Epilogue_Inst_Idx = -1;
+
+		u16 File_Idx = -1;
+		u16 Function_Idx = -1;
+		std::vector<DBGSourceLoc> Inst_Line_Table;
+		i32	Last_Inst = 0;
+	};
+
+	struct Debug_Info {
+		DIE_CU Compile_Unit;
+		std::vector<DIE_File> Files;
+		std::vector<DIE_Procedure> Procedures;
+		std::vector<std::string> String_Table;
+		u16 Current_File_Idx = -1;
+		u16 Current_Procedure_Idx = -1;
+	};
+
+	struct Debug_Info_Builder {
+		static void Build_Compile_Unit(Debug_Info& di, const std::string& name, const std::string& directory, const std::string& compiler_name);
+		static u16 Build_File(Debug_Info& di, const std::string& name, const std::string& directory);
+		static u16 Build_Procedure(Debug_Info& di, u16 function_idx, const std::string& name, DBGSourceLoc def_loc, DBGSourceLoc begin_loc, DBGSourceLoc end_loc);
+		static u16 Build_String(Debug_Info& di, const std::string& str);
+		static void Set_Location(Debug_Info& di, DBGSourceLoc location, i32 inst_idx);
+		static void Finalize_Procedure(Debug_Info& di, i32 inst_idx);
+	};
+
 	struct FASM_Printer {
 
 		FASM_Printer(Assembly_File* assembly);
@@ -23,11 +69,16 @@ namespace Glass
 	struct Clang_Assembler_Printer {
 
 		Clang_Assembler_Printer(Assembly_File* assembly);
+		Clang_Assembler_Printer(Assembly_File* assembly, Debug_Info debug_info);
 
 		std::string Print();
 		void PrintCode(std::stringstream& stream);
+		void PrintDebugInfo(std::stringstream& stream);
 
 		Assembly_File* Assembly = nullptr;
+
+		bool Build_Debug_Info = false;
+		Debug_Info Di;
 
 		Intel_Syntax_Printer intel_syntax_printer;
 	};
@@ -377,5 +428,8 @@ namespace Glass
 		bool Rip_Relative = true;
 
 		CodeGen_Assembler assembler = CodeGen_Assembler::Fasm;
+
+		bool Debug = true;
+		Debug_Info di;
 	};
 }

@@ -930,11 +930,13 @@ namespace Glass
 		IRF->ID = m_Metadata.GetFunctionMetadata(fnNode->Symbol.Symbol);
 		auto metadata = m_Metadata.GetFunctionMetadata(IRF->ID);
 
-
 		if (!metadata)
 			return nullptr;
 
 		m_Metadata.m_CurrentFunction = IRF->ID;
+
+		IRF->body_begin = DBGSourceLoc(fnNode->GetScope()->OpenCurly.Line + 1, fnNode->GetScope()->OpenCurly.Begin + 1);
+		IRF->body_end = DBGSourceLoc(fnNode->GetScope()->CloseCurly.Line + 1, fnNode->GetScope()->CloseCurly.Begin + 1);
 
 		if (metadata->PolyMorphic) {
 			return IRF;
@@ -1368,6 +1370,7 @@ namespace Glass
 
 		ret.Value = expr;
 		ret.Type = expr_type;
+		ret.DBG_Location = m_CurrentDBGLoc;
 
 		if (!ret.Type) {
 			ret.Type = TypeSystem::GetVoid();
@@ -2335,6 +2338,7 @@ namespace Glass
 					call->FuncID = op_func_id;
 					call->Arguments.push_back(A);
 					call->Arguments.push_back(B);
+					call->Source_Location = m_CurrentDBGLoc;
 
 					GS_CORE_ASSERT(left_type);
 					GS_CORE_ASSERT(right_type);
@@ -2772,6 +2776,7 @@ namespace Glass
 
 		IRFunctionCall ir_call;
 		ir_call.FuncID = IRF;
+		ir_call.Source_Location = m_CurrentDBGLoc;
 
 		std::vector<IRRegisterValue*> argumentValueRefs;
 		std::vector<TypeStorage*> argumentTypes;
@@ -3128,10 +3133,10 @@ namespace Glass
 			auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 			if (call_return_type != TypeSystem::GetVoid()) {
-				return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID)), call_return_type);
+				return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID, m_CurrentDBGLoc)), call_return_type);
 			}
 
-			return IR(IRFunctionCall(call_values, call_types, ir_func->ID));
+			return IR(IRFunctionCall(call_values, call_types, ir_func->ID, m_CurrentDBGLoc));
 		}
 
 		ASTCopier copier(metadata->Ast);
@@ -3184,16 +3189,17 @@ namespace Glass
 
 		metadata->PolyMorphicInstantiations.emplace(PolymorphicOverload{ replacements }, ir_func);
 
-
 		//Calling
+
+		RegisterDBGLoc(call);
 
 		auto call_return_type = m_Metadata.GetFunctionMetadata(ir_func->ID)->ReturnType;
 
 		if (call_return_type != TypeSystem::GetVoid()) {
-			return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID)), call_return_type);
+			return CreateIRRegister(IR(IRFunctionCall(call_values, call_types, ir_func->ID, m_CurrentDBGLoc)), call_return_type);
 		}
 
-		return IR(IRFunctionCall(call_values, call_types, ir_func->ID));
+		return IR(IRFunctionCall(call_values, call_types, ir_func->ID, m_CurrentDBGLoc));
 	}
 
 	IRInstruction* Compiler::MemberAccessCodeGen(const MemberAccess* memberAccess)

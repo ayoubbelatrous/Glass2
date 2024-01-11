@@ -796,6 +796,8 @@ namespace Glass
 		TypeStorage* Type = 0;
 		IRInstruction* Value = nullptr;
 
+		DBGSourceLoc DBG_Location;
+
 		virtual std::string ToString() const override {
 			std::string str;
 			return str;
@@ -812,6 +814,9 @@ namespace Glass
 		TypeStorage* Overload = nullptr;
 		std::vector<IRRegister*> Arguments;
 		std::vector<IRInstruction*> Instructions;
+
+		DBGSourceLoc body_begin;
+		DBGSourceLoc body_end;
 
 		virtual std::string ToString() const override
 		{
@@ -873,6 +878,8 @@ namespace Glass
 		std::vector<IRInstruction*> Arguments;
 		std::vector<TypeStorage*> ArgumentTypes;
 
+		DBGSourceLoc Source_Location;
+
 		IRFunctionCall() = default;
 
 		IRFunctionCall(std::vector<IRInstruction*> arguments, u64 funcID)
@@ -880,8 +887,8 @@ namespace Glass
 		{
 		}
 
-		IRFunctionCall(std::vector<IRInstruction*> arguments, std::vector<TypeStorage*> types, u64 funcID)
-			:Arguments(arguments), ArgumentTypes(types), FuncID(funcID)
+		IRFunctionCall(std::vector<IRInstruction*> arguments, std::vector<TypeStorage*> types, u64 funcID, DBGSourceLoc source_location)
+			:Arguments(arguments), ArgumentTypes(types), FuncID(funcID), Source_Location(source_location)
 		{
 		}
 

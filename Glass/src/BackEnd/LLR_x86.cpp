@@ -2,9 +2,7 @@
 
 #include "BackEnd/LLR_x86.h"
 #include "BackEnd/TypeSystem.h"
-
-#include "math.h"
-#include <Windows.h>
+#include "BackEnd/Dwarf.h"
 
 namespace Glass
 {
@@ -498,6 +496,103 @@ namespace Glass
 		{XMM7,F_X7},
 	};
 
+	u16 Debug_Info_Builder::Build_String(Debug_Info& di, const std::string& str)
+	{
+		di.String_Table.push_back(str);
+		return (u16)(di.String_Table.size() - 1);
+	}
+
+	void Debug_Info_Builder::Build_Compile_Unit(Debug_Info& di, const std::string& name, const std::string& directory, const std::string& compiler_name)
+	{
+		auto name_idx = Build_String(di, name);
+		auto directory_idx = Build_String(di, directory);
+		auto compiler_idx = Build_String(di, compiler_name);
+
+		di.Compile_Unit.FileName_Str_Idx = name_idx;
+		di.Compile_Unit.Directory_Str_Idx = directory_idx;
+		di.Compile_Unit.CompilerName_Str_Idx = compiler_idx;
+	}
+
+	u16 Debug_Info_Builder::Build_File(Debug_Info& di, const std::string& name, const std::string& directory)
+	{
+		DIE_File file;
+		file.FileName = name;
+		file.Directory = directory;
+
+		di.Files.push_back(file);
+
+		di.Current_File_Idx = (u16)(di.Files.size() - 1); // indices start from 1
+		return di.Current_File_Idx;
+	}
+
+	u16 Debug_Info_Builder::Build_Procedure(Debug_Info& di, u16 function_idx, const std::string& name, DBGSourceLoc def_loc, DBGSourceLoc begin_loc, DBGSourceLoc end_loc)
+	{
+		auto name_idx = Build_String(di, name);
+
+		DIE_Procedure proc = {};
+		proc.Name_Str_Idx = name_idx;
+		proc.Definition_Src_Loc = def_loc;
+		proc.Begin_Src_Loc = begin_loc;
+		proc.End_Src_Loc = end_loc;
+		proc.File_Idx = di.Current_File_Idx;
+		proc.Function_Idx = function_idx;
+
+		di.Procedures.push_back(proc);
+
+		di.Current_Procedure_Idx = (u16)(di.Procedures.size() - 1);
+		return di.Current_Procedure_Idx;
+	}
+
+	void Debug_Info_Builder::Set_Location(Debug_Info& di, DBGSourceLoc location, i32 inst_idx)
+	{
+		DIE_Procedure& proc = di.Procedures[di.Current_Procedure_Idx];
+
+		DBGSourceLoc last;
+
+		if (proc.Inst_Line_Table.size() != 0) {
+			last = proc.Inst_Line_Table[proc.Last_Inst];
+		}
+		else {
+			last = proc.Begin_Src_Loc;
+		}
+
+		proc.Inst_Line_Table.resize(inst_idx + 1);
+
+		for (i32 i = 0; i < inst_idx - proc.Last_Inst; i++)
+		{
+			proc.Inst_Line_Table[i + proc.Last_Inst] = last;
+		}
+
+		if (proc.Inst_Line_Table.size() != 0) {
+			proc.Inst_Line_Table[inst_idx] = location;
+		}
+
+		proc.Last_Inst = inst_idx;
+	}
+
+	void Debug_Info_Builder::Finalize_Procedure(Debug_Info& di, i32 inst_idx)
+	{
+		DIE_Procedure& proc = di.Procedures[di.Current_Procedure_Idx];
+
+		DBGSourceLoc last;
+
+		if (proc.Inst_Line_Table.size() != 0) {
+			last = proc.Inst_Line_Table[proc.Last_Inst];
+		}
+		else {
+			last = proc.Begin_Src_Loc;
+		}
+
+		proc.Inst_Line_Table.resize(inst_idx);
+
+		for (i32 i = 0; i < inst_idx - proc.Last_Inst; i++)
+		{
+			proc.Inst_Line_Table[i + proc.Last_Inst] = last;
+		}
+
+		proc.Last_Inst = inst_idx;
+	}
+
 	X86_BackEnd::X86_BackEnd(IRTranslationUnit* translation_unit, MetaData* metadata, bool use_linker /*= false*/, CodeGen_Assembler assembler /*= CodeGen_Assembler::Fasm*/)
 
 		: m_TranslationUnit(translation_unit), m_Metadata(metadata), Use_Linker(use_linker), assembler(assembler)
@@ -911,6 +1006,10 @@ namespace Glass
 			Rip_Relative = false;
 		}
 
+		if (Debug) {
+			Debug_Info_Builder::Build_Compile_Unit(di, "B.glass", "F:/dev/Glass2", "Glass Compiler Pre-Alpha");
+		}
+
 		AssembleTypeInfoTable();
 
 		AssembleForeignLibraries();
@@ -933,6 +1032,10 @@ namespace Glass
 			if (i->GetType() == IRNodeType::File) {
 
 				IRFile* ir_file = (IRFile*)i;
+
+				if (Debug) {
+					Debug_Info_Builder::Build_File(di, ir_file->File_Name, ir_file->Directory);
+				}
 
 				for (auto tl_inst : ir_file->Instructions) {
 					AssembleInstruction(tl_inst);
@@ -1058,7 +1161,7 @@ namespace Glass
 			assembly.functions.push_back(*func);
 		}
 
-		Clang_Assembler_Printer clang_printer(&assembly);
+		Clang_Assembler_Printer clang_printer(&assembly, di);
 		std::string clang_printer_output = clang_printer.Print();
 
 		{
@@ -1067,7 +1170,7 @@ namespace Glass
 		}
 
 		std::chrono::steady_clock::time_point Clang_Start = std::chrono::high_resolution_clock::now();
-		int fasm_result = system("clang .build/clang.s");
+		int clang_result = system("clang -c .build/clang.s");
 		std::chrono::steady_clock::time_point Clang_End = std::chrono::high_resolution_clock::now();
 
 		GS_CORE_WARN("Clang Assembler Took: {} mill s", std::chrono::duration_cast<std::chrono::milliseconds>(Clang_End - Clang_Start).count());
@@ -1349,6 +1452,14 @@ namespace Glass
 			return;
 		}
 
+		u16 dbg_proc_idx = -1;
+
+		DBGSourceLoc definition_src_loc(metadata->Symbol.Line + 1, metadata->Symbol.Begin);
+
+		if (Debug) {
+			dbg_proc_idx = Debug_Info_Builder::Build_Procedure(di, Function_Counter, metadata->Symbol.Symbol, definition_src_loc, ir_function->body_begin, ir_function->body_end);
+		}
+
 		if (ir_function->Overload) {
 			metadata = &metadata->GetOverload((TSFunc*)ir_function->Overload);
 		}
@@ -1477,6 +1588,8 @@ namespace Glass
 			}
 		}
 
+		u32 prologue_end_idx = (u32)(prologue.size() - 1);
+
 		stack_size_constant->constant_integer.integer += m_Data.Stack_Size;
 		stack_size_constant->constant_integer.integer += m_Data.Call_Stack_Size + 32 + 8; // the push rbp offset + because the stack addressing works in reverse we must add this 8 here or atleast this how i understand
 		stack_size_constant->constant_integer.integer = (i64)align_to(stack_size_constant->constant_integer.integer, 16);
@@ -1513,6 +1626,8 @@ namespace Glass
 			Code.push_back(MoveBasedOnType(TypeSystem::GetVoidPtr(), Builder::Register(saved_registers[i].first), saved_registers[i].second, "Reload"));
 		}
 
+		u32 epilogue_begin_idx = (u32)(Code.size() + prologue_end_idx);
+
 		Code.push_back(Builder::Add(Builder::Register(RSP), stack_size_constant));
 		Code.push_back(Builder::Pop(Builder::Register(RBP)));
 		Code.push_back(Builder::Ret());
@@ -1525,6 +1640,13 @@ namespace Glass
 			assembly->Code.push_back(code);
 		}
 
+		if (Debug) {
+			DIE_Procedure& proc = di.Procedures[dbg_proc_idx];
+			proc.End_Prologue_Inst_Idx = prologue_end_idx;
+			proc.Begin_Epilogue_Inst_Idx = epilogue_begin_idx;
+			Debug_Info_Builder::Finalize_Procedure(di, (i32)Code.size());
+		}
+
 		Function_Counter++;
 		Label_Counter = 0;
 	}
@@ -1535,6 +1657,10 @@ namespace Glass
 
 		if (ir_function->Overload) {
 			metadata = &metadata->GetOverload((TSFunc*)ir_function->Overload);
+		}
+
+		if (Debug) {
+			Debug_Info_Builder::Set_Location(di, ir_function->Source_Location, (i32)Code.size());
 		}
 
 		std::string name = metadata->Symbol.Symbol;
@@ -1769,6 +1895,11 @@ namespace Glass
 		CurrentIrRegister = ir_register;
 		GS_CORE_ASSERT(ir_register->Life_Time);
 		Current_Register_Lifetime = ir_register->Life_Time;
+
+		if (ir_register->Value->GetType() != IRNodeType::Argument && ir_register->Value->GetType() != IRNodeType::Call) {
+			i32 inst_idx = (i32)Code.size();
+			Debug_Info_Builder::Set_Location(di, ir_register->DBGLoc, inst_idx);
+		}
 
 		AssembleInstruction(ir_register->Value);
 	}
@@ -3625,7 +3756,13 @@ namespace Glass
 			}
 		}
 		else {
-			Code.push_back(Builder::Mov(result, Builder::Symbol(name)));
+
+			if (Rip_Relative) {
+				Code.push_back(Builder::Lea(result, Builder::De_Reference(Builder::OpAdd(Builder::Register(RIP), Builder::Symbol(name)))));
+			}
+			else {
+				Code.push_back(Builder::Mov(result, Builder::Symbol(name)));
+			}
 		}
 
 		SetRegisterValue(result, CurrentRegister);
@@ -4104,6 +4241,11 @@ namespace Glass
 		}
 
 		GS_CORE_ASSERT(Return_Label);
+
+		if (Debug) {
+			Debug_Info_Builder::Set_Location(di, ir_return->DBG_Location, (i32)Code.size());
+		}
+
 		Code.push_back(Builder::Build_Inst(I_Jmp, Return_Label));
 	}
 
@@ -4629,7 +4771,12 @@ namespace Glass
 
 		Floats.push_back(constant);
 
-		return Builder::De_Reference(Builder::Symbol(fmt::format("fl_{}", Float_Constant_Counter)));
+		if (Rip_Relative) {
+			return Builder::De_Reference(Builder::OpAdd(Builder::Register(RIP), Builder::Symbol(fmt::format("fl_{}", Float_Constant_Counter))));
+		}
+		else {
+			return Builder::De_Reference(Builder::Symbol(fmt::format("fl_{}", Float_Constant_Counter)));
+		}
 	}
 
 	Assembly_Operand* X86_BackEnd::Create_String_Constant(const std::string& data, u64 id)
@@ -5165,7 +5312,14 @@ forward
 	}
 
 	Clang_Assembler_Printer::Clang_Assembler_Printer(Assembly_File* assembly)
-		:Assembly(assembly)
+		:Assembly(assembly), Build_Debug_Info(false)
+	{
+		intel_syntax_printer.dot_at_label = false;
+		intel_syntax_printer.ptr_at_deref = true;
+	}
+
+	Clang_Assembler_Printer::Clang_Assembler_Printer(Assembly_File* assembly, Debug_Info debug_info)
+		:Assembly(assembly), Di(debug_info), Build_Debug_Info(true)
 	{
 		intel_syntax_printer.dot_at_label = false;
 		intel_syntax_printer.ptr_at_deref = true;
@@ -5204,6 +5358,36 @@ forward
 			stream << "str_" << constant_string.id << ":\n";
 
 			stream << ".asciz \"" << constant_string.value << "\"\n";
+		}
+
+		stream << "\n";
+
+		//@Floats
+		for (Assembly_Float_Constant& floating_constant : Assembly->floats) {
+
+			stream << "fl_";
+			stream << floating_constant.index;
+			stream << ":\n";
+
+			if (floating_constant.size == 4) {
+				float data = (float)floating_constant.value;
+				stream << ".long ";
+				stream << fmt::format("0x{0:x}", *(u32*)&data);
+				stream << " # ";
+				stream << fmt::format("{}", data);
+			}
+			else if (floating_constant.size == 8) {
+				double data = (double)floating_constant.value;
+				stream << ".quad ";
+				stream << fmt::format("0x{0:x}", *(u64*)&data);
+				stream << " # ";
+				stream << fmt::format("{}", data);
+			}
+			else {
+				GS_CORE_ASSERT(nullptr);
+			}
+			stream << '\n';
+
 		}
 
 		//@TypeInfo
@@ -5344,10 +5528,100 @@ forward
 			}
 		}
 
-
 		PrintCode(stream);
 
+		if (Build_Debug_Info) {
+			PrintDebugInfo(stream);
+		}
+
 		return stream.str();
+	}
+
+#define CODE_BEGIN_LABEL_NAME "code_begin"
+#define CODE_END_LABEL_NAME "code_end"
+#define LINE_BEGIN_LABEL_NAME "line_start"
+#define ABBREV_BEGIN_LABEL_NAME "abbrev_begin"
+
+#define INFO_BEGIN_LABEL_NAME "dinfo_begin"
+#define INFO_END_LABEL_NAME "dinfo_end"
+
+#define FUNC_LABEL_BEG_SUF "fb"
+#define FUNC_LABEL_END_SUF "fe"
+
+	void Clang_Assembler_Printer::PrintDebugInfo(std::stringstream& stream)
+	{
+		Dwarf_Builder dwarf_builder = Dwarf_Builder(&Di);
+		dwarf_builder.Build();
+
+		//@LineSection
+		stream << ".section	.debug_line,\"dr\"\n";
+		stream << LINE_BEGIN_LABEL_NAME << ":\n";
+
+		//@StrSection
+
+		stream << ".section	.debug_str,\"dr\"\n";
+
+		for (size_t i = 0; i < Di.String_Table.size(); i++)
+		{
+			stream << "dstr" << i << ":\n";
+			stream << ".asciz " << '"' << Di.String_Table[i] << "\"\n";
+		}
+
+		//@AbbrevSection
+		stream << ".section	.debug_abbrev,\"dr\"\n";
+		stream << ABBREV_BEGIN_LABEL_NAME << ":\n";
+
+		for (size_t i = 0; i < dwarf_builder.Abbrev_Section.size(); i++)
+		{
+			stream << ".byte	" << (int)dwarf_builder.Abbrev_Section[i] << "\n";
+		}
+
+		//@InfoSection
+		stream << ".section	.debug_info,\"dr\"\n";
+
+		for (size_t i = 0; i < dwarf_builder.Info_Section.size(); i++)
+		{
+			auto data = dwarf_builder.Info_Section[i];
+
+			if (data.type == Dwarf_Byte) {
+				stream << ".byte	" << (int)data.byte << "\n";
+			}
+			else if (data.type == Dwarf_Word) {
+				stream << ".short	" << data.word << "\n";
+			}
+			else if (data.type == Dwarf_DWord) {
+				stream << ".long	" << data.dword << "\n";
+			}
+			else if (data.type == Dwarf_QWord) {
+				stream << ".quad	" << data.qword << "\n";
+			}
+			else if (data.type == Dwarf_Secrel32_Str) {
+				stream << ".secrel32	dstr" << data.str_idx << "\n";
+			}
+			else if (data.type == Dwarf_Const_Code_Begin) {
+				stream << ".quad	" << CODE_BEGIN_LABEL_NAME << "\n";
+			}
+			else if (data.type == Dwarf_Const_Code_Size) {
+				stream << ".long	" << CODE_END_LABEL_NAME << '-' << CODE_BEGIN_LABEL_NAME << "\n";
+			}
+			else if (data.type == Dwarf_Const_Func_Begin) {
+				stream << ".quad	" << FUNC_LABEL_BEG_SUF << data.func_idx << "\n";
+			}
+			else if (data.type == Dwarf_Const_Func_Size) {
+				stream << ".long	" << FUNC_LABEL_END_SUF << data.func_idx << '-' << FUNC_LABEL_BEG_SUF << data.func_idx << "\n";
+			}
+			else if (data.type == Dwarf_Line_Table_Begin) {
+				stream << ".secrel32	" << LINE_BEGIN_LABEL_NAME << "\n";
+			}
+			else if (data.type == Dwarf_Abbrev_Begin) {
+				stream << ".secrel32	" << ABBREV_BEGIN_LABEL_NAME << "\n";
+			}
+			else {
+				GS_CORE_ASSERT(nullptr);
+			}
+		}
+
+		stream << INFO_END_LABEL_NAME << ":\n";
 	}
 
 	void Clang_Assembler_Printer::PrintCode(std::stringstream& stream)
@@ -5358,10 +5632,64 @@ forward
 		stream << ".p2align	4, 0x90\n"; // align 16 with 0x90 (nop)
 		stream << ".intel_syntax noprefix\n";
 
-		for (Assembly_Function& asm_function : Assembly->functions) {
+		u16 dbg_current_file_idx = -1;
+		u16 dbg_current_func_idx = -1;
+
+		DIE_Procedure* dbg_proc = nullptr;
+		DIE_File* dbg_file = nullptr;
+
+		DBGSourceLoc src_loc = DBGSourceLoc(-1, -1);
+
+		if (Build_Debug_Info) {
+			stream << CODE_BEGIN_LABEL_NAME << ":\n";
+
+			for (size_t i = 0; i < Di.Files.size(); i++)
+			{
+				auto& file = Di.Files[i];
+
+				for (auto& c : file.Directory)
+				{
+					if (c == '\\') {
+						c = '/';
+					}
+				}
+
+				for (auto& c : file.FileName)
+				{
+					if (c == '\\') {
+						c = '/';
+					}
+				}
+
+				stream << ".file " << i + 1 << " \"" << file.Directory << "\" \"" << file.FileName << "\"\n";
+			}
+		}
+
+		for (size_t i = 0; i < Assembly->functions.size(); i++)
+		{
+			auto asm_function = Assembly->functions[i];
+
+			if (Build_Debug_Info) {
+				dbg_proc = &Di.Procedures[i];
+				dbg_file = &Di.Files[dbg_proc->File_Idx];
+
+				dbg_current_file_idx = dbg_proc->File_Idx;
+
+				dbg_current_func_idx = dbg_proc->Function_Idx;
+
+				stream << FUNC_LABEL_BEG_SUF << dbg_current_func_idx << ":\n";
+
+
+				stream << fmt::format(".loc {} {} {}\n", dbg_current_file_idx + 1, dbg_proc->Definition_Src_Loc.Line, dbg_proc->Begin_Src_Loc.Col);
+
+				src_loc = dbg_proc->Begin_Src_Loc;
+			}
+
 			stream << asm_function.Name << ":" << "\n";
 
-			for (auto& code : asm_function.Code) {
+			for (size_t j = 0; j < asm_function.Code.size(); j++)
+			{
+				auto& code = asm_function.Code[j];
 
 				if (code.OpCode != I_Label) {
 					stream << "\t";
@@ -5370,9 +5698,40 @@ forward
 				intel_syntax_printer.PrintInstruction(code, stream);
 
 				stream << "\n";
+
+				if (Build_Debug_Info) {
+
+					if (j > dbg_proc->End_Prologue_Inst_Idx && j < dbg_proc->Begin_Epilogue_Inst_Idx) {
+
+						auto current_index = j - dbg_proc->End_Prologue_Inst_Idx;
+
+						DBGSourceLoc loc = dbg_proc->Inst_Line_Table[current_index];
+
+						if (loc.Line != src_loc.Line) {
+							src_loc = loc;
+							stream << fmt::format(".loc {} {} {}\n", dbg_current_file_idx + 1, src_loc.Line, src_loc.Col);
+						}
+					}
+					if (j == dbg_proc->End_Prologue_Inst_Idx) {
+						stream << fmt::format(".loc {} {} {} prologue_end\n", dbg_current_file_idx + 1, dbg_proc->Begin_Src_Loc.Line, src_loc.Col);
+					}
+					if (j == dbg_proc->Begin_Epilogue_Inst_Idx) {
+						stream << fmt::format(".loc {} {} {} epilogue_begin\n", dbg_current_file_idx + 1, dbg_proc->End_Src_Loc.Line, src_loc.Col);
+					}
+				}
+
 			}
+
+			if (Build_Debug_Info) {
+				stream << FUNC_LABEL_END_SUF << dbg_current_func_idx << ":\n";
+			}
+
 			stream << "\n";
 			stream << "\n";
+		}
+
+		if (Build_Debug_Info) {
+			stream << CODE_END_LABEL_NAME << ":\n";
 		}
 	}
 }
