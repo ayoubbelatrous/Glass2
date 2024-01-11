@@ -13,6 +13,7 @@ namespace Glass
 	{
 	public:
 		Parser(const CompilerFile& file);
+		Parser(const fs_path& path, std::vector<Token>& tokens);
 
 		ModuleFile* CreateAST();
 
@@ -154,13 +155,13 @@ namespace Glass
 	private:
 
 		const Token& At(i64 ahead = 0) {
-			return m_File.GetTokens()[m_Location + ahead];
+			return Tokens[m_Location + ahead];
 		}
 
 		const Token& Consume() {
 			u64 loc = m_Location;
 			m_Location++;
-			return m_File.GetTokens()[loc];
+			return Tokens[loc];
 		}
 
 		bool ExpectedToken(TokenType Type, i64 ahead = 0) {
@@ -175,12 +176,13 @@ namespace Glass
 
 		void Abort(const std::string& message) {
 			GS_CORE_WARN("{} '{}'", message, At().Symbol);
-			GS_CORE_ERROR("\t{}:{}:{}", m_File.GetPath(), At().Line + 1, At().Begin);
+			GS_CORE_ERROR("\t{}:{}:{}", Path, At().Line + 1, At().Begin);
 			Application::FatalAbort(ExitCode::ParserError);
 		}
 
 		u64 m_Location = 0;
 
-		const CompilerFile& m_File;
+		fs_path Path;
+		const std::vector<Token>& Tokens;
 	};
 }

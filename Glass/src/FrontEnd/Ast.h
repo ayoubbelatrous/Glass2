@@ -121,16 +121,6 @@ namespace Glass
 			return NodeType::ModuleFile;
 		}
 
-		// 		virtual Statement* Clone() const override {
-		// 			ModuleFile* clone = Application::AllocateAstNode(*this);
-		// 
-		// 			for (auto stmt : m_Statements) {
-		// 				clone->PushStatement(Application::AllocateAstNode(*stmt));
-		// 			}
-		// 
-		// 			return clone;
-		// 		}
-
 		void PushStatement(Statement* stmt) {
 			m_Statements.push_back(stmt);
 		}
