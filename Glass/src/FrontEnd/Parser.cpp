@@ -107,6 +107,7 @@ namespace Glass
 				}
 
 				bool var_decl_infer = At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Assign;
+				var_decl_infer |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Colon;
 
 				if (var_decl_infer) {
 					auto var = ParseVarDeclInfer();
@@ -479,6 +480,10 @@ namespace Glass
 		if (At().Type == TokenType::Assign) {
 			Consume();
 			Node.Assignment = ParseExpression();
+
+			if (!Node.Assignment) {
+				Abort("Expected Variable to be assigned something instead got:");
+			}
 		}
 
 		if (At().Type == TokenType::Colon) {
@@ -491,7 +496,18 @@ namespace Glass
 			Consume();
 
 			Node.Constant = true;
-			Node.Assignment = ParseExpression();
+
+			if (At().Type == TokenType::Pound) {
+				Consume();
+				Node.Assignment = (Expression*)ParseDirective();
+			}
+			else {
+				Node.Assignment = ParseExpression();
+			}
+
+			if (!Node.Assignment) {
+				Abort("Expected Constant to be assigned something instead got:");
+			}
 		}
 
 		return Application::AllocateAstNode(Node);
@@ -504,14 +520,40 @@ namespace Glass
 
 		Node.Symbol = Consume();
 
+		bool constant_decl = false;
+
 		if (At().Type == TokenType::Colon) {
 			Consume();
 		}
 
-		if (At().Type == TokenType::Assign) {
+		if (At().Type == TokenType::Colon) {
 			Consume();
-			Node.Assignment = ParseExpression();
+			constant_decl = true;
 		}
+		else if (At().Type == TokenType::Assign) {
+			Consume();
+		}
+
+		if (constant_decl) {
+			if (At().Type == TokenType::Pound) {
+				Consume();
+				Node.Assignment = (Expression*)ParseDirective();
+			}
+			else {
+				Node.Assignment = ParseExpression();
+			}
+		}
+
+		if (!Node.Assignment) {
+			if (constant_decl) {
+				Abort("Expected Constant to be assigned something instead got:");
+			}
+			else {
+				Abort("Expected Inferred Variable to be assigned something instead got:");
+			}
+		}
+
+		Node.Constant = constant_decl;
 
 		return Application::AllocateAstNode(Node);
 	}
@@ -633,6 +675,11 @@ namespace Glass
 		Node.OpenCurly = Consume();
 
 		while (At().Type != TokenType::CloseCurly) {
+
+			if (At().Type == TokenType::E_OF) {
+				Abort("reached the end of file looking for '}'");
+			}
+
 			auto stmt = ParseStatement();
 
 			if (stmt != nullptr)

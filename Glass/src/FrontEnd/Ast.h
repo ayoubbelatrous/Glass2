@@ -122,16 +122,16 @@ namespace Glass
 		}
 
 		void PushStatement(Statement* stmt) {
-			m_Statements.push_back(stmt);
+			Statements.push_back(stmt);
 		}
 
-		const std::vector<Statement*>& GetStatements() const {
-			return m_Statements;
+		std::vector<Statement*>& GetStatements() {
+			return Statements;
 		}
 
 		virtual std::string ToString() const {
 			std::string str = "Module File\n";
-			for (auto stmt : m_Statements) {
+			for (auto stmt : Statements) {
 				str += stmt->ToString() + '\n';
 			}
 			return str;
@@ -141,8 +141,7 @@ namespace Glass
 			return Token{};
 		}
 
-	private:
-		std::vector<Statement*> m_Statements;
+		std::vector<Statement*> Statements;
 	};
 
 	class Program : public Statement

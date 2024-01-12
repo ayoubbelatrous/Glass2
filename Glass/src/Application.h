@@ -87,6 +87,17 @@ namespace Glass
 			return result;
 		}
 
+		void* Allocate_Bytes(const u64 size) {
+
+			if ((m_Size + 1) > m_Capacity) {
+				GS_CORE_ASSERT(0, "Out Of Memory");
+			}
+
+			void* data = (void*)(m_Data + m_Size);
+			m_Size += size;
+			return data;
+		}
+
 	private:
 		u64 m_Capacity = 0;
 		u64 m_Size = 0;

@@ -7,7 +7,7 @@ namespace Glass {
 	enum TypeTypeEnum : u32
 	{
 		Basic,
-		Array,
+		TT_Array,
 		Function,
 	};
 

@@ -1,18 +1,14 @@
 #include "pch.h"
+
 #include "Application.h"
 
 #include "StrUtils.h"
-
 #include "FrontEnd/Lexer.h"
 #include "FrontEnd/Parser.h"
-
 #include "BackEnd/Compiler.h"
 #include "BackEnd/C/CTranspiler.h"
-
 #include "BackEnd/LLVMBackend.h"
-
 #include "BackEnd/LLR_X86.h"
-
 #include "FrontEnd/Frontend.h";
 
 namespace Glass
@@ -32,7 +28,7 @@ namespace Glass
 		Front_End front_end = Front_End(m_Options);
 		front_end.Compile();
 
-		for (size_t i = 0; i < front_end.Data.Messages.size(); i++)
+		for (size_t i = 0; i < front_end.Data.Messages.count; i++)
 		{
 			Front_End_Message& message = front_end.Data.Messages[i];
 
