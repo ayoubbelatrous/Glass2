@@ -88,4 +88,15 @@ namespace Glass {
 		str.data = bytes;
 		return str;
 	}
+
+	bool String_Equal(String a, String b)
+	{
+		if (a.count != b.count)
+			return false;
+
+		if (strncmp(a.data, b.data, a.count) != 0)
+			return false;
+
+		return true;
+	}
 }

@@ -9,7 +9,7 @@ namespace Glass
 	struct Array;
 
 	template<typename E>
-	void Array_Add(Array<E>& arr, const E& element);
+	E* Array_Add(Array<E>& arr, const E& element);
 
 	template<typename E>
 	struct Array
@@ -62,7 +62,7 @@ namespace Glass
 	}
 
 	template<typename E>
-	void Array_Add(Array<E>& arr, const E& element) {
+	E* Array_Add(Array<E>& arr, const E& element) {
 
 		if (arr.capacity == 0) {
 			arr.capacity++;
@@ -83,5 +83,7 @@ namespace Glass
 		new (dst) E(element);
 
 		arr.count++;
+
+		return (E*)dst;
 	}
 }

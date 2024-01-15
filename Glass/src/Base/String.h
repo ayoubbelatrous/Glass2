@@ -10,6 +10,7 @@ namespace Glass
 	String String_Make(char* c_str);
 	String String_Make(const std::string& std_str);
 	String String_Copy(String other);
+	bool String_Equal(String a, String b);
 
 	struct String
 	{
