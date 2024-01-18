@@ -62,6 +62,19 @@ namespace Glass
 	}
 
 	template<typename E>
+	Array<E> Array_Copy(Array<E> other) {
+
+		Array<E> arr = {};
+		arr.count = other.count;
+		arr.capacity = other.capacity;
+		arr.data = (E*)malloc(sizeof(E) * arr.capacity);
+
+		memcpy((void*)arr.data, (void*)other.data, arr.count * other.count);
+
+		return arr;
+	}
+
+	template<typename E>
 	E* Array_Add(Array<E>& arr, const E& element) {
 
 		if (arr.capacity == 0) {

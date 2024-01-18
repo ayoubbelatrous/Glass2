@@ -95,6 +95,10 @@ namespace Glass
 							if (At(star_counter + 2).Type == TokenType::Assign) {
 								var_decl |= true;
 							}
+
+							if (At(star_counter + 2).Type == TokenType::Colon) {
+								var_decl |= true;
+							}
 						}
 						star_counter++;
 					}
@@ -639,15 +643,10 @@ namespace Glass
 
 		while (At().Type != TokenType::CloseCurly)
 		{
-
 			Expression* expression = (Expression*)ParseStatement();
 
 			if (expression == nullptr) {
 				break;
-			}
-
-			if (expression->GetType() != NodeType::Identifier) {
-				Abort("Expected Identifier Inside enum body, Instead Got: ");
 			}
 
 			Node.Members.push_back((Identifier*)expression);
@@ -1311,6 +1310,7 @@ namespace Glass
 		case TokenType::OpenParen:
 		{
 			bool var_decl = false;
+			bool func_type = false;
 
 			//check if a function type
 			if (At().Type == TokenType::OpenParen) {
@@ -1322,10 +1322,11 @@ namespace Glass
 					}
 					if (At(i).Type == TokenType::CloseParen) {
 						if (At(i + 1).Type == TokenType::Colon) {
-							var_decl = true;
-						}
-						if (At(i + 1).Type == TokenType::Symbol) {
-							var_decl = true;
+							func_type = true;
+							if (At(i + 2).Type == TokenType::Symbol) {
+								var_decl = true;
+								func_type = false;
+							}
 						}
 						break;
 					}
@@ -1336,6 +1337,9 @@ namespace Glass
 
 			if (var_decl) {
 				return ParseVarDecl();
+			}
+			else if (func_type) {
+				return ParseTypeExpr();
 			}
 
 			Consume();

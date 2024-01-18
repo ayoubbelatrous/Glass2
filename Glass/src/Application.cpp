@@ -9,7 +9,7 @@
 #include "BackEnd/C/CTranspiler.h"
 #include "BackEnd/LLVMBackend.h"
 #include "BackEnd/LLR_X86.h"
-#include "FrontEnd/Frontend.h";
+#include "FrontEnd/Frontend.h"
 
 namespace Glass
 {

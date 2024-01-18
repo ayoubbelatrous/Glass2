@@ -133,8 +133,49 @@ namespace Glass
 		Data.f32_tn = insert_base_num_type_name(String_Make("f32"), 4, 4, false, true);
 		Data.f64_tn = insert_base_num_type_name(String_Make("f64"), 8, 8, false, true);
 
+		if (Load_Base()) {
+			return;
+		}
+
 		Load_First();
-		Do_Constants_Passes();
+
+		if (Do_Tl_Definition_Passes()) {
+			return;
+		}
+		if (Do_Tl_Dependency_Passes()) {
+			return;
+		}
+
+		Do_Tl_Resolution_Passes();
+	}
+
+	bool Front_End::Load_Base()
+	{
+		fs_path base_file_path = "Library/Base.glass";
+
+		if (!std::filesystem::exists(base_file_path)) {
+			Push_Error(FMT("base file '{}' was not found!", base_file_path.string()));
+			return true;
+		}
+
+		fs_path base_file_path_abs = std::filesystem::absolute(base_file_path);
+
+		File_ID base_file_id = Generate_File(base_file_path, base_file_path_abs);
+
+		if (base_file_id == File_Null) {
+			Push_Error(FMT("failed to load the base file at: '{}'", base_file_path.string()));
+			return true;
+		}
+
+		Entity_ID base_file_scope_entity_id = Insert_Entity(Create_File_Scope_Entity(base_file_id, Data.Files[base_file_id].Syntax), Data.global_scope_entity);
+
+		Data.File_ID_To_Scope[base_file_id] = base_file_scope_entity_id;
+
+		Do_Load_Pass(base_file_scope_entity_id);
+
+		Insert_Entity(Create_File_Load_Entity(base_file_id, File_Null), Data.global_scope_entity);
+
+		return false;
 	}
 
 	void Front_End::Load_First()
@@ -160,14 +201,16 @@ namespace Glass
 
 		Do_Load_Pass(first_file_scope_entity_id);
 
+		Insert_Entity(Create_File_Load_Entity(first_file_id, File_Null), Data.global_scope_entity);
+
 		int x = 0;
 	}
 
-	void Front_End::Do_Load_Pass(Entity_ID entity_id)
+	void Front_End::Do_Load_Pass(Entity_ID file_entity_id)
 	{
-		ASSERT(entity_id != Entity_Null);
+		ASSERT(file_entity_id != Entity_Null);
 
-		Entity& file_entity = Data.entity_storage[entity_id];
+		Entity& file_entity = Data.entity_storage[file_entity_id];
 		ASSERT(file_entity.entity_type == Entity_Type::File_Scope);
 
 		Front_End_File& file = Data.Files[file_entity.file_scope.file_id];
@@ -179,8 +222,10 @@ namespace Glass
 			if (statement->GetType() == NodeType::Load) {
 
 				LoadNode* as_load = (LoadNode*)statement;
-				Entity load_entity = Do_Load(entity_id, as_load);
-				Insert_Entity(load_entity, entity_id);
+				Entity load_entity = Do_Load(file_entity_id, as_load);
+				//Insert_Entity(load_entity, file_entity_id);
+
+				Insert_Entity(load_entity, Data.global_scope_entity);
 			}
 		}
 	}
@@ -199,7 +244,7 @@ namespace Glass
 		if (previous_loaded_file_it == Data.Path_To_File.end()) {
 
 			if (!std::filesystem::exists(path_abs)) {
-				Push_Error_Loc(file_entity.file_scope.file_id, load_node, FMT("1oad directive file not found!: '{}'", path.string()));
+				Push_Error_Loc(entity_id, load_node, FMT("1oad directive file not found!: '{}'", path.string()));
 			}
 
 			loaded_file_id = Generate_File(path, path_abs);
@@ -216,10 +261,9 @@ namespace Glass
 		return Create_File_Load_Entity(loaded_file_id, file_entity.file_scope.file_id);
 	}
 
-	void Front_End::Do_Constants_Passes()
+	bool Front_End::Do_Tl_Definition_Passes()
 	{
-		//@DefPass
-		bool def_pass_result = Iterate_Tl_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* statement) -> bool {
+		return Iterate_Tl_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* statement) -> bool {
 
 			if (statement->GetType() == NodeType::Variable) {
 
@@ -232,7 +276,7 @@ namespace Glass
 				Entity_ID previous_definition = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, var_name);
 
 				if (previous_definition != Entity_Null) {
-					Push_Error_Loc(file_entity.file_scope.file_id, as_var, FMT("global constant '{}' has its name already taken", as_var->Symbol.Symbol));
+					Push_Error_Loc(file_entity_id, as_var, FMT("global constant '{}' has its name already taken", as_var->Symbol.Symbol));
 					return true;
 				}
 
@@ -278,7 +322,7 @@ namespace Glass
 				Entity_ID previous_definition = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, struct_name);
 
 				if (previous_definition != Entity_Null) {
-					Push_Error_Loc(file_entity.file_scope.file_id, as_struct_node, FMT("struct '{}' has its name already taken", as_struct_node->Name.Symbol));
+					Push_Error_Loc(file_entity_id, as_struct_node, FMT("struct '{}' has its name already taken", as_struct_node->Name.Symbol));
 					return true;
 				}
 
@@ -305,25 +349,98 @@ namespace Glass
 						Entity& previous_member = Data.entity_storage[inserted_struct_entity.children[i]];
 
 						if (String_Equal(previous_member.semantic_name, member_name)) {
-							Push_Error_Loc(file_entity.file_scope.file_id, struct_member_node, FMT("struct '{}' member '{}' already defined", as_struct_node->Name.Symbol, struct_member_node->Symbol.Symbol));
+							Push_Error_Loc(file_entity_id, struct_member_node, FMT("struct '{}' member '{}' already defined", as_struct_node->Name.Symbol, struct_member_node->Symbol.Symbol));
 							return true;
 						}
 					}
 
 					Entity struct_member_entity = Create_Struct_Member_Entity(member_name, Loc_From_Token(struct_member_node->Symbol), file_entity.file_scope.file_id);
 					struct_member_entity.syntax_node = struct_member_node;
+					//struct_member_entity.flags |= EF_Constant;
 
 					Insert_Entity(struct_member_entity, inserted_struct_entity_id);
 				}
 			}
+			else if (statement->GetType() == NodeType::Enum) {
 
+				StructNode* as_enum_node = (StructNode*)statement;
+
+				String enum_name = String_Make(as_enum_node->Name.Symbol);
+
+				Entity_ID previous_definition = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, enum_name);
+
+				if (previous_definition != Entity_Null) {
+					Push_Error_Loc(file_entity_id, as_enum_node, FMT("enum '{}' has its name already taken", as_enum_node->Name.Symbol));
+					return true;
+				}
+
+				Entity enum_entity = Create_Enum_Entity(enum_name, Loc_From_Token(as_enum_node->Name), file_entity.file_scope.file_id);
+
+				enum_entity.flags |= EF_Constant | EF_InComplete;
+				enum_entity.syntax_node = as_enum_node;
+
+				Entity_ID inserted_enum_entity_id = Insert_Entity(enum_entity, file_entity_id);
+
+				Entity& inserted_enum_entity = Data.entity_storage[inserted_enum_entity_id];
+
+				for (size_t i = 0; i < as_enum_node->m_Members.size(); i++)
+				{
+					Statement* enum_member_node = as_enum_node->m_Members[i];
+
+					Token name_token;
+					Expression* assignment = nullptr;
+
+					if (enum_member_node->GetType() == NodeType::Identifier) {
+						Identifier* as_ident = (Identifier*)enum_member_node;
+						name_token = as_ident->Symbol;
+					}
+					else if (enum_member_node->GetType() == NodeType::Variable) {
+
+						VariableNode* as_var = (VariableNode*)enum_member_node;
+
+						if (!as_var->Constant) {
+							Push_Error_Loc(file_entity_id, enum_member_node, "expected enum member to be a name or an assignment to a name: name :: value;");
+							return true;
+						}
+
+						name_token = as_var->Symbol;
+						assignment = as_var->Assignment;
+					}
+					else {
+						Push_Error_Loc(file_entity_id, enum_member_node, "expected enum member to be a name or an assignment to a name: name :: value");
+						return true;
+					}
+
+					String member_name = String_Make(name_token.Symbol);
+
+					for (size_t i = 0; i < inserted_enum_entity.children.count; i++)
+					{
+						Entity& previous_member = Data.entity_storage[inserted_enum_entity.children[i]];
+
+						if (String_Equal(previous_member.semantic_name, member_name)) {
+							Push_Error_Loc(file_entity_id, enum_member_node, FMT("enum '{}' member '{}' already defined", as_enum_node->Name.Symbol, name_token.Symbol));
+							return true;
+						}
+					}
+
+					Entity enum_member_entity = Create_Struct_Member_Entity(member_name, Loc_From_Token(name_token), file_entity.file_scope.file_id);
+					enum_member_entity.syntax_node = enum_member_node;
+					enum_member_entity.flags |= EF_Constant;
+
+					Insert_Entity(enum_member_entity, inserted_enum_entity_id);
+				}
+			}
+			else if (statement->GetType() == NodeType::Function) {
+
+			}
 			return false;
 			});
+	}
 
-		if (def_pass_result)
-			return;
+	bool Front_End::Do_Tl_Dependency_Passes()
+	{
 
-		bool dep_pass_result = Iterate_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity) -> bool {
+		return Iterate_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity) -> bool {
 
 			for (size_t i = 0; i < file_entity.children.count; i++)
 			{
@@ -339,11 +456,11 @@ namespace Glass
 						VariableNode* as_var = (VariableNode*)tl_file_scope_entity.syntax_node;
 
 						if (!as_var->Assignment) {
-							Push_Error_Loc(file_entity.file_scope.file_id, as_var, FMT("global constant '{}' is not assigned a value", as_var->Symbol.Symbol));
+							Push_Error_Loc(file_entity_id, as_var, FMT("global constant '{}' is not assigned a value", as_var->Symbol.Symbol));
 							return true;
 						}
 
-						if (Do_Expression_Dependecy_Pass(file_entity_id, as_var->Assignment, tl_file_scope_entity.dependencies, Entity_Null)) {
+						if (!Do_Expression_Dependecy_Pass(file_entity_id, as_var->Assignment, tl_file_scope_entity.dependencies, Entity_Null)) {
 							return true;
 						}
 
@@ -367,15 +484,15 @@ namespace Glass
 
 							Entity& tail_entity = Data.entity_storage[chain[0]];
 
-							Push_Error_Loc(file_entity.file_scope.file_id, as_var, FMT("global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
-							Push_Error_Loc(tail_entity.definition_file, tail_entity.syntax_node, FMT("the tail"));
+							Push_Error_Loc(file_entity_id, as_var, FMT("global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
+							Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
 
 							return true;
 						}
 
 						if (as_var->Type) {
 
-							if (Do_Expression_Dependecy_Pass(file_entity_id, as_var->Type, tl_file_scope_entity.dependencies, Entity_Null)) {
+							if (!Do_Expression_Dependecy_Pass(file_entity_id, as_var->Type, tl_file_scope_entity.dependencies, Entity_Null)) {
 								return true;
 							}
 
@@ -399,8 +516,8 @@ namespace Glass
 
 								Entity& tail_entity = Data.entity_storage[chain[0]];
 
-								Push_Error_Loc(file_entity.file_scope.file_id, as_var->Type, FMT("the type of global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
-								Push_Error_Loc(tail_entity.definition_file, tail_entity.syntax_node, FMT("the tail"));
+								Push_Error_Loc(file_entity_id, as_var->Type, FMT("the type of global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
+								Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
 
 								return true;
 							}
@@ -415,7 +532,7 @@ namespace Glass
 
 							ASSERT(as_variable_node->Type);
 
-							if (Do_Expression_Dependecy_Pass(file_entity_id, as_variable_node->Type, tl_file_scope_entity.dependencies, tl_file_scope_entity_id))
+							if (!Do_Expression_Dependecy_Pass(file_entity_id, as_variable_node->Type, tl_file_scope_entity.dependencies, tl_file_scope_entity_id))
 								return true;
 
 							Array<Entity_ID> chain;
@@ -437,10 +554,52 @@ namespace Glass
 
 								Entity& tail_entity = Data.entity_storage[chain[0]];
 
-								Push_Error_Loc(file_entity.file_scope.file_id, as_variable_node->Type, FMT("struct member '{}' type has circular dependency: {}", as_variable_node->Symbol.Symbol, printed_chain));
-								Push_Error_Loc(tail_entity.definition_file, tail_entity.syntax_node, FMT("the tail"));
+								Push_Error_Loc(file_entity_id, as_variable_node->Type, FMT("struct member '{}' type has circular dependency: {}", as_variable_node->Symbol.Symbol, printed_chain));
+								Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
 
 								return true;
+							}
+						}
+					}
+					else if (tl_file_scope_entity.entity_type == Entity_Type::Enum_Entity) {
+
+						for (size_t i = 0; i < tl_file_scope_entity.children.count; i++)
+						{
+							Entity& enum_member_entity = Data.entity_storage[tl_file_scope_entity.children[i]];
+
+							if (enum_member_entity.syntax_node->GetType() == NodeType::Variable) {
+
+								VariableNode* as_variable_node = (VariableNode*)enum_member_entity.syntax_node;
+
+								ASSERT(as_variable_node->Assignment);
+
+								if (!Do_Expression_Dependecy_Pass(file_entity_id, as_variable_node->Assignment, tl_file_scope_entity.dependencies, tl_file_scope_entity_id))
+									return true;
+
+								Array<Entity_ID> chain;
+								if (Check_Circular_Dependencies(tl_file_scope_entity_id, tl_file_scope_entity.dependencies, chain)) {
+
+									std::string printed_chain;
+
+									printed_chain = tl_file_scope_entity.semantic_name.data;
+
+									for (size_t i = 0; i < chain.count; i++)
+									{
+										printed_chain += " -> ";
+										printed_chain += Data.entity_storage[chain[i]].semantic_name.data;
+									}
+
+									printed_chain += " -> ";
+
+									printed_chain += tl_file_scope_entity.semantic_name.data;
+
+									Entity& tail_entity = Data.entity_storage[chain[0]];
+
+									Push_Error_Loc(file_entity_id, as_variable_node, FMT("enum member '{}' type has circular dependency: {}", as_variable_node->Symbol.Symbol, printed_chain));
+									Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
+
+									return true;
+								}
 							}
 						}
 					}
@@ -450,11 +609,10 @@ namespace Glass
 			return false;
 
 			});
+	}
 
-
-		if (dep_pass_result)
-			return;
-
+	bool Front_End::Do_Tl_Resolution_Passes()
+	{
 		bool all_evaluated = true;
 
 		for (size_t i = 0; i < Data.entity_storage.count; i++)
@@ -479,51 +637,31 @@ namespace Glass
 				}
 
 				if (entity.entity_type == Entity_Type::Constant) {
-					Il_IDX proc_idx = Il_Insert_Proc(Data.il_program, String_Make("const eval"));
-					Il_Proc& proc = Data.il_program.procedures[proc_idx];
 
 					VariableNode* as_var = (VariableNode*)entity.syntax_node;
 
 					if (as_var->Type) {
-
-						CodeGen_Result type_code_gen_result = Expression_CodeGen(as_var->Type, entity.parent, proc, nullptr);
-
-						auto& type_constant_value_node = proc.instruction_storage[type_code_gen_result.code_node_id];
-
-						ASSERT(type_constant_value_node.node_type == Il_Const);
-
-						entity.semantic_type = type_constant_value_node.constant.as.type;
-
-						if (type_code_gen_result.expression_type != TypeSystem_Get_Basic_Type(Data.type_system, Data.Type_tn)) {
-							Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, entity.parent)].file_scope.file_id, as_var->Type, FMT("global constant '{}' type is not a 'Type'", as_var->Symbol.Symbol));
-							break;
-						}
+						entity.semantic_type = Evaluate_Type(as_var->Type, entity.parent);
 					}
 
-					CodeGen_Result assignment_code_gen_result = Expression_CodeGen(as_var->Assignment, entity.parent, proc, nullptr);
-
+					Eval_Result assignment_code_gen_result = Expression_Evaluate(as_var->Assignment, entity.parent, nullptr);
 					if (!assignment_code_gen_result) {
 						break;
 					}
-
-					Il_Proc_Insert(proc, Il_Make_Ret(assignment_code_gen_result.code_node_id, TypeSystem_Get_Type_Index(Data.type_system, assignment_code_gen_result.expression_type)));
-
-					Const_Union execution_result = EE_Exec_Proc(Data.exec_engine, proc);
 
 					entity.flags &= ~EF_InComplete;
 
 					if (entity.semantic_type) {
 						if (assignment_code_gen_result.expression_type != entity.semantic_type) {
-							Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, entity.parent)].file_scope.file_id, as_var, FMT("global constant '{}' type mismatch in assignment", as_var->Symbol.Symbol));
+							Push_Error_Loc(entity.parent, as_var, FMT("global constant '{}' type mismatch in assignment", as_var->Symbol.Symbol));
 							break;
 						}
 					}
-
-					if (!entity.semantic_type) {
+					else {
 						entity.semantic_type = assignment_code_gen_result.expression_type;
 					}
 
-					entity.constant_value = execution_result;
+					entity.constant_value = assignment_code_gen_result.result;
 				}
 				else if (entity.entity_type == Entity_Type::Struct_Entity)
 				{
@@ -531,23 +669,26 @@ namespace Glass
 
 					GS_Struct struct_type;
 
+					Type_Name struct_type_name;
+					struct_type_name.name = entity.semantic_name;
+					struct_type_name.flags = TN_Struct_Type;
+					struct_type_name.size = (u64)-1;
+					struct_type_name.alignment = 0;
+
+					entity.struct_entity.type_name_id = TypeSystem_Insert_TypeName_Struct(Data.type_system, struct_type_name, struct_type);
+					entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+
+					entity.flags &= ~EF_InComplete;
+
 					for (size_t i = 0; i < entity.children.count; i++)
 					{
 						Entity& struct_member_entity = Data.entity_storage[entity.children[i]];
 
-						Il_IDX proc_idx = Il_Insert_Proc(Data.il_program, String_Make("const eval type"));
-						Il_Proc& proc = Data.il_program.procedures[proc_idx];
-
 						VariableNode* as_variable_node = (VariableNode*)struct_member_entity.syntax_node;
 
-						CodeGen_Result type_code_gen_result = Expression_CodeGen(as_variable_node->Type, entity.parent, proc, nullptr);
-						if (!type_code_gen_result)
-							return;
-
-						auto& type_constant_value_node = proc.instruction_storage[type_code_gen_result.code_node_id];
-						struct_member_entity.semantic_type = type_constant_value_node.constant.as.type;
-
+						struct_member_entity.semantic_type = Evaluate_Type(as_variable_node->Type, entity.parent);
 						ASSERT(struct_member_entity.semantic_type);
+
 						Array_Add(struct_type.members, struct_member_entity.semantic_type);
 						Array_Add(struct_type.offsets, (u64)-1);
 					}
@@ -559,17 +700,57 @@ namespace Glass
 						struct_type.offsets[i] = struct_data_layout.offsets[i];
 					}
 
-					Type_Name struct_type_name;
-					struct_type_name.name = entity.semantic_name;
-					struct_type_name.flags = TN_Struct_Type;
-					struct_type_name.size = struct_data_layout.size;
-					struct_type_name.alignment = struct_data_layout.alignment;
+					Data.type_system.type_name_storage[entity.struct_entity.type_name_id].size = struct_data_layout.size;
+					Data.type_system.type_name_storage[entity.struct_entity.type_name_id].alignment = struct_data_layout.alignment;
+					Data.type_system.struct_storage[Data.type_system.type_name_storage[entity.struct_entity.type_name_id].struct_id] = struct_type;
 
-					entity.struct_entity.type_name_id = TypeSystem_Insert_TypeName_Struct(Data.type_system, struct_type_name, struct_type);
+					if (String_Equal(String_Make("string"), entity.semantic_name)) { // TODO: move this from here somehow
+						Data.string_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+						ASSERT(Data.string_Ty);
+					}
+				}
+				else if (entity.entity_type == Entity_Type::Enum_Entity) {
 
+					EnumNode* as_enum_node = (EnumNode*)entity.syntax_node;
+
+					Type_Name underlying_type_name = Data.type_system.type_name_storage[Data.u64_tn];
+					GS_Type* underlying_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.u64_tn);
+
+					Type_Name enum_type_name = underlying_type_name;
+					enum_type_name.name = String_Copy(entity.semantic_name);
+					enum_type_name.flags = TN_Enum_Type;
+					entity.enum_entity.type_name_id = TypeSystem_Insert_TypeName(Data.type_system, enum_type_name);
 					entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
-
 					entity.flags &= ~EF_InComplete;
+
+					Const_Union next_enum_value = { 0 };
+
+					for (size_t i = 0; i < entity.children.count; i++)
+					{
+						Entity& enum_member_entity = Data.entity_storage[entity.children[i]];
+
+						if (enum_member_entity.syntax_node->GetType() == NodeType::Variable) {
+
+							VariableNode* as_variable_node = (VariableNode*)enum_member_entity.syntax_node;
+
+							Eval_Result value_code_gen_result = Expression_Evaluate(as_variable_node->Assignment, entity.parent, underlying_type);
+							if (!value_code_gen_result)
+								return true;
+
+							if (value_code_gen_result.expression_type != underlying_type) {
+								Push_Error_Loc(entity.parent, as_variable_node->Assignment, FMT("enum '{}' member type mismatch in assignment", as_enum_node->Name.Symbol, as_variable_node->Symbol.Symbol));
+								break;
+							}
+
+							enum_member_entity.enum_member.value = value_code_gen_result.result;
+							value_code_gen_result.result.us8++;
+							next_enum_value = value_code_gen_result.result;
+						}
+						else {
+							enum_member_entity.enum_member.value = next_enum_value;
+							next_enum_value.us8++;
+						}
+					}
 				}
 			}
 
@@ -583,6 +764,342 @@ namespace Glass
 				}
 			}
 		}
+
+		return false;
+	}
+
+	Eval_Result Front_End::Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type)
+	{
+		NodeType expression_type = expression->GetType();
+
+		switch (expression_type)
+		{
+		case NodeType::StringLiteral:
+		{
+			StringLiteral* as_lit = (StringLiteral*)expression;
+
+			String literal_value = String_Make(as_lit->Symbol.Symbol);
+			Const_Union constant_value = { 0 };
+			constant_value.string = *(GS_String*)&literal_value;
+
+			GS_Type* literal_type = Data.string_Ty;
+
+			Eval_Result result;
+			result.ok = true;
+			result.result = constant_value;
+			result.expression_type = literal_type;
+			return result;
+		}
+		break;
+		case NodeType::NumericLiteral:
+		{
+			NumericLiteral* as_lit = (NumericLiteral*)expression;
+
+			GS_Type* literal_type;
+
+			if (inferred_type) {
+
+				auto inferred_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+
+				if (inferred_type_flags & TN_Numeric_Type) {
+					auto inferred_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+
+					if (!(inferred_flags & TN_Float_Type) && (as_lit->type == NumericLiteral::Type::Float)) {
+						literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+					}
+					else {
+						literal_type = inferred_type;
+					}
+				}
+			}
+			else {
+				if (as_lit->type == NumericLiteral::Type::Float) {
+					literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+				}
+				else if (as_lit->type == NumericLiteral::Type::Int) {
+					literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.int_tn);
+				}
+				else {
+					GS_ASSERT_UNIMPL();
+				}
+			}
+
+			Const_Union literal_value = { 0 };
+			literal_value.ptr = (void*)as_lit->Val.Int;
+
+			Eval_Result result;
+			result.ok = true;
+			result.result = literal_value;
+			result.expression_type = literal_type;
+			return result;
+		}
+		break;
+		case NodeType::BinaryExpression:
+		{
+			BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
+
+			Eval_Result left_result = Expression_Evaluate(as_bin_expr->Left, scope_id, inferred_type);
+			Eval_Result right_result = Expression_Evaluate(as_bin_expr->Right, scope_id, left_result.expression_type);
+
+			if (!left_result || !right_result)
+				return {};
+
+			if (left_result.expression_type != right_result.expression_type) {
+				Push_Error_Loc(scope_id, as_bin_expr, "type mismatch");
+				return {};
+			}
+
+			if (!left_result.expression_type) {
+				Push_Error_Loc(scope_id, as_bin_expr->Left, "<un typed> value does not support math operations");
+				return {};
+			}
+
+			if (!right_result.expression_type) {
+				Push_Error_Loc(scope_id, as_bin_expr->Right, "<un typed> value does not support math operations");
+				return {};
+			}
+
+			auto left_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, left_result.expression_type);
+			auto right_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, right_result.expression_type);
+
+			GS_Type* bin_expr_result_type = left_result.expression_type;
+
+			auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
+
+			if (!(type_flags & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
+				return {};
+			}
+
+			Const_Union result_value = { 0 };
+
+			switch (as_bin_expr->OPerator)
+			{
+			case Operator::Add:
+				if (type_flags & TN_Float_Type)
+					result_value.f64 = left_result.result.f64 + right_result.result.f64;
+				else
+					result_value.us8 = left_result.result.us8 + right_result.result.us8;
+				break;
+			case Operator::Subtract:
+				if (type_flags & TN_Float_Type)
+					result_value.f64 = left_result.result.f64 - right_result.result.f64;
+				else
+					result_value.us8 = left_result.result.us8 - right_result.result.us8;
+				break;
+			case Operator::Multiply:
+				if (type_flags & TN_Float_Type)
+					result_value.f64 = left_result.result.f64 * right_result.result.f64;
+				else
+					result_value.us8 = left_result.result.us8 * right_result.result.us8;
+				break;
+			case Operator::Divide:
+				//TODO: error when divide by 0
+				if (type_flags & TN_Float_Type)
+					result_value.f64 = left_result.result.f64 / right_result.result.f64;
+				else
+					result_value.us8 = left_result.result.us8 / right_result.result.us8;
+				break;
+			default:
+				ASSERT(nullptr, "unknown operator");
+				break;
+			}
+
+			Eval_Result result;
+			result.expression_type = bin_expr_result_type;
+			result.result = result_value;
+			result.ok = true;
+			return result;
+		}
+		case NodeType::Identifier:
+		case NodeType::TE_TypeName:
+		{
+			Identifier* as_ident = (Identifier*)expression;
+			String name = String_Make(as_ident->Symbol.Symbol);
+			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
+
+			if (identified_entity_id == Entity_Null) {
+				Push_Error_Loc(scope_id, as_ident, FMT("undefined name!: '{}'", as_ident->Symbol.Symbol));
+				return {};
+			}
+
+			Entity& identified_entity = Data.entity_storage[identified_entity_id];
+
+			ASSERT(identified_entity_id != Entity_Null);
+			//ASSERT(identified_entity.semantic_type);
+			ASSERT(identified_entity.flags & EF_Constant);
+			ASSERT(!(identified_entity.flags & EF_InComplete));
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = identified_entity.semantic_type;
+			result.result = identified_entity.constant_value;
+			result.entity_reference = identified_entity_id;
+			return result;
+		}
+		break;
+		case NodeType::TE_Pointer:
+		{
+			GS_Type* evaluated_type = Evaluate_Type(expression, scope_id);
+			if (!evaluated_type)
+				return {};
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = Data.Type_Ty;
+			result.result.type = evaluated_type;
+			return result;
+		}
+		break;
+		case NodeType::MemberAccess:
+		{
+			MemberAccess* as_member_access = (MemberAccess*)expression;
+
+			Eval_Result object_result = Expression_Evaluate(as_member_access->Object, scope_id, nullptr);
+
+			if (!object_result) {
+				return {};
+			}
+
+			Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+			String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+			if (object_result.expression_type == nullptr) {
+				if (object_result.entity_reference == Entity_Null)
+					return {};
+
+				Entity& referenced_entity = Data.entity_storage[object_result.entity_reference];
+
+				if (referenced_entity.entity_type == Entity_Type::Named_File_Load) {
+
+					Entity& referenced_file_scope = Data.entity_storage[Data.File_ID_To_Scope.at(Data.entity_storage[referenced_entity.named_file_load.file_load_entity_id].file_load.loaded_file_id)];
+
+					Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+
+					String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+					Entity* member_entity = nullptr;
+					Entity_ID member_entity_id = Entity_Null;
+
+					for (size_t i = 0; i < referenced_file_scope.children.count; i++)
+					{
+						if (String_Equal(member_name, Data.entity_storage[referenced_file_scope.children[i]].semantic_name)) {
+							member_entity = &Data.entity_storage[referenced_file_scope.children[i]];
+							member_entity_id = referenced_file_scope.children[i];
+						}
+					}
+
+					ASSERT(member_entity);
+
+					Eval_Result result;
+					result.ok = true;
+					result.expression_type = member_entity->semantic_type;
+					result.entity_reference = member_entity_id;
+					return result;
+				}
+				else {
+					ASSERT(nullptr);
+				}
+			}
+			else {
+
+				//TODO: improve performance
+
+				if (object_result.expression_type == Data.Type_Ty) {
+
+					GS_Type* type_value = object_result.result.type;
+					ASSERT(type_value);
+
+					auto type_value_flags = TypeSystem_Get_Type_Flags(Data.type_system, type_value);
+
+					if (!(type_value_flags & TN_Enum_Type)) {
+						Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+						return {};
+					}
+
+					Entity_ID enum_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[type_value->basic.type_name_id].name);
+
+					ASSERT(enum_entity_id != Entity_Null);
+					Entity& enum_entity = Data.entity_storage[enum_entity_id];
+
+					ASSERT(enum_entity.entity_type == Entity_Type::Enum_Entity);
+
+					Entity* member_entity = nullptr;
+					u64 member_index = -1;
+
+					for (size_t i = 0; i < enum_entity.children.count; i++)
+					{
+						if (String_Equal(Data.entity_storage[enum_entity.children[i]].semantic_name, member_name)) {
+							member_entity = &Data.entity_storage[enum_entity.children[i]];
+							member_index = i;
+							break;
+						}
+					}
+
+					if (!member_entity) {
+						Push_Error_Loc(scope_id, as_member_access->Member, FMT("enum does not have member named: '{}'", member_as_ident->Symbol.Symbol));
+						return {};
+					}
+
+					Eval_Result result;
+					result.ok = true;
+					result.expression_type = type_value;
+					result.result = member_entity->enum_member.value;
+					return result;
+				}
+				else {
+
+					auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
+
+					if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
+						Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+						return {};
+					}
+
+					Entity_ID struct_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].name);
+
+					ASSERT(struct_entity_id != Entity_Null);
+					Entity& struct_entity = Data.entity_storage[struct_entity_id];
+
+					ASSERT(struct_entity.entity_type == Entity_Type::Struct_Entity);
+
+					Entity* member_entity = nullptr;
+					u64 member_index = -1;
+
+					for (size_t i = 0; i < struct_entity.children.count; i++)
+					{
+						if (String_Equal(Data.entity_storage[struct_entity.children[i]].semantic_name, member_name)) {
+							member_entity = &Data.entity_storage[struct_entity.children[i]];
+							member_index = i;
+							break;
+						}
+					}
+
+					if (!member_entity) {
+						Push_Error_Loc(scope_id, as_member_access->Member, FMT("struct does not have member named: '{}'", member_as_ident->Symbol.Symbol));
+						return {};
+					}
+
+					//	Il_Node sep_node = Il_Make_Struct_Element_Ptr((u16)TypeSystem_Get_Type_Index(Data.type_system, object_result.expression_type), member_index, object_result.code_node_id);
+					//	Il_IDX sep_node_id = Il_Proc_Insert(proc, sep_node);
+
+					u64 offset = Data.type_system.struct_storage[Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].struct_id].offsets[member_index];
+
+					Eval_Result result;
+					result.ok = true;
+					result.expression_type = TypeSystem_Increase_Ind(Data.type_system, member_entity->semantic_type);
+					result.result.ptr = &(&object_result.result.us1)[offset];
+					return result;
+				}
+			}
+		}
+		break;
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+
+		return {};
 	}
 
 	CodeGen_Result Front_End::Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type)
@@ -591,6 +1108,25 @@ namespace Glass
 
 		switch (expression_type)
 		{
+		case NodeType::StringLiteral:
+		{
+			StringLiteral* as_lit = (StringLiteral*)expression;
+
+			String literal_value = String_Make(as_lit->Symbol.Symbol);
+			Const_Union constant_value = { 0 };
+			constant_value.string = *(GS_String*)&literal_value;
+
+			GS_Type* literal_type = Data.string_Ty;
+
+			u16 node_id = Il_Proc_Insert(proc, Il_Make_Constant(constant_value, (u16)TypeSystem_Get_Type_Index(Data.type_system, literal_type)));
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.code_node_id = node_id;
+			result.expression_type = literal_type;
+			return result;
+		}
+		break;
 		case NodeType::NumericLiteral:
 		{
 			NumericLiteral* as_lit = (NumericLiteral*)expression;
@@ -598,13 +1134,18 @@ namespace Glass
 			GS_Type* literal_type;
 
 			if (inferred_type) {
-				auto inferred_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
 
-				if (!(inferred_flags & TN_Float_Type) && (as_lit->type == NumericLiteral::Type::Float)) {
-					literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
-				}
-				else {
-					literal_type = inferred_type;
+				auto inferred_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+
+				if (inferred_type_flags & TN_Numeric_Type) {
+					auto inferred_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+
+					if (!(inferred_flags & TN_Float_Type) && (as_lit->type == NumericLiteral::Type::Float)) {
+						literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+					}
+					else {
+						literal_type = inferred_type;
+					}
 				}
 			}
 			else {
@@ -622,7 +1163,7 @@ namespace Glass
 			u64 literal_value = 0;
 			literal_value = as_lit->Val.Int;
 
-			u16 node_id = Il_Proc_Insert(proc, Il_Make_Constant((void*)literal_value, TypeSystem_Get_Type_Index(Data.type_system, literal_type)));
+			u16 node_id = Il_Proc_Insert(proc, Il_Make_Constant((void*)literal_value, (u16)TypeSystem_Get_Type_Index(Data.type_system, literal_type)));
 
 			CodeGen_Result result;
 			result.ok = true;
@@ -642,14 +1183,27 @@ namespace Glass
 				return {};
 
 			if (left_result.expression_type != right_result.expression_type) {
-				Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id, as_bin_expr, "type mismatch");
+				Push_Error_Loc(scope_id, as_bin_expr, "type mismatch");
 				return {};
 			}
+
+			if (!left_result.expression_type) {
+				Push_Error_Loc(scope_id, as_bin_expr->Left, "<un typed> value does not support math operations");
+				return {};
+			}
+
+			if (!right_result.expression_type) {
+				Push_Error_Loc(scope_id, as_bin_expr->Right, "<un typed> value does not support math operations");
+				return {};
+			}
+
+			auto left_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, left_result.expression_type);
+			auto right_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, right_result.expression_type);
 
 			GS_Type* bin_expr_result_type = left_result.expression_type;
 
 			if (!(TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type) & TN_Numeric_Type)) {
-				Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id, as_bin_expr, "types are not numeric and no overload was found");
+				Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
 				return {};
 			}
 
@@ -674,7 +1228,7 @@ namespace Glass
 				break;
 			}
 
-			Il_Node math_op_node = Il_Make_Math_Op(il_math_op_type, TypeSystem_Get_Type_Index(Data.type_system, bin_expr_result_type), left_result.code_node_id, right_result.code_node_id);
+			Il_Node math_op_node = Il_Make_Math_Op(il_math_op_type, (u16)TypeSystem_Get_Type_Index(Data.type_system, bin_expr_result_type), left_result.code_node_id, right_result.code_node_id);
 			Il_IDX result_node_idx = Il_Proc_Insert(proc, math_op_node);
 
 			CodeGen_Result result;
@@ -691,29 +1245,25 @@ namespace Glass
 			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
 
 			if (identified_entity_id == Entity_Null) {
-				Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id, as_ident, FMT("undefined name!: '{}'", as_ident->Symbol.Symbol));
+				Push_Error_Loc(scope_id, as_ident, FMT("undefined name!: '{}'", as_ident->Symbol.Symbol));
 				return {};
 			}
 
 			Entity& identified_entity = Data.entity_storage[identified_entity_id];
 
-			if (identified_entity.entity_type == Entity_Type::Named_File_Load) {
-				Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id, as_ident, "file loads cannot be referenced!");
-				return {};
-			}
-
 			ASSERT(identified_entity_id != Entity_Null);
-			ASSERT(identified_entity.semantic_type);
+			//ASSERT(identified_entity.semantic_type);
 			ASSERT(identified_entity.flags & EF_Constant);
 			ASSERT(!(identified_entity.flags & EF_InComplete));
 
-			Il_Node constant_value = Il_Make_Constant(identified_entity.constant_value.ptr, TypeSystem_Get_Type_Index(Data.type_system, identified_entity.semantic_type));
+			Il_Node constant_value = Il_Make_Constant(identified_entity.constant_value.ptr, (u16)TypeSystem_Get_Type_Index(Data.type_system, identified_entity.semantic_type));
 			Il_IDX value_node_id = Il_Proc_Insert(proc, constant_value);
 
 			CodeGen_Result result;
 			result.ok = true;
 			result.expression_type = identified_entity.semantic_type;
 			result.code_node_id = value_node_id;
+			result.entity_reference = identified_entity_id;
 			return result;
 		}
 		break;
@@ -727,7 +1277,7 @@ namespace Glass
 				return {};
 
 			if (pointee_result.expression_type != Data.Type_Ty) {
-				Push_Error_Loc(Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id, as_pointer->Pointee, "Expected expression to be a type!");
+				Push_Error_Loc(scope_id, as_pointer->Pointee, "Expected expression to be a type!");
 				return {};
 			}
 
@@ -738,7 +1288,7 @@ namespace Glass
 
 			GS_Type* generated_type = TypeSystem_Get_Pointer_Type(Data.type_system, pointee_result_node.constant.as.type, as_pointer->Indirection);
 
-			Il_Node constant_value = Il_Make_Constant(generated_type, TypeSystem_Get_Type_Index(Data.type_system, Data.Type_Ty));
+			Il_Node constant_value = Il_Make_Constant(generated_type, (u16)TypeSystem_Get_Type_Index(Data.type_system, Data.Type_Ty));
 			Il_IDX value_node_id = Il_Proc_Insert(proc, constant_value);
 
 			CodeGen_Result result;
@@ -746,6 +1296,158 @@ namespace Glass
 			result.expression_type = Data.Type_Ty;
 			result.code_node_id = value_node_id;
 			return result;
+		}
+		break;
+		case NodeType::MemberAccess:
+		{
+			MemberAccess* as_member_access = (MemberAccess*)expression;
+
+			CodeGen_Result object_result = Expression_CodeGen(as_member_access->Object, scope_id, proc, nullptr);
+
+			if (!object_result) {
+				return {};
+			}
+
+			Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+			String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+			if (object_result.expression_type == nullptr) {
+				if (object_result.entity_reference == Entity_Null)
+					return {};
+
+				Entity& referenced_entity = Data.entity_storage[object_result.entity_reference];
+
+				if (referenced_entity.entity_type == Entity_Type::Named_File_Load) {
+
+					Entity& referenced_file_scope = Data.entity_storage[Data.File_ID_To_Scope.at(Data.entity_storage[referenced_entity.named_file_load.file_load_entity_id].file_load.loaded_file_id)];
+
+					Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+
+					String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+					Entity* member_entity = nullptr;
+					Entity_ID member_entity_id = Entity_Null;
+
+					for (size_t i = 0; i < referenced_file_scope.children.count; i++)
+					{
+						if (String_Equal(member_name, Data.entity_storage[referenced_file_scope.children[i]].semantic_name)) {
+							member_entity = &Data.entity_storage[referenced_file_scope.children[i]];
+							member_entity_id = referenced_file_scope.children[i];
+						}
+					}
+
+					ASSERT(member_entity);
+
+					CodeGen_Result result;
+					result.ok = true;
+					result.expression_type = member_entity->semantic_type;
+					result.entity_reference = member_entity_id;
+					return result;
+				}
+				else {
+					ASSERT(nullptr);
+				}
+			}
+			else {
+
+				//TODO: improve performance
+
+				if (object_result.expression_type == Data.Type_Ty) {
+
+					Const_Union type_value_constant = proc.instruction_storage[object_result.code_node_id].constant.as;
+					GS_Type* type_value = type_value_constant.type;
+					ASSERT(type_value);
+					auto type_value_flags = TypeSystem_Get_Type_Flags(Data.type_system, type_value);
+
+					if (!(type_value_flags & TN_Enum_Type)) {
+						Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+						return {};
+					}
+
+					Entity_ID enum_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[type_value->basic.type_name_id].name);
+
+					ASSERT(enum_entity_id != Entity_Null);
+					Entity& enum_entity = Data.entity_storage[enum_entity_id];
+
+					ASSERT(enum_entity.entity_type == Entity_Type::Enum_Entity);
+
+					Entity* member_entity = nullptr;
+					u64 member_index = -1;
+
+					for (size_t i = 0; i < enum_entity.children.count; i++)
+					{
+						if (String_Equal(Data.entity_storage[enum_entity.children[i]].semantic_name, member_name)) {
+							member_entity = &Data.entity_storage[enum_entity.children[i]];
+							member_index = i;
+							break;
+						}
+					}
+
+					if (!member_entity) {
+						Push_Error_Loc(scope_id, as_member_access->Member, FMT("enum does not have member named: '{}'", member_as_ident->Symbol.Symbol));
+						return {};
+					}
+
+					Il_Node constant_value = Il_Make_Constant(member_entity->enum_member.value, (u16)TypeSystem_Get_Type_Index(Data.type_system, type_value));
+					Il_IDX value_node_id = Il_Proc_Insert(proc, constant_value);
+
+					CodeGen_Result result;
+					result.ok = true;
+					result.expression_type = type_value;
+					result.code_node_id = value_node_id;
+					return result;
+				}
+				else {
+
+					auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
+
+					if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
+						Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+						return {};
+					}
+
+					Entity_ID struct_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].name);
+
+					ASSERT(struct_entity_id != Entity_Null);
+					Entity& struct_entity = Data.entity_storage[struct_entity_id];
+
+					ASSERT(struct_entity.entity_type == Entity_Type::Struct_Entity);
+
+					Entity* member_entity = nullptr;
+					u64 member_index = -1;
+
+					for (size_t i = 0; i < struct_entity.children.count; i++)
+					{
+						if (String_Equal(Data.entity_storage[struct_entity.children[i]].semantic_name, member_name)) {
+							member_entity = &Data.entity_storage[struct_entity.children[i]];
+							member_index = i;
+							break;
+						}
+					}
+
+					if (!member_entity) {
+						Push_Error_Loc(scope_id, as_member_access->Member, FMT("struct does not have member named: '{}'", member_as_ident->Symbol.Symbol));
+						return {};
+					}
+
+					//	Il_Node sep_node = Il_Make_Struct_Element_Ptr((u16)TypeSystem_Get_Type_Index(Data.type_system, object_result.expression_type), member_index, object_result.code_node_id);
+					//	Il_IDX sep_node_id = Il_Proc_Insert(proc, sep_node);
+
+					Il_Node object_node = proc.instruction_storage[object_result.code_node_id];
+					ASSERT(object_node.node_type == Il_Const);
+
+					u64 offset = Data.type_system.struct_storage[Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].struct_id].offsets[member_index];
+
+					Il_Node constant_value = Il_Make_Constant(&(&object_node.constant.as.us1)[offset], (u16)TypeSystem_Get_Type_Index(Data.type_system, member_entity->semantic_type));
+					Il_IDX value_node_id = Il_Proc_Insert(proc, constant_value);
+
+					CodeGen_Result result;
+					result.ok = true;
+					result.expression_type = member_entity->semantic_type;
+					result.code_node_id = value_node_id;
+					return result;
+				}
+			}
 		}
 		break;
 		default:
@@ -757,7 +1459,56 @@ namespace Glass
 		return result;
 	}
 
-	bool Front_End::Do_Expression_Dependecy_Pass(Entity_ID scope_id, Expression* expr, Array<Entity_ID>& dependencies, Entity_ID ignore_indirect)
+	GS_Type* Front_End::Evaluate_Type(Expression* expression, Entity_ID scope_id)
+	{
+		switch (expression->GetType())
+		{
+		case NodeType::Identifier:
+		case NodeType::TE_TypeName:
+		{
+			Identifier* as_ident = (Identifier*)expression;
+			String name = String_Make(as_ident->Symbol.Symbol);
+			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
+
+			if (identified_entity_id == Entity_Null) {
+				Push_Error_Loc(scope_id, as_ident, FMT("undefined name!: '{}'", as_ident->Symbol.Symbol));
+				return {};
+			}
+
+			Entity& identified_entity = Data.entity_storage[identified_entity_id];
+
+			ASSERT(identified_entity_id != Entity_Null);
+			//ASSERT(identified_entity.semantic_type);
+			ASSERT(identified_entity.flags & EF_Constant);
+			ASSERT(!(identified_entity.flags & EF_InComplete));
+
+			if (identified_entity.semantic_type != Data.Type_Ty) {
+				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a type", as_ident->Symbol.Symbol));
+				return {};
+			}
+
+			return identified_entity.constant_value.type;
+		}
+		break;
+		case NodeType::TE_Pointer: {
+			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)expression;
+
+			GS_Type* pointee_result = Evaluate_Type(as_pointer->Pointee, scope_id);
+
+			if (!pointee_result)
+				return nullptr;
+
+			GS_Type* generated_type = TypeSystem_Get_Pointer_Type(Data.type_system, pointee_result, as_pointer->Indirection);
+			return generated_type;
+			break;
+		}
+		default:
+			ASSERT(nullptr);
+			break;
+		}
+	}
+
+	Dep_Result Front_End::Do_Expression_Dependecy_Pass(Entity_ID scope_id, Expression* expr, Array<Entity_ID>& dependencies, Entity_ID ignore_indirect)
 	{
 		GS_CORE_ASSERT(expr);
 		GS_CORE_ASSERT(scope_id != Entity_Null);
@@ -777,19 +1528,21 @@ namespace Glass
 
 			if (identified_entity_id == Entity_Null) {
 				GS_CORE_ASSERT(scope_entity.entity_type == Entity_Type::File_Scope);
-				Push_Error_Loc(scope_entity.file_scope.file_id, as_ident, FMT("undefined name: '{}'", as_ident->Symbol.Symbol));
-				return true;
+				Push_Error_Loc(scope_id, as_ident, FMT("undefined name: '{}'", as_ident->Symbol.Symbol));
+				return {};
 			}
 
 			Entity& identified_entity = Data.entity_storage[identified_entity_id];
 
 			if (!(identified_entity.flags & EF_Constant)) {
 				GS_CORE_ASSERT(scope_entity.entity_type == Entity_Type::File_Scope);
-				Push_Error_Loc(scope_entity.file_scope.file_id, as_ident, FMT("not a compile time constant: '{}'", as_ident->Symbol.Symbol));
-				return true;
+				Push_Error_Loc(scope_id, as_ident, FMT("not a compile time constant: '{}'", as_ident->Symbol.Symbol));
+				return {};
 			}
 
 			Array_Add(dependencies, identified_entity_id);
+
+			return { true, identified_entity_id };
 		}
 		break;
 		case NodeType::BinaryExpression:
@@ -798,17 +1551,81 @@ namespace Glass
 			GS_CORE_ASSERT(as_binary_expression->Right);
 			GS_CORE_ASSERT(as_binary_expression->Left);
 
-			if (Do_Expression_Dependecy_Pass(scope_id, as_binary_expression->Left, dependencies, ignore_indirect)) {
-				return true;
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_binary_expression->Left, dependencies, ignore_indirect)) {
+				return {};
 			}
 
-			if (Do_Expression_Dependecy_Pass(scope_id, as_binary_expression->Right, dependencies, ignore_indirect)) {
-				return true;
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_binary_expression->Right, dependencies, ignore_indirect)) {
+				return {};
 			}
+			return { true };
 		}
 		break;
 		case NodeType::NumericLiteral:
+		case NodeType::StringLiteral:
+			return { true };
 			break;
+		case NodeType::MemberAccess: {
+
+			MemberAccess* as_member_access = (MemberAccess*)expr;
+
+			GS_CORE_ASSERT(as_member_access->Member);
+			GS_CORE_ASSERT(as_member_access->Object);
+
+			Dep_Result object_dep_result = Do_Expression_Dependecy_Pass(scope_id, as_member_access->Object, dependencies, ignore_indirect);
+
+			if (!object_dep_result) {
+				return {};
+			}
+
+			if (object_dep_result.referenced_entity != Entity_Null) {
+
+				Entity& referenced_entity = Data.entity_storage[object_dep_result.referenced_entity];
+
+				if (referenced_entity.entity_type == Entity_Type::Named_File_Load) {
+
+					Entity& referenced_file_scope = Data.entity_storage[Data.File_ID_To_Scope.at(Data.entity_storage[referenced_entity.named_file_load.file_load_entity_id].file_load.loaded_file_id)];
+
+					Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+
+					String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+					Entity* member_entity = nullptr;
+					Entity_ID member_entity_id = Entity_Null;
+
+					for (size_t i = 0; i < referenced_file_scope.children.count; i++)
+					{
+						if (String_Equal(member_name, Data.entity_storage[referenced_file_scope.children[i]].semantic_name)) {
+							member_entity = &Data.entity_storage[referenced_file_scope.children[i]];
+							member_entity_id = referenced_file_scope.children[i];
+						}
+					}
+
+					if (!member_entity)
+					{
+						Push_Error_Loc(scope_id, as_member_access->Object, FMT("name '{}' is not found in '{}'", member_as_ident->Symbol.Symbol, std::string(referenced_entity.semantic_name.data)));
+						return {};
+					}
+					else {
+						Array_Add(dependencies, member_entity_id);
+						return { true };
+					}
+				}
+				else if (referenced_entity.entity_type == Entity_Type::Constant) {
+
+				}
+				else if (referenced_entity.entity_type == Entity_Type::Enum_Entity) {
+
+				}
+				else {
+					Push_Error_Loc(scope_id, as_member_access->Object, "expression does not support members");
+					return {};
+				}
+			}
+
+			return { true };
+		}
+								   break;
 		case NodeType::TE_Pointer:
 		{
 			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)expr;
@@ -816,8 +1633,8 @@ namespace Glass
 
 			Array<Entity_ID> indirect_dependencies;
 
-			if (Do_Expression_Dependecy_Pass(scope_id, as_pointer->Pointee, indirect_dependencies, ignore_indirect)) {
-				return true;
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_pointer->Pointee, indirect_dependencies, ignore_indirect)) {
+				return {};
 			}
 
 			for (size_t i = 0; i < indirect_dependencies.count; i++)
@@ -826,6 +1643,8 @@ namespace Glass
 					Array_Add(dependencies, indirect_dependencies[i]);
 				}
 			}
+
+			return { true };
 		}
 		break;
 		default:
@@ -833,7 +1652,7 @@ namespace Glass
 			break;
 		}
 
-		return false;
+		return {};
 	}
 
 	bool Front_End::Iterate_Tl_All_Files(std::function<bool(File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* syntax)> f)
@@ -913,8 +1732,9 @@ namespace Glass
 		Array_Add(Data.Messages, Front_End_Message{ warn, Message_Warning });
 	}
 
-	void Front_End::Push_Error_Loc(File_ID file_id, Statement* stmt, const std::string& error)
+	void Front_End::Push_Error_Loc(Entity_ID scope_id, Statement* stmt, const std::string& error)
 	{
+		File_ID file_id = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id;
 		ASSERT(file_id != File_Null);
 
 		const auto& token = stmt->GetLocation();
@@ -1077,6 +1897,37 @@ namespace Glass
 		return struct_member_entity;
 	}
 
+	Entity Front_End::Create_Enum_Entity(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity enum_entity = { 0 };
+
+		enum_entity.entity_type = Entity_Type::Enum_Entity;
+		enum_entity.semantic_name = String_Copy(name);
+		enum_entity.source_location = source_location;
+		enum_entity.definition_file = file_id;
+		enum_entity.semantic_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.Type_tn);
+
+		enum_entity.enum_entity.flags_enum = false;
+		enum_entity.enum_entity.type_name_id = (Type_Name_ID)-1;
+
+		return enum_entity;
+	}
+
+	Entity Front_End::Create_Enum_Member_Entity(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity enum_member_entity = { 0 };
+
+		enum_member_entity.entity_type = Entity_Type::Enum_Member_Entity;
+		enum_member_entity.semantic_name = String_Copy(name);
+		enum_member_entity.source_location = source_location;
+		enum_member_entity.definition_file = file_id;
+		enum_member_entity.semantic_type = nullptr;
+
+		enum_member_entity.enum_member.value = { 0 };
+
+		return enum_member_entity;
+	}
+
 	Entity_ID Front_End_Data::Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id)
 	{
 		Entity& entity = data.entity_storage[entity_id];
@@ -1117,10 +1968,10 @@ namespace Glass
 		Entity_ID visited_load = Get_File_Scope_Parent(data, scope_id);
 		ASSERT(data.entity_storage[visited_load].entity_type == Entity_Type::File_Scope);
 
-		return Get_Entity_ID_By_Name(data, scope_id, name, visited_load);
+		return Get_Entity_ID_By_Name(data, scope_id, name, visited_load, Entity_Null);
 	}
 
-	Entity_ID Front_End_Data::Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID scope_id, String name, Entity_ID visited_load)
+	Entity_ID Front_End_Data::Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID scope_id, String name, Entity_ID visited_load, Entity_ID visited_parent)
 	{
 		ASSERT(scope_id != Entity_Null);
 
@@ -1143,7 +1994,7 @@ namespace Glass
 
 				if (visited_load != file_load_file_scope) {
 
-					Entity_ID found_in_load = Get_Entity_ID_By_Name(data, file_load_file_scope, name, visited_load);
+					Entity_ID found_in_load = Get_Entity_ID_By_Name(data, file_load_file_scope, name, visited_load, visited_parent);
 
 					if (found_in_load != Entity_Null)
 					{
@@ -1154,7 +2005,16 @@ namespace Glass
 		}
 
 		if (scope_entity.parent != Entity_Null) {
-			return Get_Entity_ID_By_Name(data, scope_entity.parent, name, visited_load);
+
+			if (scope_entity.parent == 0) { // global scope
+				if (visited_parent == Entity_Null) {
+					return Get_Entity_ID_By_Name(data, scope_entity.parent, name, visited_load, 0);
+				}
+			}
+			else
+			{
+				return Get_Entity_ID_By_Name(data, scope_entity.parent, name, visited_load, visited_parent);
+			}
 		}
 
 		return Entity_Null;
