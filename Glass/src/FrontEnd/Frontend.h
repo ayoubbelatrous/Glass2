@@ -34,6 +34,10 @@ namespace Glass
 
 		Enum_Entity,
 		Enum_Member_Entity,
+
+		Function,
+
+		Variable,
 	};
 
 	enum Entity_Flag : u64
@@ -89,8 +93,22 @@ namespace Glass
 		Const_Union value;
 	};
 
+	struct Function_Parameter
+	{
+		String name;
+		GS_Type* param_type;
+	};
+
 	struct Entity_Function
 	{
+		Array_UI<Function_Parameter> parameters;
+		GS_Type* signature;
+		Il_IDX proc_idx;
+	};
+
+	struct Entity_Variable
+	{
+		Il_IDX location;
 	};
 
 	struct Entity
@@ -123,6 +141,7 @@ namespace Glass
 			Entity_Enum					enum_entity;
 			Entity_Enum_Member			enum_member;
 			Entity_Function				func;
+			Entity_Variable				var;
 		};
 	};
 
@@ -190,6 +209,7 @@ namespace Glass
 
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
+		static Entity_ID Get_Func_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID parent, String name, Entity_ID visited_load, Entity_ID visited_parent);
 		static Entity_ID Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID parent, String name);
 	};
@@ -198,6 +218,8 @@ namespace Glass
 		GS_Type* expression_type = nullptr;
 		u16 code_node_id = (u16)-1;
 		Entity_ID entity_reference = Entity_Null;
+		bool lvalue = false;
+		bool constant = false;
 		bool ok = false;
 
 		operator bool() {
@@ -248,10 +270,14 @@ namespace Glass
 		bool Do_Tl_Definition_Passes();
 		bool Do_Tl_Dependency_Passes();
 		bool Do_Tl_Resolution_Passes();
+		bool Do_CodeGen();
 
 		bool Resolve_Constant();
 
-		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type);
+		CodeGen_Result Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id);
+		CodeGen_Result Statement_CodeGen(Statement* statement, Entity_ID scope_id, Il_Proc& proc);
+		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type = nullptr, bool by_reference = false);
+
 		Eval_Result Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type);
 
 		GS_Type* Evaluate_Type(Expression* expression, Entity_ID scope_id);
@@ -286,7 +312,12 @@ namespace Glass
 		Entity Create_Enum_Entity(String name, Source_Loc source_location, File_ID file_id);
 		Entity Create_Enum_Member_Entity(String name, Source_Loc source_location, File_ID file_id);
 
+		Entity Create_Function_Entity(String name, Source_Loc source_location, File_ID file_id);
+		Entity Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id);
+
 		Front_End_Data Data;
 		ApplicationOptions Options;
+
+		Il_IDX main_proc_idx;
 	};
 }

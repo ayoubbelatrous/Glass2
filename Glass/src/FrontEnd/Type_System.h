@@ -19,6 +19,7 @@ namespace Glass
 	using Type_Name_ID = u32;
 	using Struct_ID = u32;
 	using Type_Name_Flags = u64;
+	using Type_IDX = u32;
 
 	struct Type_Name
 	{
@@ -56,8 +57,7 @@ namespace Glass
 	struct GS_Proc_Type
 	{
 		GS_Type* return_type;
-		GS_Type** params;
-		u64 params_count;
+		Array_UI<GS_Type*> params;
 	};
 
 	struct GS_Struct_Type
@@ -136,7 +136,7 @@ namespace Glass
 		return Combine2Hashes(hash, return_type_hash);
 	}
 
-	u64 TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type);
+	Type_IDX TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type);
 	GS_Type* TypeSystem_Get_Basic_Type(Type_System& ts, Type_Name_ID type_name_id);
 	GS_Type* TypeSystem_Get_Pointer_Type(Type_System& ts, GS_Type* pointee, u32 indirection);
 	GS_Type* TypeSystem_Get_Proc_Type(Type_System& ts, GS_Type* return_type, Array<GS_Type*> params);
@@ -147,4 +147,7 @@ namespace Glass
 	Type_Name_Flags TypeSystem_Get_Type_Alignment(Type_System& ts, GS_Type* type);
 	Type_Name_Flags TypeSystem_Get_Type_Size(Type_System& ts, GS_Type* type);
 	GS_Struct_Data_Layout TypeSystem_Struct_Compute_Align_Size_Offsets(Type_System& ts, Array<GS_Type*> members);
+
+	String TypeSystem_Print_Type(Type_System& ts, GS_Type* type);
+	String TypeSystem_Print_Type_Index(Type_System& ts, u64 type_idx);
 }

@@ -538,14 +538,12 @@ namespace Glass
 			Consume();
 		}
 
-		if (constant_decl) {
-			if (At().Type == TokenType::Pound) {
-				Consume();
-				Node.Assignment = (Expression*)ParseDirective();
-			}
-			else {
-				Node.Assignment = ParseExpression();
-			}
+		if (constant_decl && At().Type == TokenType::Pound) {
+			Consume();
+			Node.Assignment = (Expression*)ParseDirective();
+		}
+		else {
+			Node.Assignment = ParseExpression();
 		}
 
 		if (!Node.Assignment) {

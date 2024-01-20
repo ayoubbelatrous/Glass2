@@ -9,11 +9,49 @@ namespace Glass
 	struct Array;
 
 	template<typename E>
+	struct Array_UI;
+
+	template<typename E>
 	E* Array_Add(Array<E>& arr, const E& element);
+
+	template<typename E>
+	E* Array_Add(Array_UI<E>& arr, const E& element);
+
+	template<typename E>
+	struct Array_UI
+	{
+		u64 count;
+		u64 capacity;
+		E* data;
+
+		E& operator[](std::size_t index) {
+			if (index >= count) {
+				ASSERT("Array Out of bounds access");
+				return data[count - 1];
+			}
+			return data[index];
+		}
+
+		const E& operator[](std::size_t index) const {
+			if (index >= count) {
+				ASSERT("Array Out of bounds access");
+				return data[count - 1];
+			}
+			return data[index];
+		}
+	};
 
 	template<typename E>
 	struct Array
 	{
+		Array() = default;
+
+		Array(Array_UI<E> other) {
+			count = other.count;
+			capacity = other.capacity;
+			data = other.data;
+		}
+
 		u64 count = 0;
 		u64 capacity = 0;
 		E* data = nullptr;
@@ -56,7 +94,7 @@ namespace Glass
 		arr.capacity = vec.capacity();
 		arr.data = (E*)malloc(sizeof(E) * arr.capacity);
 
-		memcpy((void*)arr.data, (void*)vec.data(), arr.count * vec.size());
+		memcpy((void*)arr.data, (void*)vec.data(), arr.count * sizeof(E));
 
 		return arr;
 	}
@@ -69,9 +107,14 @@ namespace Glass
 		arr.capacity = other.capacity;
 		arr.data = (E*)malloc(sizeof(E) * arr.capacity);
 
-		memcpy((void*)arr.data, (void*)other.data, arr.count * other.count);
+		memcpy((void*)arr.data, (void*)other.data, arr.count * sizeof(E));
 
 		return arr;
+	}
+
+	template<typename E>
+	E* Array_Add(Array_UI<E>& arr, const E& element) {
+		return Array_Add(*(Array<E>*) & arr, element);
 	}
 
 	template<typename E>

@@ -447,20 +447,20 @@ namespace Glass
 		}
 
 		void PushStatement(Statement* stmt) {
-			m_Statements.push_back(stmt);
+			Statements.push_back(stmt);
 		}
 
 		const std::vector<Statement*>& GetStatements() const {
-			return m_Statements;
+			return Statements;
 		}
 
 		std::vector<Statement*>& GetStatements() {
-			return m_Statements;
+			return Statements;
 		}
 
 		virtual std::string ToString() const {
 			std::string str = "Scope\n";
-			for (auto stmt : m_Statements) {
+			for (auto stmt : Statements) {
 				str += stmt->ToString() + '\n';
 			}
 			return str;
@@ -473,8 +473,7 @@ namespace Glass
 			return OpenCurly;
 		}
 
-	private:
-		std::vector<Statement*> m_Statements;
+		std::vector<Statement*> Statements;
 	};
 
 	class ArgumentList : public Statement
@@ -488,7 +487,7 @@ namespace Glass
 
 		virtual std::string ToString() const {
 			std::string str = "(";
-			for (auto arg : m_Arguments) {
+			for (auto arg : Arguments) {
 				str += arg->ToString() + '\n';
 			}
 			return str + ")";
@@ -502,19 +501,19 @@ namespace Glass
 		}
 
 		void PushArgument(Statement* argument) {
-			m_Arguments.push_back(argument);
+			Arguments.push_back(argument);
 		}
 
 		const std::vector<Statement*>& GetArguments() const {
-			return m_Arguments;
+			return Arguments;
 		}
 
 		std::vector<Statement*>& GetArguments() {
-			return m_Arguments;
+			return Arguments;
 		}
 
-	private:
-		std::vector<Statement*> m_Arguments;
+		std::vector<Statement*> Arguments;
+
 	};
 
 	class ArgumentNode : public Expression
@@ -550,33 +549,31 @@ namespace Glass
 		}
 
 		void PushStatement(Statement* stmt) {
-			m_Scope->PushStatement(stmt);
+			scope->PushStatement(stmt);
 		}
 
 		const std::vector<Statement*>& GetStatements() const {
-			return m_Scope->GetStatements();
+			return scope->GetStatements();
 		}
 
 		void SetScope(ScopeNode* scope) {
-			m_Scope = scope;
+			this->scope = scope;
 		}
 
 		ScopeNode* GetScope() {
-			return m_Scope;
+			return scope;
 		}
 
 		void SetArgList(ArgumentList* arg_list) {
-			m_ArgumentList = arg_list;
+			argumentList = arg_list;
 		}
 
 		ArgumentList* GetArgList() {
-			return m_ArgumentList;
+			return argumentList;
 		}
 
 		virtual std::string ToString() const {
-			std::string str = "Fn " + Symbol.Symbol + " " + m_ArgumentList->ToString() + " " + " \n";
-			str += m_Scope->ToString();
-			return str;
+			return "";
 		}
 
 		Token DefinitionTk;
@@ -590,9 +587,8 @@ namespace Glass
 			return Symbol;
 		}
 
-	private:
-		ArgumentList* m_ArgumentList = nullptr;
-		ScopeNode* m_Scope = nullptr;
+		ArgumentList* argumentList = nullptr;
+		ScopeNode* scope = nullptr;
 	};
 
 

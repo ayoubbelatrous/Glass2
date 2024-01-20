@@ -14,8 +14,8 @@ namespace Glass
 
 	struct String
 	{
-		u64 count = 0;
-		char* data = nullptr;
+		u64 count;
+		char* data;
 
 		void operator=(const char* c_str) {
 			data = (char*)c_str;

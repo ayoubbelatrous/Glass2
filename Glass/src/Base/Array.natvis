@@ -2,13 +2,19 @@
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 
 	<Type Name="Glass::Array&lt;*&gt;">
-		<DisplayString Condition="count == 1">size={count} [{count}] {{ {*data} }}</DisplayString>
-		<DisplayString Condition="count == 2">size={count} [{count}] {{ {*data}, {*(data+1)} }}</DisplayString>
-		<DisplayString Condition="count == 3">size={count} [{count}] {{ {*data}, {*(data+1)}, {*(data+2)} }}</DisplayString>
-		<DisplayString Condition="count == 4">size={count} [{count}] {{ {*data}, {*(data+1)}, {*(data+2)}, {*(data+3)} }}</DisplayString>
-		<DisplayString Condition="count == 5">size={count} [{count}] {{ {*data}, {*(data+1)}, {*(data+2)}, {*(data+3)}, {*(data+4)} }}</DisplayString>
-		<DisplayString Condition="count == 6">size={count} [{count}] {{ {*data}, {*(data+1)}, {*(data+2)}, {*(data+3)}, {*(data+4)}, {*(data+5)} }}</DisplayString>
-		<DisplayString Condition="count &gt; 6">size={count} [{count}] {{ {*data}, {*(data+1)}, {*(data+2)}, {*(data+3)}, {*(data+4)}, {*(data+5)}, ... }}</DisplayString>
+		<DisplayString>size={count} [{count}]</DisplayString>
+		<Expand>
+			<Item Name="[size]">count</Item>
+			<Item Name="[capacity]">capacity</Item>
+			<ArrayItems>
+				<Size>count</Size>
+				<ValuePointer>data</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
+	<Type Name="Glass::Array_UI&lt;*&gt;">
+		<DisplayString >size={count} [{count}]</DisplayString>
 		<Expand>
 			<Item Name="[size]">count</Item>
 			<Item Name="[capacity]">capacity</Item>

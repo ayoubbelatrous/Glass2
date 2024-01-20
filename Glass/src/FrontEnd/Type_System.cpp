@@ -4,9 +4,9 @@
 
 namespace Glass
 {
-	u64 TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type)
+	Type_IDX TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type)
 	{
-		return ((u64)type - (u64)ts.type_storage.data) / sizeof(GS_Type);
+		return (Type_IDX)(((u64)type - (u64)ts.type_storage.data) / sizeof(GS_Type));
 	}
 
 	void TypeSystem_Init(Type_System& ts)
@@ -104,8 +104,7 @@ namespace Glass
 		new_type.kind = Type_Proc;
 		new_type.type_hash = type_hash;
 		new_type.proc.return_type = return_type;
-		new_type.proc.params = params.data;
-		new_type.proc.params_count = params.count;
+		new_type.proc.params = *(Array_UI<GS_Type*>*) & params;
 
 		GS_Type* inserted_type = Array_Add(ts.type_storage, new_type);
 		ts.type_lookup[type_hash] = inserted_type;
@@ -149,7 +148,7 @@ namespace Glass
 		}
 	}
 
-	Type_Name_Flags TypeSystem_Get_Type_Size(Type_System& ts, GS_Type* type)
+	u64 TypeSystem_Get_Type_Size(Type_System& ts, GS_Type* type)
 	{
 		if (type->kind == Type_Basic) {
 			return ts.type_name_storage[type->basic.type_name_id].size;
@@ -211,4 +210,31 @@ namespace Glass
 		return dl;
 	}
 
+	String TypeSystem_Print_Type(Type_System& ts, GS_Type* type)
+	{
+		std::stringstream stream;
+
+		switch (type->kind)
+		{
+		case Type_Basic:
+			stream << ts.type_name_storage[type->basic.type_name_id].name.data;
+			break;
+		case Type_Pointer:
+			stream << TypeSystem_Print_Type(ts, type->pointer.pointee).data;
+			for (size_t i = 0; i < type->pointer.indirection; i++)
+			{
+				stream << '*';
+			}
+			break;
+		default:
+			break;
+		}
+
+		return String_Make(stream.str());
+	}
+
+	String TypeSystem_Print_Type_Index(Type_System& ts, u64 type_idx)
+	{
+		return TypeSystem_Print_Type(ts, &ts.type_storage[type_idx]);
+	}
 }
