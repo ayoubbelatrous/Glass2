@@ -38,6 +38,8 @@ namespace Glass
 		Function,
 
 		Variable,
+
+		Library
 	};
 
 	enum Entity_Flag : u64
@@ -104,11 +106,21 @@ namespace Glass
 		Array_UI<Function_Parameter> parameters;
 		GS_Type* signature;
 		Il_IDX proc_idx;
+
+		bool foreign;
+		bool c_variadic;
+		Entity_ID library_entity_id;
 	};
 
 	struct Entity_Variable
 	{
 		Il_IDX location;
+	};
+
+	struct Entity_Library
+	{
+		String path;
+		Il_IDX library_node_idx;
 	};
 
 	struct Entity
@@ -142,6 +154,7 @@ namespace Glass
 			Entity_Enum_Member			enum_member;
 			Entity_Function				func;
 			Entity_Variable				var;
+			Entity_Library				library;
 		};
 	};
 
@@ -182,6 +195,8 @@ namespace Glass
 
 		Type_Name_ID void_tn;
 
+		Type_Name_ID bool_tn;
+
 		Type_Name_ID int_tn;
 
 		Type_Name_ID i8_tn;
@@ -200,6 +215,7 @@ namespace Glass
 
 		GS_Type* Type_Ty = nullptr;
 		GS_Type* void_Ty = nullptr;
+		GS_Type* bool_Ty = nullptr;
 
 		GS_Type* string_Ty = nullptr;
 
@@ -274,6 +290,7 @@ namespace Glass
 
 		bool Resolve_Constant();
 
+		bool Foreign_Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id);
 		CodeGen_Result Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id);
 		CodeGen_Result Statement_CodeGen(Statement* statement, Entity_ID scope_id, Il_Proc& proc);
 		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type = nullptr, bool by_reference = false);
@@ -314,6 +331,8 @@ namespace Glass
 
 		Entity Create_Function_Entity(String name, Source_Loc source_location, File_ID file_id);
 		Entity Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id);
+
+		Entity Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Front_End_Data Data;
 		ApplicationOptions Options;

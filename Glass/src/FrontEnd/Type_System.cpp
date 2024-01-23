@@ -56,6 +56,13 @@ namespace Glass
 	{
 		ASSERT(pointee);
 		ASSERT(indirection);
+
+		while (pointee->kind == Type_Pointer)
+		{
+			pointee = pointee->pointer.pointee;
+			indirection += pointee->pointer.indirection;
+		}
+
 		ASSERT(pointee->kind != Type_Pointer);
 
 		u64 type_hash = GS_Pointer_Type_Hash(pointee->type_hash, indirection);
@@ -128,6 +135,9 @@ namespace Glass
 	{
 		if (type->kind == Type_Basic) {
 			return ts.type_name_storage[type->basic.type_name_id].flags;
+		}
+		else if (type->kind == Type_Pointer) {
+			return TN_Pointer_Type;
 		}
 		else {
 			return 0;

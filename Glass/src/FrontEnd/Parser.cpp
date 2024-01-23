@@ -159,21 +159,21 @@ namespace Glass
 			Expression* library_name = ParseExpression();
 
 			if (!library_name) {
-				Abort("Expected a Statement after #foreign directive");
+				Abort("Expected library name after #foreign directive");
 			}
 
 			if (library_name->GetType() != NodeType::Identifier) {
-				Abort("Expected a library name after #foreign directive");
+				Abort("Expected library name to be a name after #foreign directive");
 			}
 
 			ForeignNode Node;
 
-			Node.statement = ParseStatement();
+			//Node.statement = ParseStatement();
 			Node.library_name = (Identifier*)library_name;
 
-			if (Node.statement == nullptr) {
-				Abort("Expected a Statement after library name");
-			}
+			// 			if (Node.statement == nullptr) {
+			// 				Abort("Expected a Statement after library name");
+			// 			}
 
 			return Application::AllocateAstNode(Node);
 		}
@@ -796,11 +796,26 @@ namespace Glass
 
 		if (At().Type != TokenType::SemiColon) {
 
-			if (ExpectedToken(TokenType::OpenCurly)) {
-				Abort("Expected A '{' During Function Parsing Instead Got");
-			}
+			if (At().Type == TokenType::Pound) {
+				Consume();
 
-			Node.SetScope((ScopeNode*)ParseScope());
+				Node.foreign_directive = (ForeignNode*)ParseDirective();
+
+				if (!Node.foreign_directive) {
+					Abort("Expected a valid directive after '#'");
+				}
+
+				if (Node.foreign_directive->GetType() != NodeType::Foreign) {
+					Abort("Expected only supported directive here is: #foreign");
+				}
+			}
+			else {
+				if (ExpectedToken(TokenType::OpenCurly)) {
+					Abort("Expected A '{' During Function Parsing Instead Got");
+				}
+
+				Node.SetScope((ScopeNode*)ParseScope());
+			}
 		}
 
 		return Application::AllocateAstNode(Node);

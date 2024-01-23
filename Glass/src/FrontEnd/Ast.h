@@ -539,6 +539,8 @@ namespace Glass
 		}
 	};
 
+	class ForeignNode;
+
 	class FunctionNode : public Statement
 	{
 	public:
@@ -589,6 +591,7 @@ namespace Glass
 
 		ArgumentList* argumentList = nullptr;
 		ScopeNode* scope = nullptr;
+		ForeignNode* foreign_directive = nullptr;
 	};
 
 
@@ -737,7 +740,7 @@ namespace Glass
 		}
 
 		virtual const Token& GetLocation() const override {
-			return statement->GetLocation();
+			return library_name->GetLocation();
 		}
 	};
 

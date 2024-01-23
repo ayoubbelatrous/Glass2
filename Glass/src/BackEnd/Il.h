@@ -25,6 +25,7 @@ namespace Glass
 
 		Il_Alloca,
 		Il_Load,
+		Il_String,
 		Il_Store,
 
 		Il_Ret,
@@ -34,10 +35,32 @@ namespace Glass
 		Il_Sub,
 		Il_Mul,
 		Il_Div,
+		Il_Bit_And,
+		Il_Bit_Or,
 
 		Il_StructElementPtr,
 
+		Il_ZI,
+
+		Il_Value_Cmp,
+		Il_Value_FCmp,
+
+		Il_Cond_Branch,
+		Il_Branch,
+
 		Il_Max,
+	};
+
+	enum Il_Cmp_Type : u8
+	{
+		Il_Cmp_Equal,
+		Il_Cmp_NotEqual,
+		Il_Cmp_Greater,
+		Il_Cmp_Lesser,
+		Il_Cmp_LesserEqual,
+		Il_Cmp_GreaterEqual,
+		Il_Cmp_And,
+		Il_Cmp_Or,
 	};
 
 	struct Il_Node_Param
@@ -67,8 +90,15 @@ namespace Glass
 		u16 element_idx;
 	};
 
-	struct Il_Node_Math_Op
+	struct Il_Node_Bin_Op
 	{
+		Il_IDX left_node_idx;
+		Il_IDX right_node_idx;
+	};
+
+	struct Il_Node_Compare
+	{
+		Il_Cmp_Type compare_type;
 		Il_IDX left_node_idx;
 		Il_IDX right_node_idx;
 	};
@@ -126,6 +156,23 @@ namespace Glass
 		Const_Union as;
 	};
 
+	struct Il_Node_String
+	{
+		String str;
+	};
+
+	struct Il_Node_Cond_Branch
+	{
+		Il_IDX condition_node_idx;
+		Il_IDX true_case_block_idx;
+		Il_IDX false_case_block_idx;
+	};
+
+	struct Il_Node_Branch
+	{
+		Il_IDX block_idx;
+	};
+
 	struct Il_Node
 	{
 		Type_IDX type_idx;
@@ -133,15 +180,19 @@ namespace Glass
 
 		union
 		{
-			Il_Node_Constant constant;
-			Il_Node_Alloca aloca;
-			Il_Node_Load load;
-			Il_Node_Store store;
-			Il_Node_Math_Op math_op;
-			Il_Node_Ret ret;
-			Il_Node_Struct_Element_Ptr element_ptr;
-			Il_Node_Param param;
-			Il_Node_Call call;
+			Il_Node_Constant			constant;
+			Il_Node_Alloca				aloca;
+			Il_Node_Load				load;
+			Il_Node_Store				store;
+			Il_Node_Bin_Op				math_op;
+			Il_Node_Compare				cmp_op;
+			Il_Node_Ret					ret;
+			Il_Node_Struct_Element_Ptr  element_ptr;
+			Il_Node_Param				param;
+			Il_Node_Call				call;
+			Il_Node_String				string;
+			Il_Node_Cond_Branch			c_branch;
+			Il_Node_Branch				br;
 		};
 	};
 
@@ -165,11 +216,21 @@ namespace Glass
 		Array<Il_Node> instruction_storage;
 		Array<Il_Block> blocks;
 		Il_IDX insertion_point = (Il_IDX)-1;
+
+		bool variadic = false;
+		bool external = false;
+		Il_IDX library;
+	};
+
+	struct Il_Library
+	{
+		String path;
 	};
 
 	struct Il_Program
 	{
 		Array<Il_Proc> procedures;
+		Array<Il_Library> libraries;
 		Type_System* type_system = nullptr;
 	};
 
@@ -200,7 +261,7 @@ namespace Glass
 		return node_idx;
 	}
 
-	inline Il_IDX Il_Insert_Proc(Il_Program& prog, String name, GS_Type* signature) {
+	inline Il_IDX Il_Insert_Proc(Il_Program& prog, String name, GS_Type* signature, bool variadic = false) {
 
 		Il_Proc proc = {};
 		proc.proc_name = name;
@@ -208,18 +269,45 @@ namespace Glass
 		proc.blocks = Array_Reserved<Il_Block>(128);
 		proc.program = &prog;
 		proc.signature = signature;
+		proc.variadic = variadic;
 
-		Il_Block entry_block;
+		Il_Block entry_block = {};
 		entry_block.instructions = Array_Reserved<Il_IDX>(128);
+		entry_block.name = "entry";
 
 		Array_Add(proc.blocks, entry_block);
-		proc.insertion_point = 0;
+		proc.insertion_point = (Il_IDX)(proc.blocks.count - 1);
 
 		for (size_t i = 0; i < signature->proc.params.count; i++)
 		{
 			Il_IDX inserted_param_idx = Il_Proc_Insert(proc, Il_Make_Param((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature->proc.params[i]), (Il_IDX)i));
 			Array_Add(proc.parameters, inserted_param_idx);
 		}
+
+		Array_Add(prog.procedures, proc);
+
+		return (Il_IDX)(prog.procedures.count - 1);
+	}
+
+	inline Il_IDX Il_Insert_Library(Il_Program& prog, String path) {
+
+		Il_Library library = {};
+		library.path = path;
+
+		Array_Add(prog.libraries, library);
+
+		return (Il_IDX)(prog.libraries.count - 1);
+	}
+
+	inline Il_IDX Il_Insert_External_Proc(Il_Program& prog, String name, GS_Type* signature, Il_IDX library_node_idx, bool variadic = false) {
+
+		Il_Proc proc = {};
+		proc.proc_name = name;
+		proc.program = &prog;
+		proc.signature = signature;
+		proc.external = true;
+		proc.library = library_node_idx;
+		proc.variadic = variadic;
 
 		Array_Add(prog.procedures, proc);
 
@@ -234,6 +322,15 @@ namespace Glass
 		const_node.constant.as.ptr = value;
 
 		return const_node;
+	}
+
+	inline Il_Node Il_Make_Zero_Init(Type_IDX type_index) {
+
+		Il_Node zi_node = { 0 };
+		zi_node.node_type = Il_ZI;
+		zi_node.type_idx = type_index;
+
+		return zi_node;
 	}
 
 	inline Il_Node Il_Make_Struct_Element_Ptr(Type_IDX type_idx, u16 element_idx, Il_IDX ptr_node_idx) {
@@ -297,9 +394,55 @@ namespace Glass
 		return store_node;
 	}
 
+	inline Il_Node Il_Make_String(String string, Type_IDX type_idx) {
+
+		Il_Node store_node = { 0 };
+		store_node.node_type = Il_String;
+		store_node.type_idx = type_idx;
+		store_node.string.str = string;
+
+		return store_node;
+	}
+
+	inline Il_Node Il_Make_Compare(Il_Node_Type cmp_node_type, Il_Cmp_Type compare_type, Type_IDX type_idx, Il_IDX left, Il_IDX right) {
+
+		Il_Node store_node = { 0 };
+		store_node.node_type = cmp_node_type;
+		store_node.type_idx = type_idx;
+		store_node.cmp_op.compare_type = compare_type;
+		store_node.cmp_op.left_node_idx = left;
+		store_node.cmp_op.right_node_idx = right;
+
+		return store_node;
+	}
+
+	inline Il_Node Il_Make_CBR(Type_IDX type_idx, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
+
+		Il_Node cbr_node = { 0 };
+
+		cbr_node.node_type = Il_Cond_Branch;
+		cbr_node.type_idx = type_idx;
+		cbr_node.c_branch.condition_node_idx = condition_node_idx;
+		cbr_node.c_branch.true_case_block_idx = true_case_block;
+		cbr_node.c_branch.false_case_block_idx = false_case_block;
+
+		return cbr_node;
+	}
+
+	inline Il_Node Il_Make_Br(Il_IDX block_idx) {
+
+		Il_Node br_node = { 0 };
+
+		br_node.node_type = Il_Branch;
+		br_node.type_idx = -1;
+		br_node.br.block_idx = block_idx;
+
+		return br_node;
+	}
+
 	inline Il_Node Il_Make_Math_Op(Il_Node_Type math_op_node_type, Type_IDX type_index, Il_IDX left, Il_IDX right) {
 
-		if (math_op_node_type != Il_Add && math_op_node_type != Il_Sub && math_op_node_type != Il_Mul && math_op_node_type != Il_Div) {
+		if (math_op_node_type != Il_Add && math_op_node_type != Il_Sub && math_op_node_type != Il_Mul && math_op_node_type != Il_Div && math_op_node_type != Il_Bit_And && math_op_node_type != Il_Bit_Or) {
 			GS_ASSERT_UNIMPL();
 		}
 
@@ -375,15 +518,62 @@ namespace Glass
 		return Il_Proc_Insert(proc, call_node);
 	}
 
+	inline Il_IDX Il_Insert_Zero_Init(Il_Proc& proc, GS_Type* type) {
+		Il_Node zi_node = Il_Make_Zero_Init((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
+		return Il_Proc_Insert(proc, zi_node);
+	}
+
+	inline Il_IDX Il_Insert_String(Il_Proc& proc, GS_Type* a_pointer_type, String string) {
+		ASSERT(a_pointer_type->kind == Type_Pointer);
+		Il_Node string_node = Il_Make_String(string, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, a_pointer_type));
+		return Il_Proc_Insert(proc, string_node);
+	}
+
+	inline Il_IDX Il_Insert_Compare(Il_Proc& proc, Il_Node_Type cmp_node_type, Il_Cmp_Type compare_type, GS_Type* type, Il_IDX left, Il_IDX right) {
+		Il_Node cmp_node = Il_Make_Compare(cmp_node_type, compare_type, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type), left, right);
+		return Il_Proc_Insert(proc, cmp_node);
+	}
+
+	inline Il_IDX Il_Insert_CBR(Il_Proc& proc, GS_Type* type, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
+		Il_Node cbr_node = Il_Make_CBR((Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type), condition_node_idx, true_case_block, false_case_block);
+		return Il_Proc_Insert(proc, cbr_node);
+	}
+
+	inline Il_IDX Il_Insert_Br(Il_Proc& proc, Il_IDX block_idx) {
+		Il_Node br_node = Il_Make_Br(block_idx);
+		return Il_Proc_Insert(proc, br_node);
+	}
+
+	inline Il_IDX Il_Insert_Block(Il_Proc& proc, String name = {}) {
+
+		Il_Block block = {};
+		block.instructions = Array_Reserved<Il_IDX>(128);
+		block.name = name;
+
+		Array_Add(proc.blocks, block);
+		proc.insertion_point = (Il_IDX)(proc.blocks.count - 1);
+
+		return (Il_IDX)proc.insertion_point;
+	}
+
+	inline void Il_Set_Insert_Point(Il_Proc& proc, Il_IDX insert_point) {
+		ASSERT((Il_IDX)proc.blocks.count > insert_point, "insert point out of range");
+		proc.insertion_point = insert_point;
+	}
+
 	std::string Il_Print_Proc(Il_Proc& proc);
 
-#define REG_BUF_SZ 2048
-#define STACK_SZ 1024*10
+#define REG_BUF_SZ 1024
+#define STACK_SZ 128
 
 	struct Execution_Engine {
 		Type_System* type_system = nullptr;
 		Il_Program* program = nullptr;
+		Array<void*> library_handles;
+		Array<void*> proc_pointers;
 	};
 
-	Const_Union EE_Exec_Proc(Execution_Engine& ee, Il_Proc& proc, Array<Const_Union> arguments);
+	Const_Union EE_Exec_Program(Execution_Engine& ee, Il_Program* prog, Il_IDX entry);
+	Const_Union EE_Exec_Proc(Execution_Engine& ee, Il_Proc& proc, Array<Const_Union> arguments, Array<GS_Type*> argument_types = {});
+	Const_Union EE_Exec_External_Proc(Execution_Engine& ee, Il_Proc& proc, Array<Const_Union> arguments, Array<GS_Type*> argument_types = {});
 }

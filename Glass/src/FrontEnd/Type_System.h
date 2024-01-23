@@ -10,10 +10,12 @@ namespace Glass
 	{
 		TN_Base_Type = BIT(0),
 		TN_Numeric_Type = BIT(1),
-		TN_Float_Type = BIT(2),
-		TN_Unsigned_Type = BIT(3),
-		TN_Struct_Type = BIT(4),
-		TN_Enum_Type = BIT(5),
+		TN_Bool_Type = BIT(2),
+		TN_Float_Type = BIT(3),
+		TN_Unsigned_Type = BIT(4),
+		TN_Struct_Type = BIT(5),
+		TN_Enum_Type = BIT(6),
+		TN_Pointer_Type = BIT(7),
 	};
 
 	using Type_Name_ID = u32;

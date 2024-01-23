@@ -43,12 +43,16 @@ namespace Glass
 		Data.exec_engine.type_system = &Data.type_system;
 		Data.exec_engine.program = &Data.il_program;
 
-		auto insert_base_num_type_name = [this](String name, u64 size, u64 alignment, bool is_signed, bool is_float) -> auto {
+		auto insert_base_type_name = [this](String name, u64 size, u64 alignment, bool is_signed, bool is_float, bool numeric = true, bool bool_type = false) -> auto {
 			Type_Name tn;
 			tn.size = size;
 			tn.alignment = alignment;
 			tn.name = name;
-			tn.flags = TN_Base_Type | TN_Numeric_Type;
+			tn.flags = TN_Base_Type;
+
+			if (numeric) {
+				tn.flags = TN_Numeric_Type;
+			}
 
 			if (!is_signed) {
 				tn.flags |= TN_Unsigned_Type;
@@ -56,6 +60,10 @@ namespace Glass
 
 			if (is_float) {
 				tn.flags |= TN_Float_Type;
+			}
+
+			if (bool_type) {
+				tn.flags |= TN_Bool_Type;
 			}
 
 			Type_Name_ID type_name_id = TypeSystem_Insert_TypeName(Data.type_system, tn);
@@ -117,22 +125,25 @@ namespace Glass
 
 		}
 
-		Data.int_tn = insert_base_num_type_name(String_Make("int"), 4, 4, true, false);
+		Data.bool_tn = insert_base_type_name(String_Make("bool"), 1, 1, true, false, false, true);
+		Data.bool_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.bool_tn);
 
-		Data.i8_tn = insert_base_num_type_name(String_Make("i8"), 1, 1, true, false);
-		Data.i16_tn = insert_base_num_type_name(String_Make("i16"), 2, 2, true, false);
-		Data.i32_tn = insert_base_num_type_name(String_Make("i32"), 4, 4, true, false);
-		Data.i64_tn = insert_base_num_type_name(String_Make("i64"), 8, 8, true, false);
+		Data.int_tn = insert_base_type_name(String_Make("int"), 4, 4, true, false);
 
-		Data.u8_tn = insert_base_num_type_name(String_Make("u8"), 1, 1, false, false);
-		Data.u16_tn = insert_base_num_type_name(String_Make("u16"), 2, 2, false, false);
-		Data.u32_tn = insert_base_num_type_name(String_Make("u32"), 4, 4, false, false);
-		Data.u64_tn = insert_base_num_type_name(String_Make("u64"), 8, 8, false, false);
+		Data.i8_tn = insert_base_type_name(String_Make("i8"), 1, 1, true, false);
+		Data.i16_tn = insert_base_type_name(String_Make("i16"), 2, 2, true, false);
+		Data.i32_tn = insert_base_type_name(String_Make("i32"), 4, 4, true, false);
+		Data.i64_tn = insert_base_type_name(String_Make("i64"), 8, 8, true, false);
 
-		Data.float_tn = insert_base_num_type_name(String_Make("float"), 4, 4, false, true);
+		Data.u8_tn = insert_base_type_name(String_Make("u8"), 1, 1, false, false);
+		Data.u16_tn = insert_base_type_name(String_Make("u16"), 2, 2, false, false);
+		Data.u32_tn = insert_base_type_name(String_Make("u32"), 4, 4, false, false);
+		Data.u64_tn = insert_base_type_name(String_Make("u64"), 8, 8, false, false);
 
-		Data.f32_tn = insert_base_num_type_name(String_Make("f32"), 4, 4, false, true);
-		Data.f64_tn = insert_base_num_type_name(String_Make("f64"), 8, 8, false, true);
+		Data.float_tn = insert_base_type_name(String_Make("float"), 4, 4, false, true);
+
+		Data.f32_tn = insert_base_type_name(String_Make("f32"), 4, 4, true, true);
+		Data.f64_tn = insert_base_type_name(String_Make("f64"), 8, 8, true, true);
 
 		if (Load_Base()) {
 			return;
@@ -153,7 +164,8 @@ namespace Glass
 
 		Do_CodeGen();
 
-		auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
+		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
+		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
 
 		GS_CORE_INFO("main returned: {}", result.us8);
 	}
@@ -456,6 +468,20 @@ namespace Glass
 				new_function_entity.flags = EF_InComplete;
 				new_function_entity.syntax_node = as_func_node;
 
+				if (as_func_node->foreign_directive) {
+					new_function_entity.func.foreign = true;
+				}
+
+				if (as_func_node->CVariadic) {
+
+					if (!as_func_node->foreign_directive) {
+						Push_Error_Loc(file_entity_id, as_func_node, FMT("function '{}' with ! declared C variadic is not foreign", as_func_node->Symbol.Symbol));
+						return true;
+					}
+
+					new_function_entity.func.c_variadic = true;
+				}
+
 				Entity_ID inserted_function_entity_id = Insert_Entity(new_function_entity, file_entity_id);
 
 				Entity& inserted_entity = Data.entity_storage[inserted_function_entity_id];
@@ -477,6 +503,26 @@ namespace Glass
 
 					Array_Add(inserted_entity.func.parameters, parameter);
 				}
+			}
+			else if (statement->GetType() == NodeType::Library) {
+
+				LibraryNode* as_library_node = (LibraryNode*)statement;
+
+				String library_name = String_Make(as_library_node->Name.Symbol);
+
+				Entity_ID previous_definition = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, library_name);
+
+				if (previous_definition != Entity_Null) {
+					Push_Error_Loc(file_entity_id, as_library_node, FMT("library '{}' has its name already taken", as_library_node->Name.Symbol));
+					return true;
+				}
+
+				Entity library_entity = Create_Library_Entity(library_name, Loc_From_Token(as_library_node->Name), file_entity.file_scope.file_id);
+				library_entity.library.path = String_Make(as_library_node->FileName->Symbol.Symbol);
+
+				library_entity.library.library_node_idx = Il_Insert_Library(Data.il_program, String_Make(as_library_node->FileName->Symbol.Symbol + ".dll"));
+
+				Insert_Entity(library_entity, file_entity_id);
 			}
 			return false;
 			});
@@ -651,6 +697,28 @@ namespace Glass
 
 						FunctionNode* as_func_node = (FunctionNode*)tl_entity.syntax_node;
 
+						if (tl_entity.func.foreign) {
+
+							ASSERT(as_func_node->foreign_directive);
+
+							String foreign_library_name = String_Make(as_func_node->foreign_directive->library_name->Symbol.Symbol);
+
+							Entity_ID foreign_library_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, foreign_library_name);
+
+							if (foreign_library_entity_id == Entity_Null) {
+								Push_Error_Loc(file_entity_id, as_func_node->foreign_directive, FMT("library '{}' is not defined", as_func_node->foreign_directive->library_name->Symbol.Symbol));
+								return true;
+							}
+
+							if (Data.entity_storage[foreign_library_entity_id].entity_type != Entity_Type::Library) {
+								Push_Error_Loc(file_entity_id, as_func_node->foreign_directive, FMT("'{}' is not a library", as_func_node->foreign_directive->library_name->Symbol.Symbol));
+								return true;
+							}
+
+							tl_entity.func.library_entity_id = foreign_library_entity_id;
+							Array_Add(tl_entity.dependencies, foreign_library_entity_id);
+						}
+
 						for (size_t i = 0; i < as_func_node->argumentList->Arguments.size(); i++)
 						{
 							ArgumentNode* as_arg = (ArgumentNode*)as_func_node->argumentList->Arguments[i];
@@ -823,13 +891,7 @@ namespace Glass
 
 					if (as_func_node->ReturnType) {
 						return_type = Evaluate_Type(as_func_node->ReturnType, entity.parent);
-
 						ASSERT(return_type);
-
-						//if (!return_type) {
-						//	Push_Error_Loc(entity.parent, as_func_node->ReturnType, FMT("function '{}' undefined return type", as_func_node->Symbol.Symbol));
-						//	return true;
-						//}
 					}
 					else {
 						return_type = Data.void_Ty;
@@ -846,13 +908,25 @@ namespace Glass
 						ASSERT(argument_type);
 
 						entity.func.parameters[i].param_type = argument_type;
-
 						Array_Add(param_types, argument_type);
+
 					}
 
 					GS_Type* signature = TypeSystem_Get_Proc_Type(Data.type_system, return_type, param_types);
 					ASSERT(signature);
 					entity.func.signature = signature;
+
+
+					if (entity.func.foreign) {
+						Entity& library_entity = Data.entity_storage[entity.func.library_entity_id];
+						Il_IDX inserted_external_proc_idx = Il_Insert_External_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature, library_entity.library.library_node_idx, entity.func.c_variadic);
+						Il_Proc& proc = Data.il_program.procedures[inserted_external_proc_idx];
+						entity.func.proc_idx = inserted_external_proc_idx;
+					}
+					else {
+						Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature);
+						entity.func.proc_idx = inserted_proc_idx;
+					}
 				}
 			}
 
@@ -877,9 +951,21 @@ namespace Glass
 			Entity& entity = Data.entity_storage[i];
 
 			if (entity.entity_type == Entity_Type::Function) {
-				Function_CodeGen(entity, (Entity_ID)i, entity.parent);
+				if (!entity.func.foreign) {
+					Function_CodeGen(entity, (Entity_ID)i, entity.parent);
+				}
+				else {
+					Foreign_Function_CodeGen(entity, (Entity_ID)i, entity.parent);
+				}
 			}
 		}
+
+		return false;
+	}
+
+	bool Front_End::Foreign_Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id)
+	{
+		ASSERT(function_entity.func.foreign);
 
 		return false;
 	}
@@ -890,13 +976,10 @@ namespace Glass
 
 		File_ID current_file = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id;
 
-		Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(function_entity.semantic_name), function_entity.func.signature);
-		Il_Proc& proc = Data.il_program.procedures[inserted_proc_idx];
-
-		function_entity.func.proc_idx = inserted_proc_idx;
+		Il_Proc& proc = Data.il_program.procedures[function_entity.func.proc_idx];
 
 		if (as_func_node->Symbol.Symbol == "main") {
-			main_proc_idx = inserted_proc_idx;
+			main_proc_idx = function_entity.func.proc_idx;
 		}
 
 		for (size_t i = 0; i < function_entity.func.parameters.count; i++)
@@ -938,6 +1021,7 @@ namespace Glass
 		case NodeType::Identifier:
 		case NodeType::NumericLiteral:
 		case NodeType::BinaryExpression:
+		case NodeType::Call:
 			return Expression_CodeGen((Expression*)statement, scope_id, proc);
 			break;
 		case NodeType::Return:
@@ -1034,6 +1118,16 @@ namespace Glass
 			else {
 				variable.var.location = Il_Insert_Alloca(proc, variable_type);
 				variable.semantic_type = variable_type;
+
+				auto type_size = TypeSystem_Get_Type_Size(Data.type_system, variable_type);
+
+				if (type_size <= sizeof(Const_Union)) {
+					Const_Union zero = { 0 };
+					Il_Insert_Store(proc, variable_type, variable.var.location, Il_Insert_Constant(proc, zero, variable_type));
+				}
+				else {
+					Il_Insert_Store(proc, variable_type, variable.var.location, Il_Insert_Zero_Init(proc, variable_type));
+				}
 			}
 
 			Insert_Entity(variable, scope_id);
@@ -1042,6 +1136,77 @@ namespace Glass
 			result.ok = true;
 			return result;
 		}
+		case NodeType::Scope: {
+
+			ScopeNode* as_scope = (ScopeNode*)statement;
+
+			for (u64 i = 0; i < as_scope->Statements.size(); i++)
+			{
+				if (!Statement_CodeGen(as_scope->Statements[i], scope_id, proc)) {
+					return {};
+				}
+			}
+
+			CodeGen_Result result;
+			result.ok = true;
+			return result;
+		}
+							break;
+		case NodeType::If: {
+
+			IfNode* as_if = (IfNode*)statement;
+
+			CodeGen_Result condition_result = Expression_CodeGen(as_if->Condition, scope_id, proc, Data.bool_Ty);
+			if (!condition_result) return {};
+
+			if (condition_result.expression_type != Data.bool_Ty) {
+
+				auto expression_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, condition_result.expression_type);
+
+				if (expression_type_flags & TN_Numeric_Type || expression_type_flags & TN_Pointer_Type) {
+					Const_Union zero = {};
+					condition_result.code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, condition_result.expression_type, condition_result.code_node_id, Il_Insert_Constant(proc, zero, condition_result.expression_type));
+				}
+				else {
+					Push_Error_Loc(scope_id, as_if->Condition, FMT("expected expression to be of type bool or convertible to bool"));
+					return {};
+				}
+			}
+
+			Il_IDX saved_insert_point = proc.insertion_point;
+
+			Il_IDX else_block_idx = -1;
+
+			Il_IDX body_block_idx = Il_Insert_Block(proc, String_Make("then"));
+			CodeGen_Result body_result = Statement_CodeGen(as_if->Scope, scope_id, proc);
+			if (!body_result) return {};
+
+			if (as_if->Else) {
+				else_block_idx = Il_Insert_Block(proc, String_Make("else"));
+				if (!Statement_CodeGen(as_if->Else->statement, scope_id, proc)) return {};
+			}
+
+			Il_IDX cont_block_idx = Il_Insert_Block(proc, String_Make("cont"));
+
+			Il_Set_Insert_Point(proc, saved_insert_point);
+
+			if (as_if->Else) {
+				Il_Insert_CBR(proc, Data.bool_Ty, condition_result.code_node_id, body_block_idx, else_block_idx);
+			}
+			else {
+				Il_Insert_CBR(proc, Data.bool_Ty, condition_result.code_node_id, body_block_idx, cont_block_idx);
+			}
+
+			Il_Set_Insert_Point(proc, body_block_idx);
+			Il_Insert_Br(proc, cont_block_idx);
+
+			Il_Set_Insert_Point(proc, cont_block_idx);
+
+			CodeGen_Result result;
+			result.ok = true;
+			return result;
+		}
+						 break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1059,6 +1224,26 @@ namespace Glass
 		case NodeType::Identifier:
 		{
 			Identifier* as_ident = (Identifier*)expression;
+
+			if (as_ident->Symbol.Symbol == "null") {
+
+				GS_Type* null_type = inferred_type;
+
+				if (!null_type) {
+					null_type = TypeSystem_Get_Pointer_Type(Data.type_system, Data.void_Ty, 1);
+				}
+
+				CodeGen_Result result;
+
+				Const_Union zero = { 0 };
+
+				result.code_node_id = Il_Insert_Constant(proc, zero, null_type);
+				result.ok = true;
+				result.expression_type = null_type;
+
+				return result;
+			}
+
 			String name = String_Make(as_ident->Symbol.Symbol);
 			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
 
@@ -1085,6 +1270,11 @@ namespace Glass
 					result.code_node_id = Il_Insert_Constant(proc, identified_entity.constant_value, identified_entity.semantic_type);
 				}
 			}
+			else if (identified_entity.entity_type == Entity_Type::Struct_Entity) {
+				Const_Union value;
+				value.us8 = TypeSystem_Get_Type_Index(Data.type_system, identified_entity.constant_value.type);
+				result.code_node_id = Il_Insert_Constant(proc, value, identified_entity.semantic_type);
+			}
 			else if (identified_entity.entity_type == Entity_Type::Variable) {
 
 				if (by_reference) {
@@ -1095,10 +1285,75 @@ namespace Glass
 					result.code_node_id = Il_Insert_Load(proc, identified_entity.semantic_type, identified_entity.var.location);
 				}
 			}
+			else {
+				ASSERT(nullptr);
+			}
 
 			result.ok = true;
 			result.expression_type = identified_entity.semantic_type;
 			return result;
+		}
+		break;
+		case NodeType::StringLiteral:
+		{
+			StringLiteral* as_lit = (StringLiteral*)expression;
+
+			GS_Type* literal_type = nullptr;
+
+			if (inferred_type) {
+				if (inferred_type == Data.string_Ty) {
+					GS_ASSERT_UNIMPL();
+					return {};
+				}
+
+				GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
+				ASSERT(c_str_type);
+
+				std::string processed_literal;
+
+				for (size_t i = 0; i < as_lit->Symbol.Symbol.size(); i++)
+				{
+					auto c = as_lit->Symbol.Symbol[i];
+
+					if (c == '\\') {
+						if (i + 1 < as_lit->Symbol.Symbol.size()) {
+
+							auto next_c = as_lit->Symbol.Symbol[i + 1];
+
+							if (next_c == 'n') {
+								processed_literal.push_back('\n');
+							}
+							else if (next_c == 'r') {
+								processed_literal.push_back('\r');
+							}
+							else if (next_c == 't') {
+								processed_literal.push_back('\t');
+							}
+							else {
+								ASSERT(nullptr, "unknown escape code");
+							}
+							i++;
+							continue;
+						}
+					}
+
+					processed_literal.push_back(c);
+				}
+
+				String literal_value = String_Make(processed_literal);
+
+				CodeGen_Result result;
+
+				result.code_node_id = Il_Insert_String(proc, c_str_type, literal_value);
+				result.ok = true;
+				result.expression_type = c_str_type;
+				return result;
+			}
+			else {
+				GS_ASSERT_UNIMPL();
+			}
+
+			return {};
 		}
 		break;
 		case NodeType::NumericLiteral:
@@ -1107,37 +1362,51 @@ namespace Glass
 
 			GS_Type* literal_type = nullptr;
 
+			Const_Union literal_value;
+
+			Type_Name_Flags inferred_type_flags = 0;
+
 			if (inferred_type) {
+				inferred_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+			}
 
-				auto inferred_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
+			if (inferred_type_flags & TN_Numeric_Type || inferred_type_flags & TN_Bool_Type) {
 
-				if (inferred_type_flags & TN_Numeric_Type) {
-					auto inferred_flags = TypeSystem_Get_Type_Flags(Data.type_system, inferred_type);
-
-					if (!(inferred_flags & TN_Float_Type) && (as_lit->type == NumericLiteral::Type::Float)) {
+				if (!(inferred_type_flags & TN_Float_Type)) {
+					if (as_lit->type == NumericLiteral::Type::Float) {
 						literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+						literal_value.f64 = as_lit->Val.Float;
 					}
 					else {
 						literal_type = inferred_type;
+						literal_value.us8 = as_lit->Val.Int;
+					}
+				}
+				else {
+
+					literal_type = inferred_type;
+
+					if (as_lit->type == NumericLiteral::Type::Float) {
+						literal_value.f64 = as_lit->Val.Float;
+					}
+					else {
+						literal_value.f64 = (double)as_lit->Val.Int;
 					}
 				}
 			}
 			else {
 				if (as_lit->type == NumericLiteral::Type::Float) {
 					literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+					literal_value.f64 = as_lit->Val.Float;
 				}
 				else if (as_lit->type == NumericLiteral::Type::Int) {
 					literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.int_tn);
+					literal_value.us8 = as_lit->Val.Int;
 				}
 				else {
 					GS_ASSERT_UNIMPL();
 				}
 			}
-
-			//TODO: convert float to actual floats
-
-			Const_Union literal_value = { 0 };
-			literal_value.ptr = (void*)as_lit->Val.Int;
 
 			CodeGen_Result result;
 			result.ok = true;
@@ -1191,7 +1460,7 @@ namespace Glass
 
 			auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
 
-			if (!(type_flags & TN_Numeric_Type)) {
+			if (!(type_flags & TN_Numeric_Type) && !assignment) {
 				Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
 				return {};
 			}
@@ -1201,6 +1470,8 @@ namespace Glass
 			Il_IDX code_node_id = -1;
 
 			Il_Node_Type math_op_type = (Il_Node_Type)-1;
+			Il_Cmp_Type cmp_type = (Il_Cmp_Type)-1;
+			bool compare = false;
 
 			switch (as_bin_expr->OPerator)
 			{
@@ -1216,6 +1487,53 @@ namespace Glass
 			case Operator::Divide:
 				math_op_type = Il_Div;
 				break;
+			case Operator::BitAnd:
+				math_op_type = Il_Bit_And;
+				break;
+			case Operator::BitOr:
+				math_op_type = Il_Bit_Or;
+				break;
+			case Operator::GreaterThan:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_Greater;
+				compare = true;
+				break;
+			case Operator::LesserThan:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_Lesser;
+				compare = true;
+				break;
+			case Operator::GreaterThanEq:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_GreaterEqual;
+				compare = true;
+				break;
+			case Operator::LesserThanEq:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_LesserEqual;
+				compare = true;
+				break;
+			case Operator::Equal:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_Equal;
+				compare = true;
+				break;
+			case Operator::NotEqual:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_NotEqual;
+				compare = true;
+				break;
+			case Operator::And:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_And;
+				compare = true;
+				break;
+			case Operator::Or:
+				math_op_type = Il_Value_Cmp;
+				cmp_type = Il_Cmp_Or;
+				compare = true;
+				break;
+
 			case Operator::Assign:
 			{
 				code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
@@ -1227,7 +1545,13 @@ namespace Glass
 			}
 
 			if (!assignment) {
-				code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
+				if (!compare) {
+					code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
+				}
+				else {
+					code_node_id = Il_Insert_Compare(proc, math_op_type, cmp_type, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
+					bin_expr_result_type = Data.bool_Ty;
+				}
 			}
 
 			CodeGen_Result result;
@@ -1257,8 +1581,13 @@ namespace Glass
 				return {};
 			}
 
-			if (callee_entity.func.parameters.count != as_call->Arguments.size()) {
-				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' argument count mismatch (needed: {}, given: {})", as_call->Function.Symbol, callee_entity.func.parameters.count, as_call->Arguments.size()));
+			if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
+				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", as_call->Function.Symbol, callee_entity.func.parameters.count, as_call->Arguments.size()));
+				return {};
+			}
+
+			if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
+				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", as_call->Function.Symbol, callee_entity.func.parameters.count, as_call->Arguments.size()));
 				return {};
 			}
 
@@ -1268,17 +1597,25 @@ namespace Glass
 			{
 				Expression* arg_node = as_call->Arguments[i];
 
-				Function_Parameter& parameter = callee_entity.func.parameters[i];
+				Function_Parameter* parameter = nullptr;
+				GS_Type* inferred_type = nullptr;
 
-				CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, parameter.param_type);
+				if (i < callee_entity.func.parameters.count) {
+					parameter = &callee_entity.func.parameters[i];
+					inferred_type = parameter->param_type;
+				}
+
+				CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, inferred_type);
 
 				if (!arg_result) {
 					return {};
 				}
 
-				if (arg_result.expression_type != parameter.param_type) {
-					Push_Error_Loc(scope_id, arg_node, FMT("call to '{}' passed value to argument: '{}' type mismatch", as_call->Function.Symbol, parameter.name.data));
-					return {};
+				if (parameter) {
+					if (arg_result.expression_type != parameter->param_type) {
+						Push_Error_Loc(scope_id, arg_node, FMT("call to '{}' passed value to argument: '{}' type mismatch", as_call->Function.Symbol, parameter->name.data));
+						return {};
+					}
 				}
 
 				Array_Add(arguments_code, Il_Argument{ arg_result.code_node_id, (Type_IDX)TypeSystem_Get_Type_Index(Data.type_system,arg_result.expression_type) });
@@ -1292,6 +1629,50 @@ namespace Glass
 			result.ok = true;
 
 			return result;
+		}
+		break;
+		case NodeType::MemberAccess:
+		{
+			MemberAccess* as_member_access = (MemberAccess*)expression;
+
+			if (as_member_access->Object->GetType() == NodeType::Identifier) {
+
+				Identifier* obj_as_ident = (Identifier*)as_member_access->Object;
+				String name = String_Make(obj_as_ident->Symbol.Symbol);
+
+				Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
+
+				if (identified_entity_id == Entity_Null) {
+					Push_Error_Loc(scope_id, obj_as_ident, FMT("undefined name: {}", obj_as_ident->Symbol.Symbol));
+					return {};
+				}
+
+				Entity& identified_entity = Data.entity_storage[identified_entity_id];
+
+
+				switch (identified_entity.entity_type)
+				{
+				case Entity_Type::Enum_Entity:
+				case Entity_Type::Constant:
+				{
+					Eval_Result eval_result = Expression_Evaluate(as_member_access, scope_id, nullptr);
+					if (!eval_result)
+						return {};
+
+					Il_IDX inserted_node_idx = Il_Insert_Constant(proc, eval_result.result, eval_result.expression_type);
+
+					CodeGen_Result result;
+					result.ok = true;
+					result.expression_type = eval_result.expression_type;
+					result.code_node_id = inserted_node_idx;
+					return result;
+				}
+				break;
+				default:
+					GS_ASSERT_UNIMPL();
+					break;
+				}
+			}
 		}
 		break;
 		default:
@@ -2131,6 +2512,19 @@ namespace Glass
 		var_entity.semantic_type = nullptr;
 
 		return var_entity;
+	}
+
+	Entity Front_End::Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity lib_entity = { 0 };
+
+		lib_entity.entity_type = Entity_Type::Library;
+		lib_entity.semantic_name = String_Copy(name);
+		lib_entity.source_location = source_location;
+		lib_entity.definition_file = file_id;
+		lib_entity.semantic_type = nullptr;
+
+		return lib_entity;
 	}
 
 	Entity_ID Front_End_Data::Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id)
