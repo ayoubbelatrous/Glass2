@@ -26,7 +26,7 @@ namespace Glass
 		Statement* ParseWhile();
 		Statement* ParseFor();
 
-		Statement* ParseTypeExpr();
+		Statement* ParseTypeExpr(Expression* type = nullptr);
 		Statement* ParseFuncTypeExpr();
 
 		Statement* ParseScope();
@@ -34,7 +34,7 @@ namespace Glass
 		Statement* ParseArgumentList();
 		Statement* ParseFunction();
 
-		Statement* ParseVarDecl();
+		Statement* ParseVarDecl(Expression* type = nullptr);
 		Statement* ParseVarDeclInfer();
 
 		Statement* ParseReturn();
@@ -49,16 +49,17 @@ namespace Glass
 
 		Expression* ParseRefExpr();
 		Expression* ParseDeRefExpr();
+		Expression* ParsePointerExpr();
 		Expression* ParseAssignExpr();
 		Expression* ParseAddExpr();
 		Expression* ParseCompExpr();
 		Expression* ParseBitLogiExpr();
 		Expression* ParseLogiExpr();
 		Expression* ParseMulExpr();
-		Expression* ParseCallExpr();
+		Expression* ParseCallExpr(Expression* callee);
 		Expression* ParseMemberExpr();
 		Expression* ParseNegateExpr();
-		Expression* ParseArrayAccessExpr();
+		Expression* ParseArrayAccessExpr(Expression* accessee);
 		Expression* ParseRangeExpr();
 		Expression* ParseTypeOfExpr();
 		Expression* ParseCastExpr();
@@ -184,5 +185,7 @@ namespace Glass
 
 		fs_path Path;
 		const std::vector<Token>& Tokens;
+
+		bool Top_Level_Expression = false;
 	};
 }

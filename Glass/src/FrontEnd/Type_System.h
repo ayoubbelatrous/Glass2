@@ -127,6 +127,10 @@ namespace Glass
 		return Combine2Hashes(pointee_hash, std::hash<u32>{}(indirection));
 	}
 
+	inline u64 GS_Dyn_Array_Type_Hash(u64 element_hash) {
+		return Combine2Hashes(std::hash<u64>{}(element_hash), std::hash<std::string>{}("dyn_array_type"));
+	}
+
 	inline u64 GS_Proc_Type_Hash(u64 return_type_hash, Array<u64> param_hashes) {
 		u64 hash = std::hash<std::string>{}("proc_type");
 
@@ -141,6 +145,7 @@ namespace Glass
 	Type_IDX TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type);
 	GS_Type* TypeSystem_Get_Basic_Type(Type_System& ts, Type_Name_ID type_name_id);
 	GS_Type* TypeSystem_Get_Pointer_Type(Type_System& ts, GS_Type* pointee, u32 indirection);
+	GS_Type* TypeSystem_Get_Dyn_Array_Type(Type_System& ts, GS_Type* element);
 	GS_Type* TypeSystem_Get_Proc_Type(Type_System& ts, GS_Type* return_type, Array<GS_Type*> params);
 
 	GS_Type* TypeSystem_Increase_Ind(Type_System& ts, GS_Type* type, u32 amount = 1);

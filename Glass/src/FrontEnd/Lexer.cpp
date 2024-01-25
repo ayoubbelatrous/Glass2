@@ -66,6 +66,27 @@ namespace Glass
 		return true;
 	}
 
+	inline static bool is_valid_hex_literal(const std::string_view& token)
+	{
+		if (token.size() < 2) {
+			return false;
+		}
+
+		if (token[0] != '0' || token[1] != 'x') {
+			return false;
+		}
+
+		for (size_t i = 0; i < token.size(); i++)
+		{
+			if (!std::isalnum(token[i])) {
+				return false;
+			}
+		}
+
+
+		return true;
+	}
+
 	Lexer::Lexer(const std::string& source, const fs_path& file_path)
 		:m_Source(source), m_Path(file_path)
 	{
@@ -188,6 +209,9 @@ namespace Glass
 				}
 				else if (is_valid_numeric_literal(accumulator)) {
 					return TokenType::NumericLiteral;
+				}
+				else if (is_valid_hex_literal(accumulator)) {
+					return TokenType::HexLiteral;
 				}
 				else {
 					return TokenType::Invalid;
@@ -338,7 +362,7 @@ namespace Glass
 				string_collection_mode = true;
 			}
 			else {
-				if (is_valid_numeric_literal(accumulator) && c == '.' && m_Source[location] != '.') {
+				if ((is_valid_numeric_literal(accumulator) || is_valid_hex_literal(accumulator)) && c == '.' && m_Source[location] != '.') {
 					accumulator += c;
 				}
 				else if (token_to_type.find(c) != token_to_type.end()) {

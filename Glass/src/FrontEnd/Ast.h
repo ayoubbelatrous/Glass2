@@ -625,6 +625,7 @@ namespace Glass
 	public:
 
 		Token Function;
+		Expression* callee = nullptr;
 		std::vector<Expression*> Arguments;
 
 		virtual NodeType GetType() const override

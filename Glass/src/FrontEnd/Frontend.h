@@ -218,6 +218,7 @@ namespace Glass
 		GS_Type* bool_Ty = nullptr;
 
 		GS_Type* string_Ty = nullptr;
+		GS_Type* array_Ty = nullptr;
 
 		Il_Program il_program;
 

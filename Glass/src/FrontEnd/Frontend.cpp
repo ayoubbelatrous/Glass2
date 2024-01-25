@@ -820,7 +820,13 @@ namespace Glass
 						struct_member_entity.semantic_type = Evaluate_Type(as_variable_node->Type, entity.parent);
 						ASSERT(struct_member_entity.semantic_type);
 
-						Array_Add(struct_type.members, struct_member_entity.semantic_type);
+						if (struct_member_entity.semantic_type->kind == Type_Dyn_Array) {
+							Array_Add(struct_type.members, Data.array_Ty);
+						}
+						else {
+							Array_Add(struct_type.members, struct_member_entity.semantic_type);
+						}
+
 						Array_Add(struct_type.offsets, (u64)-1);
 					}
 
@@ -835,9 +841,15 @@ namespace Glass
 					Data.type_system.type_name_storage[entity.struct_entity.type_name_id].alignment = struct_data_layout.alignment;
 					Data.type_system.struct_storage[Data.type_system.type_name_storage[entity.struct_entity.type_name_id].struct_id] = struct_type;
 
-					if (String_Equal(String_Make("string"), entity.semantic_name)) { // TODO: move this from here somehow
+					// TODO: move this from here somehow
+					if (String_Equal(String_Make("string"), entity.semantic_name)) {
 						Data.string_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
 						ASSERT(Data.string_Ty);
+					}
+
+					if (String_Equal(String_Make("Array"), entity.semantic_name)) {
+						Data.array_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+						ASSERT(Data.array_Ty);
 					}
 				}
 				else if (entity.entity_type == Entity_Type::Enum_Entity) {
@@ -927,6 +939,8 @@ namespace Glass
 						Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature);
 						entity.func.proc_idx = inserted_proc_idx;
 					}
+
+					entity.flags &= ~EF_InComplete;
 				}
 			}
 
@@ -1111,6 +1125,7 @@ namespace Glass
 				}
 
 				variable.var.location = Il_Insert_Alloca(proc, variable_type);
+
 				variable.semantic_type = variable_type;
 
 				Il_Insert_Store(proc, variable_type, variable.var.location, assignment_result.code_node_id);
@@ -1207,6 +1222,49 @@ namespace Glass
 			return result;
 		}
 						 break;
+		case NodeType::While:
+		{
+			WhileNode* as_while = (WhileNode*)statement;
+
+			Il_IDX saved_insert_point = proc.insertion_point;
+
+			Il_IDX cond_block_idx = Il_Insert_Block(proc, String_Make("cond"));
+
+			CodeGen_Result condition_result = Expression_CodeGen(as_while->Condition, scope_id, proc, Data.bool_Ty);
+			if (!condition_result) return {};
+
+			if (condition_result.expression_type != Data.bool_Ty) {
+
+				auto expression_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, condition_result.expression_type);
+
+				if (expression_type_flags & TN_Numeric_Type || expression_type_flags & TN_Pointer_Type) {
+					Const_Union zero = {};
+					condition_result.code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, condition_result.expression_type, condition_result.code_node_id, Il_Insert_Constant(proc, zero, condition_result.expression_type));
+				}
+				else {
+					Push_Error_Loc(scope_id, as_while->Condition, FMT("expected expression to be of type bool or convertible to bool"));
+					return {};
+				}
+			}
+
+			Il_IDX body_block_idx = Il_Insert_Block(proc, String_Make("body"));
+			CodeGen_Result body_result = Statement_CodeGen(as_while->Scope, scope_id, proc);
+			if (!body_result) return {};
+
+			Il_Insert_Br(proc, cond_block_idx);
+
+			Il_IDX cont_block_idx = Il_Insert_Block(proc, String_Make("cont"));
+
+			Il_Set_Insert_Point(proc, cond_block_idx);
+			Il_Insert_CBR(proc, Data.bool_Ty, condition_result.code_node_id, body_block_idx, cont_block_idx);
+
+			Il_Set_Insert_Point(proc, cont_block_idx);
+
+			CodeGen_Result result;
+			result.ok = true;
+			return result;
+		}
+		break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1418,13 +1476,19 @@ namespace Glass
 		{
 			BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
 
-			bool assignment = as_bin_expr->OPerator == Operator::Assign;
+			bool op_assignment =
+				as_bin_expr->OPerator == Operator::AddAssign || as_bin_expr->OPerator == Operator::SubAssign ||
+				as_bin_expr->OPerator == Operator::MulAssign || as_bin_expr->OPerator == Operator::DivAssign;
 
-			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, inferred_type, assignment);
+			bool assignment = as_bin_expr->OPerator == Operator::Assign || op_assignment;
+
+			bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
+			bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
+
+			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment);
+			if (!left_result) return {};
 			CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type);
-
-			if (!left_result || !right_result)
-				return {};
+			if (!right_result) return {};
 
 			if (assignment) {
 				if (left_result.constant) {
@@ -1460,9 +1524,17 @@ namespace Glass
 
 			auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
 
-			if (!(type_flags & TN_Numeric_Type) && !assignment) {
-				Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
-				return {};
+			if (!logical_compare && !equality_compare) {
+				if (!(type_flags & TN_Numeric_Type) && !assignment) {
+					Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
+					return {};
+				}
+			}
+			else {
+				if (bin_expr_result_type != Data.bool_Ty && !equality_compare) {
+					Push_Error_Loc(scope_id, as_bin_expr, "types are not bool");
+					return {};
+				}
 			}
 
 			Const_Union result_value = { 0 };
@@ -1536,22 +1608,46 @@ namespace Glass
 
 			case Operator::Assign:
 			{
-				code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
 			}
 			break;
+			case Operator::AddAssign:
+				math_op_type = Il_Add;
+				break;
+			case Operator::SubAssign:
+				math_op_type = Il_Sub;
+				break;
+			case Operator::MulAssign:
+				math_op_type = Il_Mul;
+				break;
+			case Operator::DivAssign:
+				math_op_type = Il_Div;
+				break;
 			default:
 				ASSERT(nullptr, "unknown operator");
 				break;
 			}
 
-			if (!assignment) {
-				if (!compare) {
+			if (!compare) {
+
+				if (op_assignment) {
+
+					CodeGen_Result byvalue_left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr);
+					ASSERT(byvalue_left_result);
+					ASSERT(byvalue_left_result.expression_type == bin_expr_result_type);
+
+					right_result.code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, byvalue_left_result.code_node_id, right_result.code_node_id);
+				}
+				else if (!assignment) {
 					code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
 				}
-				else {
-					code_node_id = Il_Insert_Compare(proc, math_op_type, cmp_type, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
-					bin_expr_result_type = Data.bool_Ty;
-				}
+			}
+			else {
+				code_node_id = Il_Insert_Compare(proc, math_op_type, cmp_type, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
+				bin_expr_result_type = Data.bool_Ty;
+			}
+
+			if (assignment) {
+				code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
 			}
 
 			CodeGen_Result result;
@@ -1565,29 +1661,33 @@ namespace Glass
 		{
 			FunctionCall* as_call = (FunctionCall*)expression;
 
-			String callee_name = String_Make(as_call->Function.Symbol);
+			Eval_Result eval_result = Expression_Evaluate(as_call->callee, scope_id, nullptr);
 
-			Entity_ID callee_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, callee_name);
+			if (!eval_result) return {};
 
-			if (callee_entity_id == Entity_Null) {
-				Push_Error_Loc(scope_id, as_call, FMT("undefined name: '{}'", as_call->Function.Symbol));
-				return {};
-			}
+			Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
+			String callee_name = callee_entity.semantic_name;
+			std::string callee_name_std = std::string(callee_name.data);
 
-			Entity& callee_entity = Data.entity_storage[callee_entity_id];
+			eval_result.entity_reference;
+			// 
+			// 			if (callee_entity_id == Entity_Null) {
+			// 				Push_Error_Loc(scope_id, as_call, FMT("undefined name: '{}'", callee_name_std));
+			// 				return {};
+			// 			}
 
 			if (callee_entity.entity_type != Entity_Type::Function) {
-				Push_Error_Loc(scope_id, as_call, FMT("'{}' is not a function", as_call->Function.Symbol));
+				Push_Error_Loc(scope_id, as_call, FMT("'{}' is not a function", callee_name_std));
 				return {};
 			}
 
 			if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
-				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", as_call->Function.Symbol, callee_entity.func.parameters.count, as_call->Arguments.size()));
+				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
 				return {};
 			}
 
 			if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
-				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", as_call->Function.Symbol, callee_entity.func.parameters.count, as_call->Arguments.size()));
+				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
 				return {};
 			}
 
@@ -1613,7 +1713,7 @@ namespace Glass
 
 				if (parameter) {
 					if (arg_result.expression_type != parameter->param_type) {
-						Push_Error_Loc(scope_id, arg_node, FMT("call to '{}' passed value to argument: '{}' type mismatch", as_call->Function.Symbol, parameter->name.data));
+						Push_Error_Loc(scope_id, arg_node, FMT("call to '{}' passed value to argument: '{}' type mismatch", callee_name_std, parameter->name.data));
 						return {};
 					}
 				}
@@ -1654,6 +1754,7 @@ namespace Glass
 				{
 				case Entity_Type::Enum_Entity:
 				case Entity_Type::Constant:
+				case Entity_Type::Named_File_Load:
 				{
 					Eval_Result eval_result = Expression_Evaluate(as_member_access, scope_id, nullptr);
 					if (!eval_result)
@@ -1842,7 +1943,7 @@ namespace Glass
 
 			ASSERT(identified_entity_id != Entity_Null);
 			//ASSERT(identified_entity.semantic_type);
-			ASSERT(identified_entity.flags & EF_Constant);
+			///ASSERT(identified_entity.flags & EF_Constant);
 			ASSERT(!(identified_entity.flags & EF_InComplete));
 
 			Eval_Result result;
@@ -2059,8 +2160,20 @@ namespace Glass
 
 			GS_Type* generated_type = TypeSystem_Get_Pointer_Type(Data.type_system, pointee_result, as_pointer->Indirection);
 			return generated_type;
-			break;
 		}
+								 break;
+		case NodeType::TE_Array: {
+			TypeExpressionArray* as_array = (TypeExpressionArray*)expression;
+
+			GS_Type* element_type = Evaluate_Type(as_array->ElementType, scope_id);
+
+			if (!element_type)
+				return nullptr;
+
+			GS_Type* generated_type = TypeSystem_Get_Dyn_Array_Type(Data.type_system, element_type);
+			return generated_type;
+		}
+							   break;
 		default:
 			ASSERT(nullptr);
 			return nullptr;
@@ -2194,6 +2307,27 @@ namespace Glass
 			Array<Entity_ID> indirect_dependencies;
 
 			if (!Do_Expression_Dependecy_Pass(scope_id, as_pointer->Pointee, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			for (size_t i = 0; i < indirect_dependencies.count; i++)
+			{
+				if (indirect_dependencies[i] != ignore_indirect) {
+					Array_Add(dependencies, indirect_dependencies[i]);
+				}
+			}
+
+			return { true };
+		}
+		break;
+		case NodeType::TE_Array:
+		{
+			TypeExpressionArray* as_array = (TypeExpressionArray*)expr;
+			ASSERT(as_array->ElementType);
+
+			Array<Entity_ID> indirect_dependencies;
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_array->ElementType, indirect_dependencies, ignore_indirect)) {
 				return {};
 			}
 

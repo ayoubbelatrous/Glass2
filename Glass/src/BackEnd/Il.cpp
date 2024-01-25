@@ -238,7 +238,7 @@ namespace Glass
 			return EE_Exec_External_Proc(ee, proc, arguments, argument_types);
 		}
 
-		Const_Union register_buffer[REG_BUF_SZ];
+		Const_Union register_buffer[REG_BUF_SZ] = { 0 };
 		GS_Type* register_type_buffer[REG_BUF_SZ];
 		u64* stack[STACK_SZ] = { 0 };
 		u64 stack_pointer = 0;
@@ -332,6 +332,8 @@ namespace Glass
 					register_buffer[i].ptr = ((u8*)register_buffer[node.element_ptr.ptr_node_idx].ptr) + strct.offsets[node.element_ptr.element_idx];
 				}
 										break;
+#define DO_OP(OP, SZ) register_buffer[i].SZ = register_buffer[node.math_op.left_node_idx].SZ OP register_buffer[node.math_op.right_node_idx].SZ
+
 				case Il_Add: {
 					if (type_flags & TN_Float_Type) {
 						if (type_size == 4) {
@@ -345,7 +347,13 @@ namespace Glass
 						}
 					}
 					else {
-						register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 + register_buffer[node.math_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:	DO_OP(+, s1); break;
+						case 2:	DO_OP(+, s2); break;
+						case 4:	DO_OP(+, s4); break;
+						case 8: DO_OP(+, s8); break;
+						}
 					}
 				}
 						   break;
@@ -362,7 +370,13 @@ namespace Glass
 						}
 					}
 					else {
-						register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 - register_buffer[node.math_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:	DO_OP(-, s1); break;
+						case 2:	DO_OP(-, s2); break;
+						case 4:	DO_OP(-, s4); break;
+						case 8: DO_OP(-, s8); break;
+						}
 					}
 				}
 						   break;
@@ -379,7 +393,13 @@ namespace Glass
 						}
 					}
 					else {
-						register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 * register_buffer[node.math_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:	DO_OP(*, s1); break;
+						case 2:	DO_OP(*, s2); break;
+						case 4:	register_buffer[i].s4 = register_buffer[node.math_op.left_node_idx].s4 * register_buffer[node.math_op.right_node_idx].s4; break;
+						case 8: DO_OP(*, s8); break;
+						}
 					}
 				}
 						   break;
@@ -396,44 +416,63 @@ namespace Glass
 						}
 					}
 					else {
-						register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 / register_buffer[node.math_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:	DO_OP(/ , s1); break;
+						case 2:	DO_OP(/ , s2); break;
+						case 4:	DO_OP(/ , s4); break;
+						case 8: DO_OP(/ , s8); break;
+						}
 					}
 				}
 						   break;
 				case Il_Bit_And: {
-					register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 & register_buffer[node.math_op.right_node_idx].us8;
+					register_buffer[i].s8 = register_buffer[node.cmp_op.left_node_idx].s8 & register_buffer[node.cmp_op.right_node_idx].s8;
 				}
 							   break;
 				case Il_Bit_Or: {
-					register_buffer[i].us8 = register_buffer[node.math_op.left_node_idx].us8 | register_buffer[node.math_op.right_node_idx].us8;
+					register_buffer[i].us8 = register_buffer[node.cmp_op.left_node_idx].s8 | register_buffer[node.cmp_op.right_node_idx].s8;
 				}
 							  break;
+#define DO_CMP_OP(OP, SZ) register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].SZ OP register_buffer[node.cmp_op.right_node_idx].SZ
 				case Il_Value_Cmp:
 				{
 					register_buffer[i] = { 0 };
 					if (node.cmp_op.compare_type == Il_Cmp_Equal) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 == register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 == register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_NotEqual) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 != register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 != register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_GreaterEqual) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 >= register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 >= register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_LesserEqual) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 <= register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 <= register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_Lesser) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 < register_buffer[node.cmp_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:DO_CMP_OP(< , s1); break;
+						case 2:DO_CMP_OP(< , s2); break;
+						case 4:DO_CMP_OP(< , s4); break;
+						case 8:DO_CMP_OP(< , s8); break;
+						}
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_Greater) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 > register_buffer[node.cmp_op.right_node_idx].us8;
+						switch (type_size)
+						{
+						case 1:DO_CMP_OP(> , s1); break;
+						case 2:DO_CMP_OP(> , s2); break;
+						case 4:DO_CMP_OP(> , s4); break;
+						case 8:DO_CMP_OP(> , s8); break;
+						}
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_And) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 && register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 && register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else if (node.cmp_op.compare_type == Il_Cmp_Or) {
-						register_buffer[i].us1 = register_buffer[node.cmp_op.left_node_idx].us8 || register_buffer[node.cmp_op.right_node_idx].us8;
+						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 || register_buffer[node.cmp_op.right_node_idx].s8;
 					}
 					else { GS_ASSERT_UNIMPL(); }
 				}
@@ -495,6 +534,7 @@ namespace Glass
 	typedef float (*dynamic_invoke_f_t)(void*, size_t, size_t*, size_t*);
 	typedef size_t(*dynamic_invoke_i_t)(void*, size_t, size_t*, size_t*);
 	typedef void(*sin_t)();
+	typedef int(*init_t)(int, int, const char*);
 
 	extern "C" size_t dynamic_invoke(void* func, size_t arg_count, size_t * arguments, size_t * argument_types);
 
@@ -509,6 +549,10 @@ namespace Glass
 
 		void* external_proc_pointer = ee.proc_pointers[proc_idx];
 		ASSERT(external_proc_pointer);
+
+		//init_t t = (init_t)external_proc_pointer;
+		////t(512, 512, "A Window");
+		//return {};
 
 		dynamic_invoke_f_t f = (dynamic_invoke_f_t)dynamic_invoke;
 		dynamic_invoke_d_t d = (dynamic_invoke_d_t)dynamic_invoke;

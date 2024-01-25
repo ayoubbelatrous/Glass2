@@ -66,6 +66,7 @@ namespace Glass
 
 		StringLiteral,
 		NumericLiteral,
+		HexLiteral,  // 0x
 
 		Symbol,
 

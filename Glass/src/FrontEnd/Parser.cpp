@@ -75,43 +75,10 @@ namespace Glass
 			}
 			else {
 
-				bool var_decl = At().Type == TokenType::Symbol && At(1).Type == TokenType::Symbol;
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::Symbol;
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::NumericLiteral && At(3).Type == TokenType::CloseBracket && At(4).Type == TokenType::Symbol;
-				var_decl |= At().Type == TokenType::Dollar && At(1).Type == TokenType::Symbol;
-
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::OpenBracket && At(3).Type == TokenType::Period; // i32[..]
-				var_decl |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Multiply && At(2).Type == TokenType::OpenBracket; // i32[..]
-
-				u64 star_counter = 1;
-
-				if (At().Type == TokenType::Symbol) {
-					while (At(star_counter).Type == TokenType::Multiply) {
-						if (At(star_counter + 1).Type == TokenType::Symbol) {
-							if (At(star_counter + 2).Type == TokenType::SemiColon) {
-								var_decl |= true;
-							}
-
-							if (At(star_counter + 2).Type == TokenType::Assign) {
-								var_decl |= true;
-							}
-
-							if (At(star_counter + 2).Type == TokenType::Colon) {
-								var_decl |= true;
-							}
-						}
-						star_counter++;
-					}
-				}
-
-				if (var_decl) {
-					auto var = ParseVarDecl();
-					expected_semicolon();
-					return var;
-				}
-
 				bool var_decl_infer = At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Assign;
 				var_decl_infer |= At().Type == TokenType::Symbol && At(1).Type == TokenType::Colon && At(2).Type == TokenType::Colon;
+
+				Top_Level_Expression = false;
 
 				if (var_decl_infer) {
 					auto var = ParseVarDeclInfer();
@@ -144,7 +111,12 @@ namespace Glass
 			break;
 		}
 
+		Top_Level_Expression = true;
 		auto expr = ParseExpression();
+
+		if (At().Type == TokenType::Symbol) {
+			return ParseVarDecl(expr);
+		}
 
 		expected_semicolon();
 
@@ -258,15 +230,15 @@ namespace Glass
 			Abort("Expected Condition After 'if' Instead Got");
 		}
 
-		Node.Scope = (ScopeNode*)ParseScope();
+		Node.Scope = (ScopeNode*)ParseStatement();
 
 		if (!Node.Scope) {
 			Abort("Expected Expression Or Scope!, Before: ");
 		}
 
-		if (Node.Scope->GetType() != NodeType::Scope) {
-			Abort("Expression if Statements not supported yet!, At: ");
-		}
+		// 		if (Node.Scope->GetType() != NodeType::Scope) {
+		// 			Abort("Expression if Statements not supported yet!, At: ");
+		// 		}
 
 		Node.Else = ParseElse();
 
@@ -280,6 +252,10 @@ namespace Glass
 			Consume();
 			ElseNode else_node;
 			else_node.statement = ParseStatement();
+
+			if (!else_node.statement) {
+				Abort("Expected a statement after 'else' instead got:");
+			}
 
 			return AST(else_node);
 		}
@@ -296,10 +272,14 @@ namespace Glass
 		Node.Condition = ParseExpression();
 
 		if (Node.Condition == nullptr) {
-			Abort("Expected Condition After 'while' Instead Got");
+			Abort("Expected condition after 'while' instead got");
 		}
 
-		Node.Scope = (ScopeNode*)ParseScope();
+		Node.Scope = (ScopeNode*)ParseStatement();
+
+		if (!Node.Scope) {
+			Abort("Expected statement after while condition Instead Got:");
+		}
 
 		return Application::AllocateAstNode(Node);
 	}
@@ -336,9 +316,9 @@ namespace Glass
 		return Application::AllocateAstNode(Node);
 	}
 
-	Statement* Parser::ParseTypeExpr()
+	Statement* Parser::ParseTypeExpr(Expression* type /*= nullptr*/)
 	{
-		TypeExpression* current = nullptr;
+		TypeExpression* current = (TypeExpression*)type;
 
 		while (true) {
 
@@ -389,7 +369,7 @@ namespace Glass
 					Consume();
 				}
 				else {
-
+					ParseExpression();
 					if (ExpectedToken(TokenType::CloseBracket)) {
 						Abort("Expected ']' in array type expression, Instead Got: ");
 					}
@@ -466,10 +446,15 @@ namespace Glass
 		return AST(Node);
 	}
 
-	Statement* Parser::ParseVarDecl()
+	Statement* Parser::ParseVarDecl(Expression* type /*= nullptr*/)
 	{
 		VariableNode Node;
-		Node.Type = (TypeExpression*)ParseTypeExpr();
+		if (!type) {
+			Node.Type = (TypeExpression*)ParseTypeExpr();
+		}
+		else {
+			Node.Type = (TypeExpression*)type;
+		}
 
 		if (ExpectedToken(TokenType::Symbol)) {
 			Abort("Expected a variable name after type Instead Got");
@@ -483,6 +468,7 @@ namespace Glass
 
 		if (At().Type == TokenType::Assign) {
 			Consume();
+			Top_Level_Expression = false;
 			Node.Assignment = ParseExpression();
 
 			if (!Node.Assignment) {
@@ -506,6 +492,7 @@ namespace Glass
 				Node.Assignment = (Expression*)ParseDirective();
 			}
 			else {
+				Top_Level_Expression = false;
 				Node.Assignment = ParseExpression();
 			}
 
@@ -540,9 +527,11 @@ namespace Glass
 
 		if (constant_decl && At().Type == TokenType::Pound) {
 			Consume();
+			Top_Level_Expression = false;
 			Node.Assignment = (Expression*)ParseDirective();
 		}
 		else {
+			Top_Level_Expression = false;
 			Node.Assignment = ParseExpression();
 		}
 
@@ -828,14 +817,14 @@ namespace Glass
 
 	Expression* Parser::ParseRangeExpr()
 	{
-		Expression* begin = ParseAssignExpr();
+		Expression* begin = ParsePointerExpr();
 
 		while (At().Type == TokenType::Period && At(1).Type == TokenType::Period) {
 
 			Token period = Consume();
 			period = Consume();
 
-			Expression* end = ParseAssignExpr();
+			Expression* end = ParsePointerExpr();
 
 			RangeNode Node;
 
@@ -843,6 +832,18 @@ namespace Glass
 			Node.End = end;
 
 			begin = Application::AllocateAstNode(Node);
+		}
+
+		return begin;
+	}
+
+
+	Expression* Parser::ParsePointerExpr()
+	{
+		Expression* begin = ParseAssignExpr();
+
+		while (At().Type == TokenType::Multiply || (At().Type == TokenType::OpenBracket && At(1).Type == TokenType::Period)) {
+			begin = (Expression*)ParseTypeExpr(begin);
 		}
 
 		return begin;
@@ -867,6 +868,8 @@ namespace Glass
 
 		while (is_assignment_op(GetOperator(At()))) {
 			Token Op = Consume();
+
+			Top_Level_Expression = false;
 			auto right = ParseBitLogiExpr();
 
 			BinaryExpression binExpr;
@@ -875,7 +878,7 @@ namespace Glass
 			binExpr.Right = right;
 
 			if (!binExpr.Right) {
-				Abort("Expected Expression!, Before: ");
+				Abort("Expected Expression!, Before:");
 			}
 
 			binExpr.OPerator = GetOperator(Op);
@@ -1056,10 +1059,15 @@ namespace Glass
 			return false;
 		};
 
-		while (is_multiplicative_op(GetOperator(At()))) {
+		while (is_multiplicative_op(GetOperator(At())) && !Top_Level_Expression) {
 
 			Token Op = Consume();
 			auto right = ParseNegateExpr();
+
+			if (!right) {
+				m_Location--;
+				return left;
+			}
 
 			BinaryExpression binExpr;
 
@@ -1142,6 +1150,11 @@ namespace Glass
 
 			right = ParseMemberExpr();
 
+			if (!right) {
+				m_Location--;
+				return right;
+			}
+
 			DeRefNode Node;
 			Node.What = right;
 
@@ -1160,18 +1173,18 @@ namespace Glass
 
 	Expression* Parser::ParseMemberExpr()
 	{
-		Expression* left = ParseCallExpr();
+		Expression* left = (Expression*)ParsePrimaryExpr();
 
-		while (At().Type == TokenType::Period && At(1).Type != TokenType::Period || At().Type == TokenType::OpenBracket) {
+		if (At().Type == TokenType::Period && At(1).Type != TokenType::Period) {
 
 			Token period = Consume();
 
 			if (period.Type == TokenType::Period) {
 
-				Expression* right = ParseCallExpr();
+				Expression* right = (Expression*)ParsePrimaryExpr();
 
 				if (!right) {
-					Abort("Expected member name after '.' , Before: ");
+					Abort("Expected member after '.' , Before: ");
 				}
 
 				if (right->GetType() != NodeType::Identifier) {
@@ -1185,41 +1198,36 @@ namespace Glass
 
 				left = Application::AllocateAstNode(Node);
 			}
-			else {
-
-				Expression* index = ParseExpression();
-
-				Token close_bracket = Consume();
-
-				if (!index) {
-					Abort("Expected an expression after '[', Instead Got: ");
-				}
-
-				if (close_bracket.Type != TokenType::CloseBracket) {
-					Abort("Expected ']', Instead Got: ");
-				}
-
-				ArrayAccess Node;
-
-				Node.Object = left;
-				Node.Index = index;
-
-				left = Application::AllocateAstNode(Node);
-			}
 		}
+
+		if (At().Type == TokenType::OpenParen || At().Type == TokenType::OpenBracket) {
+			return ParseArrayAccessExpr(left);
+		}
+
+		// 		if (At().Type == TokenType::Multiply && Top_Level_Expression) {
+		// 			return (Expression*)ParseTypeExpr(left);
+		// 		}
 
 		return left;
 	}
 
-	Expression* Parser::ParseArrayAccessExpr()
+	Expression* Parser::ParseArrayAccessExpr(Expression* accessee)
 	{
-		Expression* object = ParseCallExpr();
+		Expression* object = accessee;
 
 		while (At().Type == TokenType::OpenBracket) {
 
+			// 			if (At(2).Type == TokenType::Period) {
+			// 				return (Expression*)ParseTypeExpr(accessee);
+			// 			}
+
+			if (At(2).Type == TokenType::Period) {
+				return accessee;
+			}
+
 			Token bracket = Consume();
 
-			Expression* index = ParseCallExpr();
+			Expression* index = ParseExpression();
 
 			Token close_bracket = Consume();
 
@@ -1239,72 +1247,56 @@ namespace Glass
 			object = Application::AllocateAstNode(Node);
 		}
 
+		if (At().Type == TokenType::OpenParen) {
+			return ParseCallExpr(object);
+		}
+
 		return object;
 	}
 
-	Expression* Parser::ParseCallExpr()
+	Expression* Parser::ParseCallExpr(Expression* callee)
 	{
-		Expression* name = (Expression*)ParsePrimaryExpr();
+		while (At().Type == TokenType::OpenParen) {
 
-		if (name) {
+			Consume();
 
-			auto is_func_call = [this, name]() -> bool {
-				if (name->GetType() == NodeType::Identifier && At().Type == TokenType::OpenParen) {
-					return true;
+			std::vector<Expression*> arguments;
+			Top_Level_Expression = false;
+
+			while (At().Type != TokenType::CloseParen) {
+
+				auto expr = ParseExpression();
+
+				if (expr) {
+					arguments.push_back(expr);
 				}
 				else {
-					return false;
-				}
-			};
-
-			if (is_func_call()) {
-
-				if (((Identifier*)name)->Symbol.Symbol == "typeof") {
-					return ParseTypeOfExpr();
+					Abort("Expected an argument in function call, Instead Got: ");
 				}
 
-				if (ExpectedToken(TokenType::OpenParen)) {
-					Abort("Expected '(' after function call name, Instead Got: ");
-				}
-
-				Consume();
-
-				std::vector<Expression*> arguments;
-
-				while (At().Type != TokenType::CloseParen) {
-
-					auto expr = ParseExpression();
-
-					if (expr) {
-						arguments.push_back(expr);
-					}
-					else {
-						Abort("Expected an argument in function call, Instead Got: ");
-					}
-
-					if (At().Type == TokenType::Comma) {
-						Consume();
-					}
-				}
-
-				if (ExpectedToken(TokenType::CloseParen)) {
-					Abort("Expected ')' on function call, Instead Got: ");
-				}
-
-				Consume();
-
-				if (name->GetType() == NodeType::Identifier) {
-
-					FunctionCall* func_call = Application::AllocateAstNode(FunctionCall());
-					func_call->Arguments = arguments;
-					func_call->Function = ((Identifier*)name)->Symbol;
-
-					name = func_call;
+				if (At().Type == TokenType::Comma) {
+					Consume();
 				}
 			}
+
+			if (ExpectedToken(TokenType::CloseParen)) {
+				Abort("Expected ')' on function call, Instead Got: ");
+			}
+
+			Consume();
+
+			FunctionCall* func_call = Application::AllocateAstNode(FunctionCall());
+			func_call->Arguments = arguments;
+			func_call->callee = callee;
+
+			callee = func_call;
 		}
 
-		return name;
+		if (At().Type == TokenType::OpenBracket) {
+			return ParseArrayAccessExpr(callee);
+		}
+
+		return callee;
 	}
 
 	Statement* Parser::ParsePrimaryExpr()
@@ -1389,19 +1381,19 @@ namespace Glass
 			}
 			else {
 
-				auto third_type = At(2).Type;
-				auto third_correct =
-					third_type != TokenType::Symbol &&
-					third_type != TokenType::NumericLiteral &&
-					third_type != TokenType::OpenParen;
-
-				if (
-					(At(1).Type == TokenType::Multiply || (At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::Period)) &&
-					third_correct
-					) {
-
-					return ParseTypeExpr();
-				}
+				// 				auto third_type = At(2).Type;
+				// 				auto third_correct =
+				// 					third_type != TokenType::Symbol &&
+				// 					third_type != TokenType::NumericLiteral &&
+				// 					third_type != TokenType::OpenParen;
+				// 
+				// 				if (
+				// 					(At(1).Type == TokenType::Multiply || (At(1).Type == TokenType::OpenBracket && At(2).Type == TokenType::Period)) &&
+				// 					third_correct
+				// 					) {
+				// 
+				// 					return ParseTypeExpr();
+				// 				}
 
 				Identifier identifier;
 				identifier.Symbol = Consume();
@@ -1439,11 +1431,22 @@ namespace Glass
 			return Application::AllocateAstNode(num_lit);
 		}
 		break;
-		case TokenType::Multiply:
+		case TokenType::HexLiteral:
 		{
-			return ParseDeRefExpr();
+			NumericLiteral num_lit;
+			num_lit.token = Consume();
+
+			num_lit.Val.Int = std::stoull(num_lit.token.Symbol.data() + 2, nullptr, 16);
+			num_lit.type = NumericLiteral::Type::Int;
+
+			return Application::AllocateAstNode(num_lit);
 		}
 		break;
+		// 		case TokenType::Multiply:
+		// 		{
+		// 			return ParseDeRefExpr();
+		// 		}
+		// 		break;
 		}
 
 		return nullptr;
