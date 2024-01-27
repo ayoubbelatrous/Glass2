@@ -2,6 +2,7 @@
 
 #include "FrontEnd/Frontend.h"
 #include "FrontEnd/Lexer.h"
+#include "BackEnd/MC_Gen.h"
 
 #define FMT(...) fmt::format(__VA_ARGS__)
 
@@ -162,7 +163,14 @@ namespace Glass
 			return;
 		}
 
-		Do_CodeGen();
+		if (Do_CodeGen())
+			return;
+
+		MC_Gen_Spec mc_gen_spec;
+		mc_gen_spec.output_path = String_Make(".bin/mc.exe");
+
+		MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
+		MC_Gen_Run(mc_generator);
 
 		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
 		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
