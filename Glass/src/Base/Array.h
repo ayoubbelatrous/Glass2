@@ -87,6 +87,16 @@ namespace Glass
 	}
 
 	template<typename E>
+	Array<E> Array_View(E* data, std::size_t count) {
+
+		Array<E> arr = {};
+		arr.count = count;
+		arr.capacity = count;
+		arr.data = data;
+		return arr;
+	}
+
+	template<typename E>
 	Array<E> Array_From_Vec(const std::vector<E>& vec) {
 
 		Array<E> arr = {};

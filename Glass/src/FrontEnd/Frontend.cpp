@@ -181,7 +181,7 @@ namespace Glass
 
 		if (disassemble)
 		{
-			system("objdump.exe --no-show-raw-insn -D -Mintel .\.bin\mc.obj > .\.bin/mc.");
+			system("objdump.exe --no-show-raw-insn -D -Mintel ./.bin/mc.obj > ./.bin/mc.s");
 		}
 
 		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
@@ -1096,6 +1096,7 @@ namespace Glass
 		case NodeType::BinaryExpression:
 		case NodeType::Call:
 		case NodeType::Cast:
+		case NodeType::MemberAccess:
 			return Expression_CodeGen((Expression*)statement, scope_id, proc);
 			break;
 		case NodeType::Return:
@@ -1416,62 +1417,66 @@ namespace Glass
 		{
 			StringLiteral* as_lit = (StringLiteral*)expression;
 
-			GS_Type* literal_type = nullptr;
+			GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
+			ASSERT(c_str_type);
 
-			if (inferred_type) {
-				if (inferred_type == Data.string_Ty) {
-					GS_ASSERT_UNIMPL();
-					return {};
-				}
+			std::string processed_literal;
 
-				GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
-				ASSERT(c_str_type);
+			for (size_t i = 0; i < as_lit->Symbol.Symbol.size(); i++)
+			{
+				auto c = as_lit->Symbol.Symbol[i];
 
-				std::string processed_literal;
+				if (c == '\\') {
+					if (i + 1 < as_lit->Symbol.Symbol.size()) {
 
-				for (size_t i = 0; i < as_lit->Symbol.Symbol.size(); i++)
-				{
-					auto c = as_lit->Symbol.Symbol[i];
+						auto next_c = as_lit->Symbol.Symbol[i + 1];
 
-					if (c == '\\') {
-						if (i + 1 < as_lit->Symbol.Symbol.size()) {
-
-							auto next_c = as_lit->Symbol.Symbol[i + 1];
-
-							if (next_c == 'n') {
-								processed_literal.push_back('\n');
-							}
-							else if (next_c == 'r') {
-								processed_literal.push_back('\r');
-							}
-							else if (next_c == 't') {
-								processed_literal.push_back('\t');
-							}
-							else {
-								ASSERT(nullptr, "unknown escape code");
-							}
-							i++;
-							continue;
+						if (next_c == 'n') {
+							processed_literal.push_back('\n');
 						}
+						else if (next_c == 'r') {
+							processed_literal.push_back('\r');
+						}
+						else if (next_c == 't') {
+							processed_literal.push_back('\t');
+						}
+						else {
+							ASSERT(nullptr, "unknown escape code");
+						}
+						i++;
+						continue;
 					}
-
-					processed_literal.push_back(c);
 				}
 
-				String literal_value = String_Make(processed_literal);
+				processed_literal.push_back(c);
+			}
 
-				CodeGen_Result result;
+			String literal_value = String_Make(processed_literal);
 
-				result.code_node_id = Il_Insert_String(proc, c_str_type, literal_value);
-				result.ok = true;
+			CodeGen_Result result;
+
+			Il_IDX string_data_node_id = Il_Insert_String(proc, c_str_type, literal_value);
+
+			if (inferred_type == c_str_type) {
+				result.code_node_id = string_data_node_id;
 				result.expression_type = c_str_type;
-				return result;
 			}
 			else {
-				GS_ASSERT_UNIMPL();
+
+				Il_IDX struct_members[2];
+
+				Const_Union count_const;
+				count_const.us8 = literal_value.count;
+
+				struct_members[0] = Il_Insert_Constant(proc, count_const, TypeSystem_Get_Basic_Type(Data.type_system, Data.u64_tn));
+				struct_members[1] = string_data_node_id;
+
+				result.code_node_id = Il_Insert_Struct_Init(proc, Data.string_Ty, Array_View((Il_IDX*)struct_members, 2));
+				result.expression_type = Data.string_Ty;
 			}
 
-			return {};
+			result.ok = true;
+			return result;
 		}
 		break;
 		case NodeType::NumericLiteral:
@@ -1809,7 +1814,6 @@ namespace Glass
 
 				Entity& identified_entity = Data.entity_storage[identified_entity_id];
 
-
 				switch (identified_entity.entity_type)
 				{
 				case Entity_Type::Enum_Entity:
@@ -1829,11 +1833,59 @@ namespace Glass
 					return result;
 				}
 				break;
-				default:
-					GS_ASSERT_UNIMPL();
+				}
+			}
+
+			CodeGen_Result object_result = Expression_CodeGen(as_member_access->Object, scope_id, proc, inferred_type, true);
+			if (!as_member_access->Object)
+				return {};
+
+			auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
+
+			if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
+				Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+				return {};
+			}
+
+			Entity_ID struct_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].name);
+
+			ASSERT(struct_entity_id != Entity_Null);
+			Entity& struct_entity = Data.entity_storage[struct_entity_id];
+
+			ASSERT(struct_entity.entity_type == Entity_Type::Struct_Entity);
+
+			Entity* member_entity = nullptr;
+			u64 member_index = -1;
+
+			ASSERT(as_member_access->Member->GetType() == NodeType::Identifier);
+			Identifier* member_as_ident = (Identifier*)as_member_access->Member;
+
+			GS_Type* member_type = nullptr;
+
+			String member_name = String_Make(member_as_ident->Symbol.Symbol);
+
+			for (size_t i = 0; i < struct_entity.children.count; i++)
+			{
+				if (String_Equal(Data.entity_storage[struct_entity.children[i]].semantic_name, member_name)) {
+					member_entity = &Data.entity_storage[struct_entity.children[i]];
+					member_index = i;
+					member_type = member_entity->semantic_type;
 					break;
 				}
 			}
+
+			if (!member_entity) {
+				Push_Error_Loc(scope_id, as_member_access->Member, FMT("struct does not have member named: '{}'", member_as_ident->Symbol.Symbol));
+				return {};
+			}
+
+			Il_IDX sep_node_idx = Il_Insert_SEP(proc, object_result.expression_type, member_index, object_result.code_node_id);
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.code_node_id = Il_Insert_Load(proc, member_type, sep_node_idx);
+			result.expression_type = member_type;
+			return result;
 		}
 		break;
 		case NodeType::Cast:

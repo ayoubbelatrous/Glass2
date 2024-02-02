@@ -178,6 +178,19 @@ namespace Glass
 					use_register(node.ret.value_node_idx);
 				}
 
+				if (node.node_type == Il_Struct_Initializer)
+				{
+					u8 allocated_register = temp_allocate_register(idx);
+					allocations[idx].allocated_register = allocated_register;
+
+					ASSERT(node.si.member_count < SI_SMALL_COUNT);
+
+					for (size_t i = 0; i < node.si.member_count; i++)
+					{
+						use_register(node.si.members_value_nodes[i]);
+					}
+				}
+
 				if (node.node_type == Il_Store)
 				{
 					u8 allocated_register = temp_allocate_register(idx);
@@ -570,6 +583,58 @@ namespace Glass
 				break;
 				case Il_ZI:
 					break;
+				case Il_Struct_Initializer:
+				{
+					Reg_Allocation allocation = register_allocations[i];
+
+					Inst_Op result_op;
+					result_op.type = Op_Reg_Disp4;
+					result_op.reg_disp.r = RBP;
+
+					stack_pointer += node_type_size;
+					result_op.reg_disp.disp = -(i32)stack_pointer;
+
+					register_values[i] = result_op;
+
+					ASSERT(node.si.member_count < SI_SMALL_COUNT);
+
+					auto type_system = g.prog->type_system;
+
+					GS_Struct& strct = type_system->struct_storage[type_system->type_name_storage[node_type->basic.type_name_id].struct_id];
+
+					Inst_Op tmp_reg;
+					tmp_reg.type = Op_Reg;
+					tmp_reg.reg = allocation.allocated_register;
+
+					for (size_t i = 0; i < node.si.member_count; i++)
+					{
+						GS_Type* member_type = strct.members[i];
+						auto member_offset = strct.offsets[i];
+
+						auto member_type_size = TypeSystem_Get_Type_Size(*type_system, member_type);
+
+						auto member_type_size_bits = member_type_size * 8;
+
+						Inst_Op member_value = register_values[node.si.members_value_nodes[i]];
+
+						if (member_type_size <= 8) {
+
+							Inst_Op member_op = result_op;
+							member_op.reg_disp.disp += member_offset;
+
+							if (member_value.type == Op_Reg_Disp4) {
+								Emit_Mov(g.code, tmp_reg, member_value, member_type_size_bits);
+								member_value = tmp_reg;
+							}
+
+							Emit_Mov(g.code, member_op, member_value, member_type_size_bits);
+						}
+						else {
+							GS_ASSERT_UNIMPL();
+						}
+					}
+				}
+				break;
 				case Il_Store:
 				{
 					Reg_Allocation allocation = register_allocations[i];

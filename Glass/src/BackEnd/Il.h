@@ -42,6 +42,8 @@ namespace Glass
 
 		Il_ZI,
 
+		Il_Struct_Initializer,
+
 		Il_Value_Cmp,
 		Il_Value_FCmp,
 
@@ -186,6 +188,19 @@ namespace Glass
 		Il_Cast_Type cast_type;
 	};
 
+#define SI_SMALL_COUNT 16 / sizeof(Il_IDX)
+
+	struct Il_Node_Struct_Initializer
+	{
+		u16 member_count;
+
+		union
+		{
+			Il_IDX members_value_nodes[SI_SMALL_COUNT];
+			Il_IDX* members_value_nodes_ptr;
+		};
+	};
+
 	struct Il_Node
 	{
 		Type_IDX type_idx;
@@ -207,6 +222,7 @@ namespace Glass
 			Il_Node_Cond_Branch			c_branch;
 			Il_Node_Branch				br;
 			Il_Node_Cast				cast;
+			Il_Node_Struct_Initializer  si;
 		};
 	};
 
@@ -346,6 +362,33 @@ namespace Glass
 		zi_node.type_idx = type_index;
 
 		return zi_node;
+	}
+
+	inline Il_Node Il_Make_Struct_Init(Type_IDX struct_type_index, Array<Il_IDX> member_values) {
+
+		Il_Node si_node = { 0 };
+		si_node.node_type = Il_Struct_Initializer;
+		si_node.type_idx = struct_type_index;
+
+		if (member_values.count <= SI_SMALL_COUNT) {
+			for (size_t i = 0; i < member_values.count; i++)
+			{
+				si_node.si.members_value_nodes[i] = member_values[i];
+			}
+		}
+		else {
+
+			si_node.si.members_value_nodes_ptr = (Il_IDX*)malloc(member_values.count * sizeof(Il_IDX));
+
+			for (size_t i = 0; i < member_values.count; i++)
+			{
+				si_node.si.members_value_nodes_ptr[i] = member_values[i];
+			}
+		}
+
+		si_node.si.member_count = (u16)member_values.count;
+
+		return si_node;
 	}
 
 	inline Il_Node Il_Make_Struct_Element_Ptr(Type_IDX type_idx, u16 element_idx, Il_IDX ptr_node_idx) {
@@ -550,6 +593,11 @@ namespace Glass
 		return Il_Proc_Insert(proc, zi_node);
 	}
 
+	inline Il_IDX Il_Insert_Struct_Init(Il_Proc& proc, GS_Type* struct_type, Array<Il_IDX> members_values) {
+		Il_Node si_node = Il_Make_Struct_Init((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, struct_type), members_values);
+		return Il_Proc_Insert(proc, si_node);
+	}
+
 	inline Il_IDX Il_Insert_String(Il_Proc& proc, GS_Type* a_pointer_type, String string) {
 		ASSERT(a_pointer_type->kind == Type_Pointer);
 		Il_Node string_node = Il_Make_String(string, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, a_pointer_type));
@@ -575,6 +623,11 @@ namespace Glass
 		Il_Node br_node = Il_Make_Br(block_idx);
 		br_node.type_idx = 0;
 		return Il_Proc_Insert(proc, br_node);
+	}
+
+	inline Il_IDX Il_Insert_SEP(Il_Proc& proc, GS_Type* struct_type, u64 member_index, Il_IDX struct_pointer_node_idx) {
+		Il_Node sep_node = Il_Make_Struct_Element_Ptr((u16)TypeSystem_Get_Type_Index(*proc.program->type_system, struct_type), member_index, struct_pointer_node_idx);
+		return Il_Proc_Insert(proc, sep_node);
 	}
 
 	inline Il_IDX Il_Insert_Block(Il_Proc& proc, String name = {}) {

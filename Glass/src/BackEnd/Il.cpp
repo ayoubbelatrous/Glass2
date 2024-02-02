@@ -191,6 +191,25 @@ namespace Glass
 						<< " $" << node.cast.castee_node_idx << "\n";
 				}
 				break;
+				case Il_Struct_Initializer:
+				{
+					stream << "SI " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " {";
+
+					ASSERT(node.si.member_count < SI_SMALL_COUNT);
+
+					for (size_t i = 0; i < node.si.member_count; i++)
+					{
+						stream << " $" << node.si.members_value_nodes[i];
+					}
+
+					stream << "}\n";
+				}
+				break;
+				case Il_StructElementPtr:
+				{
+					stream << "sep " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "." << node.element_ptr.element_idx << " $" << node.element_ptr.ptr_node_idx << "\n";
+				}
+				break;
 				default:
 					GS_ASSERT_UNIMPL();
 					break;
@@ -535,6 +554,39 @@ namespace Glass
 				case Il_Cast:
 				{
 					register_buffer[i] = register_buffer[node.cast.castee_node_idx];
+				}
+				break;
+				case Il_Struct_Initializer:
+				{
+					GS_Struct& strct = ee.type_system->struct_storage[ee.type_system->type_name_storage[type->basic.type_name_id].struct_id];
+
+					ASSERT(node.si.member_count < SI_SMALL_COUNT);
+
+					u8* dest = (u8*)&register_buffer[i];
+
+					if (type_size > sizeof(Const_Union))
+					{
+						dest = (u8*)&stack[stack_pointer];
+						stack_pointer += type_size;
+					}
+
+					for (size_t i = 0; i < node.si.member_count; i++)
+					{
+						GS_Type* member_type = strct.members[i];
+
+						auto member_type_size = TypeSystem_Get_Type_Size(*ee.type_system, member_type);
+
+						void* src;
+
+						if (member_type_size > sizeof(Const_Union)) {
+							src = register_buffer[node.si.members_value_nodes[i]].ptr;
+						}
+						else {
+							src = &register_buffer[node.si.members_value_nodes[i]];
+						}
+
+						memcpy(dest + strct.offsets[i], src, member_type_size);
+					}
 				}
 				break;
 				default:
