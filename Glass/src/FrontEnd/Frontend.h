@@ -7,6 +7,7 @@
 #include "FrontEnd/Parser.h"
 #include "FrontEnd/Type_System.h"
 #include "BackEnd/Il.h"
+#include <unordered_set>
 
 namespace Glass
 {
@@ -180,6 +181,8 @@ namespace Glass
 
 	struct Front_End_Data
 	{
+		std::set<std::string> Added_Libraries_Paths;
+
 		Array<Front_End_File> Files;
 		std::unordered_map<std::string, File_ID> Path_To_File;
 		std::unordered_map<File_ID, Entity_ID> File_ID_To_Scope;

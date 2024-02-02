@@ -1591,7 +1591,7 @@ namespace Glass
 		u32 prologue_end_idx = (u32)(prologue.size() - 1);
 
 		stack_size_constant->constant_integer.integer += m_Data.Stack_Size;
-		stack_size_constant->constant_integer.integer += m_Data.Call_Stack_Size + 32 + 8; // the push rbp offset + because the stack addressing works in reverse we must add this 8 here or atleast this how i understand
+		stack_size_constant->constant_integer.integer += m_Data.Call_Stack_Size + 32 + 8;
 		stack_size_constant->constant_integer.integer = (i64)align_to(stack_size_constant->constant_integer.integer, 16);
 
 		Code.push_back(Builder::Label(Return_Label));

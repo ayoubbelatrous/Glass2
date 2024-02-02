@@ -3,6 +3,7 @@
 #include "FrontEnd/Frontend.h"
 #include "FrontEnd/Lexer.h"
 #include "BackEnd/MC_Gen.h"
+#include "microsoft_craziness.h"
 
 #define FMT(...) fmt::format(__VA_ARGS__)
 
@@ -115,6 +116,8 @@ namespace Glass
 			Data.void_tn = void_type_name_id;
 			Data.void_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.void_tn);
 
+			Data.type_system.void_Ty = Data.void_Ty;
+
 			Entity void_type_name_entity = Create_TypeName_Entity(tn_Void.name, { 0,0 }, -1);
 			void_type_name_entity.semantic_name = String_Make("void");
 			void_type_name_entity.flags |= EF_Constant;
@@ -123,7 +126,6 @@ namespace Glass
 			void_type_name_entity.constant_value.type = Data.void_Ty;
 
 			Insert_Entity(void_type_name_entity, Data.global_scope_entity);
-
 		}
 
 		Data.bool_tn = insert_base_type_name(String_Make("bool"), 1, 1, true, false, false, true);
@@ -166,16 +168,58 @@ namespace Glass
 		if (Do_CodeGen())
 			return;
 
+		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
+		GS_CORE_INFO("main returned: {}", result.us8);
+
 		MC_Gen_Spec mc_gen_spec;
-		mc_gen_spec.output_path = String_Make(".bin/mc.exe");
+		mc_gen_spec.output_path = String_Make(".bin/mc.obj");
 
 		MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
 		MC_Gen_Run(mc_generator);
 
-		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
-		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
+		bool disassemble = true;
 
-		GS_CORE_INFO("main returned: {}", result.us8);
+		if (disassemble)
+		{
+			system("objdump.exe --no-show-raw-insn -D -Mintel .\.bin\mc.obj > .\.bin/mc.");
+		}
+
+		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
+
+		Find_Result find_result = find_visual_studio_and_windows_sdk();
+
+		fs_path msvc_linker_path = find_result.vs_exe_path;
+		msvc_linker_path.append("link.exe");
+
+		std::string linked_objects = "./.bin/mc.obj";
+		std::string linker_options = "/nologo /ignore:4210 /NODEFAULTLIB /IMPLIB:C /DEBUG:FULL /SUBSYSTEM:CONSOLE /INCREMENTAL:NO";
+
+		std::string program_libraries;
+
+		for (auto& added_library_path : Data.Added_Libraries_Paths)
+		{
+			program_libraries.append(added_library_path);
+			program_libraries.append(".lib");
+			program_libraries.append(" ");
+		}
+
+		std::wstring ucrt_lib_path_w = find_result.windows_sdk_ucrt_library_path;
+		std::wstring um_lib_path_w = find_result.windows_sdk_um_library_path;
+		std::wstring vs_lib_path_w = find_result.vs_library_path;
+
+		fs_path ucrt_lib_path = ucrt_lib_path_w;
+		fs_path um_lib_path = um_lib_path_w;
+		fs_path vs_lib_path = vs_lib_path_w;
+
+		std::string linker_lib_paths = fmt::format("/LIBPATH:\"{}\" /LIBPATH:\"{}\" /LIBPATH:\"{}\"", vs_lib_path.string(), um_lib_path.string(), ucrt_lib_path.string());
+
+		std::string linker_command = fmt::format("{} {} {} {} {}", msvc_linker_path.string(), linker_lib_paths, program_libraries, linker_options, linked_objects);
+
+		GS_CORE_INFO("running linker: {}", linker_command);
+
+		system(linker_command.c_str());
+
+		free_resources(&find_result);
 	}
 
 	bool Front_End::Load_Base()
@@ -473,7 +517,7 @@ namespace Glass
 				}
 
 				Entity new_function_entity = Create_Function_Entity(func_name, Loc_From_Token(as_func_node->Symbol), file_entity.file_scope.file_id);
-				new_function_entity.flags = EF_InComplete;
+				new_function_entity.flags = EF_InComplete | EF_Constant;
 				new_function_entity.syntax_node = as_func_node;
 
 				if (as_func_node->foreign_directive) {
@@ -531,6 +575,10 @@ namespace Glass
 				library_entity.library.library_node_idx = Il_Insert_Library(Data.il_program, String_Make(as_library_node->FileName->Symbol.Symbol + ".dll"));
 
 				Insert_Entity(library_entity, file_entity_id);
+			}
+			else if (statement->GetType() == NodeType::AddLibrary) {
+				AddLibraryNode* as_add_library_node = (AddLibraryNode*)statement;
+				Data.Added_Libraries_Paths.emplace(as_add_library_node->FileName->Symbol.Symbol);
 			}
 			return false;
 			});
@@ -940,7 +988,6 @@ namespace Glass
 					if (entity.func.foreign) {
 						Entity& library_entity = Data.entity_storage[entity.func.library_entity_id];
 						Il_IDX inserted_external_proc_idx = Il_Insert_External_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature, library_entity.library.library_node_idx, entity.func.c_variadic);
-						Il_Proc& proc = Data.il_program.procedures[inserted_external_proc_idx];
 						entity.func.proc_idx = inserted_external_proc_idx;
 					}
 					else {
@@ -974,7 +1021,9 @@ namespace Glass
 
 			if (entity.entity_type == Entity_Type::Function) {
 				if (!entity.func.foreign) {
-					Function_CodeGen(entity, (Entity_ID)i, entity.parent);
+					if (!Function_CodeGen(entity, (Entity_ID)i, entity.parent)) {
+						return true;
+					}
 				}
 				else {
 					Foreign_Function_CodeGen(entity, (Entity_ID)i, entity.parent);
@@ -1031,7 +1080,9 @@ namespace Glass
 
 		GS_CORE_TRACE("generated: {}", printed_proc);
 
-		return {};
+		CodeGen_Result result;
+		result.ok = true;
+		return result;
 	}
 
 	CodeGen_Result Front_End::Statement_CodeGen(Statement* statement, Entity_ID scope_id, Il_Proc& proc)
@@ -1044,6 +1095,7 @@ namespace Glass
 		case NodeType::NumericLiteral:
 		case NodeType::BinaryExpression:
 		case NodeType::Call:
+		case NodeType::Cast:
 			return Expression_CodeGen((Expression*)statement, scope_id, proc);
 			break;
 		case NodeType::Return:
@@ -1144,7 +1196,7 @@ namespace Glass
 
 				auto type_size = TypeSystem_Get_Type_Size(Data.type_system, variable_type);
 
-				if (type_size <= sizeof(Const_Union)) {
+				if (type_size <= 8) {
 					Const_Union zero = { 0 };
 					Il_Insert_Store(proc, variable_type, variable.var.location, Il_Insert_Constant(proc, zero, variable_type));
 				}
@@ -1493,7 +1545,7 @@ namespace Glass
 			bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
 			bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
 
-			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment);
+			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, inferred_type, assignment);
 			if (!left_result) return {};
 			CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type);
 			if (!right_result) return {};
@@ -1784,6 +1836,42 @@ namespace Glass
 			}
 		}
 		break;
+		case NodeType::Cast:
+		{
+			CastNode* as_cast_node = (CastNode*)expression;
+
+			GS_Type* cast_to_type = Evaluate_Type(as_cast_node->Type, scope_id);
+
+			if (!cast_to_type) {
+				Push_Error_Loc(scope_id, as_cast_node->Type, FMT("cast() unknown type"));
+				return {};
+			}
+
+			CodeGen_Result expr_result = Expression_CodeGen(as_cast_node->Expr, scope_id, proc, cast_to_type);
+			if (!expr_result) return {};
+
+			GS_Type* castee_type = expr_result.expression_type;
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.expression_type = cast_to_type;
+
+			if (cast_to_type->kind == castee_type->kind) {
+				if (cast_to_type->kind == Type_Pointer) {
+					result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Ptr, cast_to_type, castee_type, expr_result.code_node_id);
+				}
+				else {
+					Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
+					return {};
+				}
+			}
+			else {
+				Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
+				return {};
+			}
+
+			return result;
+		}
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1953,6 +2041,11 @@ namespace Glass
 			//ASSERT(identified_entity.semantic_type);
 			///ASSERT(identified_entity.flags & EF_Constant);
 			ASSERT(!(identified_entity.flags & EF_InComplete));
+
+			if (!(identified_entity.flags & EF_Constant)) {
+				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a constant", as_ident->Symbol.Symbol));
+				return {};
+			}
 
 			Eval_Result result;
 			result.ok = true;
@@ -2147,8 +2240,13 @@ namespace Glass
 
 			ASSERT(identified_entity_id != Entity_Null);
 			//ASSERT(identified_entity.semantic_type);
-			ASSERT(identified_entity.flags & EF_Constant);
+			//ASSERT(identified_entity.flags & EF_Constant);
 			ASSERT(!(identified_entity.flags & EF_InComplete));
+
+			if (!(identified_entity.flags & EF_Constant)) {
+				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a constant", as_ident->Symbol.Symbol));
+				return {};
+			}
 
 			if (identified_entity.semantic_type != Data.Type_Ty) {
 				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a type", as_ident->Symbol.Symbol));
@@ -2182,6 +2280,39 @@ namespace Glass
 			return generated_type;
 		}
 							   break;
+		case NodeType::ArrayAccess: {
+			ArrayAccess* as_array_access = (ArrayAccess*)expression;
+
+			GS_Type* element_type = Evaluate_Type(as_array_access->Object, scope_id);
+			if (!element_type)
+				return nullptr;
+
+			Eval_Result size_eval_result = Expression_Evaluate(as_array_access->Index, scope_id, nullptr);
+			if (!size_eval_result)
+				return nullptr;
+
+			if (!size_eval_result.expression_type) {
+				Push_Error_Loc(scope_id, as_array_access->Index, "expected array type size to have an integral numeric type");
+				return nullptr;
+			}
+
+			auto array_size_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, size_eval_result.expression_type);
+
+			if (!(array_size_type_flags & TN_Numeric_Type) || (array_size_type_flags & TN_Float_Type)) {
+				Push_Error_Loc(scope_id, as_array_access->Index, "expected array type size to have an integral numeric type");
+				return nullptr;
+			}
+
+			if (size_eval_result.result.s8 <= 0) {
+				Push_Error_Loc(scope_id, as_array_access->Index, FMT("expected array type size: [{}] to be greater than zero", size_eval_result.result.s8));
+				return nullptr;
+			}
+
+			GS_Type* generated_type = TypeSystem_Get_Array_Type(Data.type_system, element_type, size_eval_result.result.us8);
+
+			return generated_type;
+		}
+								  break;
 		default:
 			ASSERT(nullptr);
 			return nullptr;

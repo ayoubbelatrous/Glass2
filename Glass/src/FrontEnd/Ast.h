@@ -45,6 +45,7 @@ namespace Glass
 		Operator,
 		Load,
 		Library,
+		AddLibrary,
 		Cast,
 		AutoCast,
 		ArrayAccess,
@@ -638,7 +639,7 @@ namespace Glass
 		}
 
 		virtual const Token& GetLocation() const override {
-			return Function;
+			return callee->GetLocation();
 		}
 	};
 
@@ -947,6 +948,26 @@ namespace Glass
 
 		virtual std::string ToString() const {
 			return "#library " + FileName->ToString();
+		}
+
+		virtual const Token& GetLocation() const override {
+			return FileName->GetLocation();
+		}
+	};
+
+	class AddLibraryNode : public Statement
+	{
+	public:
+
+		StringLiteral* FileName = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::AddLibrary;
+		}
+
+		virtual std::string ToString() const {
+			return "";
 		}
 
 		virtual const Token& GetLocation() const override {

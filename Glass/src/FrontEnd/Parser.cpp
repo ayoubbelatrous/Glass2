@@ -39,7 +39,7 @@ namespace Glass
 			{
 				auto struct_ = ParseStruct();
 
-				expected_semicolon();
+				//expected_semicolon();
 
 				return struct_;
 			}
@@ -114,8 +114,15 @@ namespace Glass
 		Top_Level_Expression = true;
 		auto expr = ParseExpression();
 
-		if (At().Type == TokenType::Symbol) {
-			return ParseVarDecl(expr);
+		if (expr->GetType() == NodeType::Identifier ||
+			expr->GetType() == NodeType::TE_TypeName ||
+			expr->GetType() == NodeType::TE_Pointer ||
+			expr->GetType() == NodeType::TE_Array ||
+			expr->GetType() == NodeType::ArrayAccess ||
+			expr->GetType() == NodeType::TE_Func) {
+			if (At().Type == TokenType::Symbol) {
+				return ParseVarDecl(expr);
+			}
 		}
 
 		expected_semicolon();
@@ -209,6 +216,25 @@ namespace Glass
 
 			if (Node.FileName->GetType() != NodeType::StringLiteral) {
 				Abort("Expected a string after #library directive, Instead Got: ");
+			}
+
+			return Application::AllocateAstNode(Node);
+		}
+
+		if (At().Symbol == "add_library") {
+
+			Consume();
+
+			AddLibraryNode Node;
+
+			Node.FileName = (StringLiteral*)ParseStatement();
+
+			if (Node.FileName == nullptr) {
+				Abort("Expected a file name after #add_library directive, Instead Got: ");
+			}
+
+			if (Node.FileName->GetType() != NodeType::StringLiteral) {
+				Abort("Expected a string after #add_library directive, Instead Got: ");
 			}
 
 			return Application::AllocateAstNode(Node);

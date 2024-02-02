@@ -108,6 +108,31 @@ namespace Glass
 		return inserted_type;
 	}
 
+	GS_Type* TypeSystem_Get_Array_Type(Type_System& ts, GS_Type* element, u64 size)
+	{
+		ASSERT(element);
+		ASSERT(size);
+
+		u64 type_hash = GS_Array_Type_Hash(element->type_hash, size);
+
+		auto it = ts.type_lookup.find(type_hash);
+		if (it != ts.type_lookup.end()) {
+			ASSERT(it->second->kind == Type_Array);
+			return it->second;
+		}
+
+		GS_Type new_type;
+		new_type.kind = Type_Array;
+		new_type.type_hash = type_hash;
+		new_type.array.element_type = element;
+		new_type.array.size = size;
+
+		GS_Type* inserted_type = Array_Add(ts.type_storage, new_type);
+		ts.type_lookup[type_hash] = inserted_type;
+
+		return inserted_type;
+	}
+
 	GS_Type* TypeSystem_Get_Proc_Type(Type_System& ts, GS_Type* return_type, Array<GS_Type*> params)
 	{
 		ASSERT(return_type);
@@ -195,6 +220,9 @@ namespace Glass
 		else if (type->kind == Type_Dyn_Array) {
 			return 16;
 		}
+		else if (type->kind == Type_Array) {
+			return TypeSystem_Get_Type_Size(ts, type->array.element_type) * type->array.size;
+		}
 		else {
 			ASSERT(nullptr);
 			return 0;
@@ -268,6 +296,12 @@ namespace Glass
 		case Type_Dyn_Array:
 			stream << TypeSystem_Print_Type(ts, type->dyn_array.element_type).data;
 			stream << "[..]";
+			break;
+		case Type_Array:
+			stream << TypeSystem_Print_Type(ts, type->array.element_type).data;
+			stream << '[';
+			stream << type->array.size;
+			stream << ']';
 			break;
 		default:
 			GS_ASSERT_UNIMPL();

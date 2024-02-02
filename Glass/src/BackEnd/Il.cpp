@@ -182,6 +182,15 @@ namespace Glass
 					stream << "br @" << node.br.block_idx << block << "\n";
 				}
 				break;
+				case Il_Cast:
+				{
+					stream << "cast " <<
+						TypeSystem_Print_Type_Index(*proc.program->type_system, node.cast.from_type_idx).data
+						<< " -> " <<
+						TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data
+						<< " $" << node.cast.castee_node_idx << "\n";
+				}
+				break;
 				default:
 					GS_ASSERT_UNIMPL();
 					break;
@@ -240,10 +249,14 @@ namespace Glass
 
 		Const_Union register_buffer[REG_BUF_SZ] = { 0 };
 		GS_Type* register_type_buffer[REG_BUF_SZ];
-		u64* stack[STACK_SZ] = { 0 };
+		u64 stack[STACK_SZ] = { 0 };
 		u64 stack_pointer = 0;
 
 		Const_Union returned_value = { 0 };
+		// 
+		// 		if (String_Equal(proc.proc_name, String_Make("aabb_test"))) {
+		// 			__debugbreak();
+		// 		}
 
 		for (size_t block_idx = 0; block_idx < proc.blocks.count; block_idx++)
 		{
@@ -305,7 +318,7 @@ namespace Glass
 						register_buffer[i].ptr = register_buffer[node.load.ptr_node_idx].ptr;
 					}
 					else {
-						register_buffer[i] = *(Const_Union*)register_buffer[node.load.ptr_node_idx].ptr;
+						memcpy(&register_buffer[i], register_buffer[node.load.ptr_node_idx].ptr, type_size);
 					}
 				}
 							break;
@@ -519,6 +532,11 @@ namespace Glass
 					goto branch;
 				}
 				break;
+				case Il_Cast:
+				{
+					register_buffer[i] = register_buffer[node.cast.castee_node_idx];
+				}
+				break;
 				default:
 					GS_ASSERT_UNIMPL();
 					break;
@@ -549,10 +567,6 @@ namespace Glass
 
 		void* external_proc_pointer = ee.proc_pointers[proc_idx];
 		ASSERT(external_proc_pointer);
-
-		//init_t t = (init_t)external_proc_pointer;
-		////t(512, 512, "A Window");
-		//return {};
 
 		dynamic_invoke_f_t f = (dynamic_invoke_f_t)dynamic_invoke;
 		dynamic_invoke_d_t d = (dynamic_invoke_d_t)dynamic_invoke;

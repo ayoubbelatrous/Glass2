@@ -48,4 +48,11 @@ namespace Glass
 		uint8_t  reserved;
 		int16_t  high_bits;    // high bits of the section number
 	};
+
+	struct COFF_Relocation
+	{
+		uint32_t address;
+		uint32_t symbol_table_idx;
+		uint16_t type;
+	};
 }

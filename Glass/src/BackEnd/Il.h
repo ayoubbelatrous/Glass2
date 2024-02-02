@@ -47,6 +47,7 @@ namespace Glass
 
 		Il_Cond_Branch,
 		Il_Branch,
+		Il_Cast,
 
 		Il_Max,
 	};
@@ -61,6 +62,11 @@ namespace Glass
 		Il_Cmp_GreaterEqual,
 		Il_Cmp_And,
 		Il_Cmp_Or,
+	};
+
+	enum Il_Cast_Type : u8
+	{
+		Il_Cast_Ptr,
 	};
 
 	struct Il_Node_Param
@@ -173,6 +179,13 @@ namespace Glass
 		Il_IDX block_idx;
 	};
 
+	struct Il_Node_Cast
+	{
+		Il_IDX castee_node_idx;
+		Type_IDX from_type_idx;
+		Il_Cast_Type cast_type;
+	};
+
 	struct Il_Node
 	{
 		Type_IDX type_idx;
@@ -193,6 +206,7 @@ namespace Glass
 			Il_Node_String				string;
 			Il_Node_Cond_Branch			c_branch;
 			Il_Node_Branch				br;
+			Il_Node_Cast				cast;
 		};
 	};
 
@@ -270,6 +284,7 @@ namespace Glass
 		proc.program = &prog;
 		proc.signature = signature;
 		proc.variadic = variadic;
+		proc.external = false;
 
 		Il_Block entry_block = {};
 		entry_block.instructions = Array_Reserved<Il_IDX>(128);
@@ -416,6 +431,18 @@ namespace Glass
 		return store_node;
 	}
 
+	inline Il_Node Il_Make_Cast(Il_Cast_Type cast_type, Type_IDX type_idx, Type_IDX from_type_idx, Il_IDX castee_node_idx) {
+
+		Il_Node cast_node = { 0 };
+		cast_node.node_type = Il_Cast;
+		cast_node.type_idx = type_idx;
+		cast_node.cast.cast_type = cast_type;
+		cast_node.cast.from_type_idx = from_type_idx;
+		cast_node.cast.castee_node_idx = castee_node_idx;
+
+		return cast_node;
+	}
+
 	inline Il_Node Il_Make_CBR(Type_IDX type_idx, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
 
 		Il_Node cbr_node = { 0 };
@@ -534,6 +561,11 @@ namespace Glass
 		return Il_Proc_Insert(proc, cmp_node);
 	}
 
+	inline Il_IDX Il_Insert_Cast(Il_Proc& proc, Il_Cast_Type cast_type, GS_Type* to_type, GS_Type* from_type, Il_IDX castee_node_idx) {
+		Il_Node cast_node = Il_Make_Cast(cast_type, (Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, to_type), (Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, from_type), castee_node_idx);
+		return Il_Proc_Insert(proc, cast_node);
+	}
+
 	inline Il_IDX Il_Insert_CBR(Il_Proc& proc, GS_Type* type, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
 		Il_Node cbr_node = Il_Make_CBR((Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type), condition_node_idx, true_case_block, false_case_block);
 		return Il_Proc_Insert(proc, cbr_node);
@@ -541,6 +573,7 @@ namespace Glass
 
 	inline Il_IDX Il_Insert_Br(Il_Proc& proc, Il_IDX block_idx) {
 		Il_Node br_node = Il_Make_Br(block_idx);
+		br_node.type_idx = 0;
 		return Il_Proc_Insert(proc, br_node);
 	}
 
@@ -564,7 +597,7 @@ namespace Glass
 	std::string Il_Print_Proc(Il_Proc& proc);
 
 #define REG_BUF_SZ 1024
-#define STACK_SZ 128
+#define STACK_SZ 512
 
 	struct Execution_Engine {
 		Type_System* type_system = nullptr;

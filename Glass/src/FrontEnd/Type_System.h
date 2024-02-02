@@ -105,6 +105,8 @@ namespace Glass
 		Array<GS_Struct> struct_storage;
 		Array<GS_Type> type_storage;
 		std::unordered_map<u64, GS_Type*> type_lookup;
+
+		GS_Type* void_Ty = nullptr;
 	};
 
 	struct GS_Struct_Data_Layout
@@ -131,6 +133,10 @@ namespace Glass
 		return Combine2Hashes(std::hash<u64>{}(element_hash), std::hash<std::string>{}("dyn_array_type"));
 	}
 
+	inline u64 GS_Array_Type_Hash(u64 element_hash, u64 size) {
+		return Combine2Hashes(std::hash<u64>{}(size), Combine2Hashes(std::hash<u64>{}(element_hash), std::hash<std::string>{}("array_type")));
+	}
+
 	inline u64 GS_Proc_Type_Hash(u64 return_type_hash, Array<u64> param_hashes) {
 		u64 hash = std::hash<std::string>{}("proc_type");
 
@@ -146,13 +152,14 @@ namespace Glass
 	GS_Type* TypeSystem_Get_Basic_Type(Type_System& ts, Type_Name_ID type_name_id);
 	GS_Type* TypeSystem_Get_Pointer_Type(Type_System& ts, GS_Type* pointee, u32 indirection);
 	GS_Type* TypeSystem_Get_Dyn_Array_Type(Type_System& ts, GS_Type* element);
+	GS_Type* TypeSystem_Get_Array_Type(Type_System& ts, GS_Type* element, u64 size);
 	GS_Type* TypeSystem_Get_Proc_Type(Type_System& ts, GS_Type* return_type, Array<GS_Type*> params);
 
 	GS_Type* TypeSystem_Increase_Ind(Type_System& ts, GS_Type* type, u32 amount = 1);
 
 	Type_Name_Flags TypeSystem_Get_Type_Flags(Type_System& ts, GS_Type* type);
 	Type_Name_Flags TypeSystem_Get_Type_Alignment(Type_System& ts, GS_Type* type);
-	Type_Name_Flags TypeSystem_Get_Type_Size(Type_System& ts, GS_Type* type);
+	u64 TypeSystem_Get_Type_Size(Type_System& ts, GS_Type* type);
 	GS_Struct_Data_Layout TypeSystem_Struct_Compute_Align_Size_Offsets(Type_System& ts, Array<GS_Type*> members);
 
 	String TypeSystem_Print_Type(Type_System& ts, GS_Type* type);
