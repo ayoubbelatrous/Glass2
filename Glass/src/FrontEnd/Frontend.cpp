@@ -132,18 +132,30 @@ namespace Glass
 		Data.bool_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.bool_tn);
 
 		Data.int_tn = insert_base_type_name(String_Make("int"), 4, 4, true, false);
+		Data.int_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.int_tn);
 
 		Data.i8_tn = insert_base_type_name(String_Make("i8"), 1, 1, true, false);
 		Data.i16_tn = insert_base_type_name(String_Make("i16"), 2, 2, true, false);
 		Data.i32_tn = insert_base_type_name(String_Make("i32"), 4, 4, true, false);
 		Data.i64_tn = insert_base_type_name(String_Make("i64"), 8, 8, true, false);
 
+		Data.i8_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.i8_tn);
+		Data.i16_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.i16_tn);
+		Data.i32_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.i32_tn);
+		Data.i64_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.i64_tn);
+
 		Data.u8_tn = insert_base_type_name(String_Make("u8"), 1, 1, false, false);
 		Data.u16_tn = insert_base_type_name(String_Make("u16"), 2, 2, false, false);
 		Data.u32_tn = insert_base_type_name(String_Make("u32"), 4, 4, false, false);
 		Data.u64_tn = insert_base_type_name(String_Make("u64"), 8, 8, false, false);
 
+		Data.u8_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn);
+		Data.u16_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.u16_tn);
+		Data.u32_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.u32_tn);
+		Data.u64_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.u64_tn);
+
 		Data.float_tn = insert_base_type_name(String_Make("float"), 4, 4, false, true);
+		Data.float_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
 
 		Data.f32_tn = insert_base_type_name(String_Make("f32"), 4, 4, true, true);
 		Data.f64_tn = insert_base_type_name(String_Make("f64"), 8, 8, true, true);
@@ -342,18 +354,18 @@ namespace Glass
 
 				VariableNode* as_var = (VariableNode*)statement;
 
-				GS_CORE_ASSERT(as_var->Assignment);
-
 				String var_name = String_Make(as_var->Symbol.Symbol);
 
 				Entity_ID previous_definition = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, var_name);
 
-				if (previous_definition != Entity_Null) {
-					Push_Error_Loc(file_entity_id, as_var, FMT("global constant '{}' has its name already taken", as_var->Symbol.Symbol));
-					return true;
-				}
-
 				if (as_var->Constant) {
+
+					if (previous_definition != Entity_Null) {
+						Push_Error_Loc(file_entity_id, as_var, FMT("global constant declaration '{}' name already taken", as_var->Symbol.Symbol));
+						return true;
+					}
+
+					GS_CORE_ASSERT(as_var->Assignment);
 
 					if (as_var->Assignment->GetType() == NodeType::Load) {
 
@@ -384,6 +396,22 @@ namespace Glass
 
 						Insert_Entity(constant_entity, file_entity_id);
 					}
+				}
+				else
+				{
+					if (previous_definition != Entity_Null) {
+						Push_Error_Loc(file_entity_id, as_var, FMT("global variable declaration '{}', name already taken", as_var->Symbol.Symbol));
+						return true;
+					}
+
+					Entity global_variable_entity = Create_Variable_Entity(
+						var_name,
+						Loc_From_Token(as_var->Symbol), file_entity.file_scope.file_id);
+
+					global_variable_entity.flags |= EF_InComplete;
+					global_variable_entity.syntax_node = as_var;
+
+					Insert_Entity(global_variable_entity, file_entity_id);
 				}
 			}
 			else if (statement->GetType() == NodeType::StructNode) {
@@ -788,6 +816,84 @@ namespace Glass
 								return true;
 						}
 					}
+					else if (tl_entity.entity_type == Entity_Type::Variable) {
+
+						GS_CORE_ASSERT(tl_entity.syntax_node);
+						GS_CORE_ASSERT(tl_entity.syntax_node->GetType() == NodeType::Variable);
+
+						VariableNode* as_var = (VariableNode*)tl_entity.syntax_node;
+
+						if (as_var->Type == nullptr && as_var->Assignment == nullptr) {
+							Push_Error_Loc(file_entity_id, as_var, FMT("global variable '{}' is not assigned, type cannot be inferred!", as_var->Symbol.Symbol));
+							return true;
+						}
+
+						if (as_var->Assignment) {
+
+							if (!Do_Expression_Dependecy_Pass(file_entity_id, as_var->Assignment, tl_entity.dependencies, Entity_Null)) {
+								return true;
+							}
+						}
+
+						Array<Entity_ID> chain;
+
+						if (Check_Circular_Dependencies(tl_file_scope_entity_id, tl_entity.dependencies, chain)) {
+
+							std::string printed_chain;
+
+							printed_chain = tl_entity.semantic_name.data;
+
+							for (size_t i = 0; i < chain.count; i++)
+							{
+								printed_chain += " -> ";
+								printed_chain += Data.entity_storage[chain[i]].semantic_name.data;
+							}
+
+							printed_chain += " -> ";
+
+							printed_chain += tl_entity.semantic_name.data;
+
+							Entity& tail_entity = Data.entity_storage[chain[0]];
+
+							Push_Error_Loc(file_entity_id, as_var, FMT("global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
+							Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
+
+							return true;
+						}
+
+						if (as_var->Type) {
+
+							if (!Do_Expression_Dependecy_Pass(file_entity_id, as_var->Type, tl_entity.dependencies, Entity_Null)) {
+								return true;
+							}
+
+							Array<Entity_ID> chain;
+
+							if (Check_Circular_Dependencies(tl_file_scope_entity_id, tl_entity.dependencies, chain)) {
+
+								std::string printed_chain;
+
+								printed_chain = tl_entity.semantic_name.data;
+
+								for (size_t i = 0; i < chain.count; i++)
+								{
+									printed_chain += " -> ";
+									printed_chain += Data.entity_storage[chain[i]].semantic_name.data;
+								}
+
+								printed_chain += " -> ";
+
+								printed_chain += tl_entity.semantic_name.data;
+
+								Entity& tail_entity = Data.entity_storage[chain[0]];
+
+								Push_Error_Loc(file_entity_id, as_var->Type, FMT("the type of global constant '{}' has circular dependency: {}", as_var->Symbol.Symbol, printed_chain));
+								Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
+
+								return true;
+							}
+						}
+					}
 				}
 			}
 
@@ -821,7 +927,48 @@ namespace Glass
 					continue;
 				}
 
-				if (entity.entity_type == Entity_Type::Constant) {
+				if (entity.entity_type == Entity_Type::Variable) {
+
+					VariableNode* as_var = (VariableNode*)entity.syntax_node;
+
+					if (as_var->Type) {
+						entity.semantic_type = Evaluate_Type(as_var->Type, entity.parent);
+						if (!entity.semantic_type)
+							return true;
+					}
+
+					Il_Global global;
+					global.name = String_Copy(entity.semantic_name);
+					global.read_only = false;
+
+					if (as_var->Assignment) {
+						Eval_Result assignment_code_gen_result = Expression_Evaluate(as_var->Assignment, entity.parent, entity.semantic_type);
+						if (!assignment_code_gen_result) {
+							return true;
+						}
+
+						if (entity.semantic_type) {
+							if (assignment_code_gen_result.expression_type != entity.semantic_type) {
+								Push_Error_Loc(entity.parent, as_var, FMT("global variable '{}' type mismatch in assignment", as_var->Symbol.Symbol));
+								return true;
+							}
+						}
+						else {
+							entity.semantic_type = assignment_code_gen_result.expression_type;
+						}
+
+						Array_Add(global.initializer_storage, Il_Make_Constant(assignment_code_gen_result.result, TypeSystem_Get_Type_Index(Data.type_system, entity.semantic_type)));
+						global.initializer = 0;
+					}
+
+					global.type = entity.semantic_type;
+					entity.var.location = Il_Insert_Global(Data.il_program, global);
+
+					entity.var.global = true;
+
+					entity.flags &= ~EF_InComplete;
+				}
+				else if (entity.entity_type == Entity_Type::Constant) {
 
 					VariableNode* as_var = (VariableNode*)entity.syntax_node;
 
@@ -1377,6 +1524,8 @@ namespace Glass
 
 			CodeGen_Result result;
 
+			result.entity_reference = identified_entity_id;
+
 			if (identified_entity.entity_type == Entity_Type::Constant || identified_entity.entity_type == Entity_Type::Type_Name_Entity) {
 				result.constant = true;
 
@@ -1388,28 +1537,55 @@ namespace Glass
 				else {
 					result.code_node_id = Il_Insert_Constant(proc, identified_entity.constant_value, identified_entity.semantic_type);
 				}
+
+				result.expression_type = identified_entity.semantic_type;
+
 			}
 			else if (identified_entity.entity_type == Entity_Type::Struct_Entity) {
 				Const_Union value;
 				value.us8 = TypeSystem_Get_Type_Index(Data.type_system, identified_entity.constant_value.type);
 				result.code_node_id = Il_Insert_Constant(proc, value, identified_entity.semantic_type);
+				result.expression_type = identified_entity.semantic_type;
 			}
 			else if (identified_entity.entity_type == Entity_Type::Variable) {
 
+				Il_IDX code_location = identified_entity.var.location;
+
+				if (identified_entity.var.global) {
+					code_location = Il_Insert_Global_Address(proc, identified_entity.var.location);
+				}
+
 				if (by_reference) {
 					result.lvalue = true;
-					result.code_node_id = identified_entity.var.location;
+					result.code_node_id = code_location;
+					result.expression_type = identified_entity.semantic_type;
 				}
 				else {
-					result.code_node_id = Il_Insert_Load(proc, identified_entity.semantic_type, identified_entity.var.location);
+
+					result.expression_type = identified_entity.semantic_type;
+
+					if (inferred_type && identified_entity.semantic_type->kind == Type_Array) {
+						if (TypeSystem_Reduce_Indirection(Data.type_system, inferred_type) == identified_entity.semantic_type->array.element_type) {
+							result.code_node_id = code_location;
+							result.expression_type = inferred_type;
+						}
+					}
+					else {
+						result.code_node_id = Il_Insert_Load(proc, identified_entity.semantic_type, code_location);
+						result.expression_type = identified_entity.semantic_type;
+					}
 				}
+			}
+			else if (identified_entity.entity_type == Entity_Type::Function) {
+				result.expression_type = identified_entity.func.signature;
+				result.code_node_id = Il_Insert_Proc_Address(proc, identified_entity.func.proc_idx);
 			}
 			else {
 				ASSERT(nullptr);
 			}
 
 			result.ok = true;
-			result.expression_type = identified_entity.semantic_type;
+
 			return result;
 		}
 		break;
@@ -1726,34 +1902,67 @@ namespace Glass
 		{
 			FunctionCall* as_call = (FunctionCall*)expression;
 
-			Eval_Result eval_result = Expression_Evaluate(as_call->callee, scope_id, nullptr);
+			Entity* func_callee_entity = nullptr;
+			GS_Type* callee_signature = nullptr;
 
-			if (!eval_result) return {};
+			if (as_call->callee->GetType() == NodeType::Identifier)
+			{
+				Eval_Result eval_result = Expression_Evaluate(as_call->callee, scope_id, nullptr, false);
 
-			Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
-			String callee_name = callee_entity.semantic_name;
-			std::string callee_name_std = std::string(callee_name.data);
+				if (!eval_result) return {};
 
-			eval_result.entity_reference;
-			// 
-			// 			if (callee_entity_id == Entity_Null) {
-			// 				Push_Error_Loc(scope_id, as_call, FMT("undefined name: '{}'", callee_name_std));
-			// 				return {};
-			// 			}
+				if (eval_result.entity_reference != Entity_Null)
+				{
+					Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
+					String callee_name = callee_entity.semantic_name;
+					std::string callee_name_std = std::string(callee_name.data);
 
-			if (callee_entity.entity_type != Entity_Type::Function) {
-				Push_Error_Loc(scope_id, as_call, FMT("'{}' is not a function", callee_name_std));
-				return {};
+					if (callee_entity.entity_type == Entity_Type::Function) {
+
+						if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
+							Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
+							return {};
+						}
+
+						if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
+							Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
+							return {};
+						}
+
+						callee_signature = callee_entity.func.signature;
+
+						func_callee_entity = &callee_entity;
+					}
+				}
 			}
 
-			if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
-				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
-				return {};
-			}
+			Il_IDX callee_code_node_idx = -1;
 
-			if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
-				Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
-				return {};
+			if (!func_callee_entity) {
+
+				CodeGen_Result callee_result = Expression_CodeGen(as_call->callee, scope_id, proc, nullptr);
+
+				if (!callee_result)
+					return {};
+
+				if (callee_result.expression_type->kind != Type_Proc) {
+					Push_Error_Loc(scope_id, as_call->callee, "type is not a function type");
+					return {};
+				}
+
+				callee_signature = callee_result.expression_type;
+
+				if (as_call->Arguments.size() > callee_signature->proc.params.count) {
+					Push_Error_Loc(scope_id, as_call, FMT("call too few arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
+					return {};
+				}
+
+				if (as_call->Arguments.size() < callee_signature->proc.params.count) {
+					Push_Error_Loc(scope_id, as_call, FMT("call too many arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
+					return {};
+				}
+
+				callee_code_node_idx = callee_result.code_node_id;
 			}
 
 			Array<Il_Argument> arguments_code;
@@ -1762,12 +1971,10 @@ namespace Glass
 			{
 				Expression* arg_node = as_call->Arguments[i];
 
-				Function_Parameter* parameter = nullptr;
 				GS_Type* inferred_type = nullptr;
 
-				if (i < callee_entity.func.parameters.count) {
-					parameter = &callee_entity.func.parameters[i];
-					inferred_type = parameter->param_type;
+				if (i < callee_signature->proc.params.count) {
+					inferred_type = callee_signature->proc.params[i];
 				}
 
 				CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, inferred_type);
@@ -1776,9 +1983,9 @@ namespace Glass
 					return {};
 				}
 
-				if (parameter) {
-					if (arg_result.expression_type != parameter->param_type) {
-						Push_Error_Loc(scope_id, arg_node, FMT("call to '{}' passed value to argument: '{}' type mismatch", callee_name_std, parameter->name.data));
+				if (i < callee_signature->proc.params.count) {
+					if (arg_result.expression_type != callee_signature->proc.params[i]) {
+						Push_Error_Loc(scope_id, arg_node, "call type mismatch in argument");
 						return {};
 					}
 				}
@@ -1786,10 +1993,17 @@ namespace Glass
 				Array_Add(arguments_code, Il_Argument{ arg_result.code_node_id, (Type_IDX)TypeSystem_Get_Type_Index(Data.type_system,arg_result.expression_type) });
 			}
 
-			Il_IDX code_node_id = Il_Insert_Call(proc, callee_entity.func.signature, arguments_code, callee_entity.func.proc_idx);
+			Il_IDX code_node_id;
+
+			if (func_callee_entity) {
+				code_node_id = Il_Insert_Call(proc, callee_signature, arguments_code, func_callee_entity->func.proc_idx);
+			}
+			else {
+				code_node_id = Il_Insert_Call_Ptr(proc, callee_signature, arguments_code, callee_code_node_idx);
+			}
 
 			CodeGen_Result result;
-			result.expression_type = callee_entity.func.signature->proc.return_type;
+			result.expression_type = callee_signature->proc.return_type;
 			result.code_node_id = code_node_id;
 			result.ok = true;
 
@@ -1882,8 +2096,17 @@ namespace Glass
 			Il_IDX sep_node_idx = Il_Insert_SEP(proc, object_result.expression_type, member_index, object_result.code_node_id);
 
 			CodeGen_Result result;
+
+			if (by_reference)
+			{
+				result.code_node_id = sep_node_idx;
+				result.lvalue = true;
+			}
+			else {
+				result.code_node_id = Il_Insert_Load(proc, member_type, sep_node_idx);
+			}
+
 			result.ok = true;
-			result.code_node_id = Il_Insert_Load(proc, member_type, sep_node_idx);
 			result.expression_type = member_type;
 			return result;
 		}
@@ -1924,6 +2147,55 @@ namespace Glass
 
 			return result;
 		}
+		case NodeType::ArrayAccess:
+		{
+			ArrayAccess* as_array_access = (ArrayAccess*)expression;
+
+			CodeGen_Result object_result = Expression_CodeGen(as_array_access->Object, scope_id, proc, inferred_type, true);
+			if (!object_result)
+				return {};
+
+			if (object_result.expression_type->kind != Type_Array && object_result.expression_type->kind != Type_Pointer) {
+				Push_Error_Loc(scope_id, as_array_access->Object, "type doesn't support subscript operator []");
+				return {};
+			}
+
+			CodeGen_Result index_result = Expression_CodeGen(as_array_access->Index, scope_id, proc, nullptr, false);
+			if (!index_result)
+				return {};
+
+			if (!(TypeSystem_Get_Type_Flags(Data.type_system, index_result.expression_type) & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, as_array_access->Index, "[] index type is not numeric");
+				return {};
+			}
+
+			GS_Type* array_element_type = nullptr;
+
+			if (object_result.expression_type->kind == Type_Array)
+				array_element_type = object_result.expression_type->array.element_type;
+
+			if (object_result.expression_type->kind == Type_Pointer)
+				array_element_type = object_result.expression_type->pointer.pointee;
+
+			CodeGen_Result result = {};
+
+			Il_IDX aep_node_idx = Il_Insert_AEP(proc, array_element_type, object_result.code_node_id, index_result.code_node_id);
+
+			if (by_reference) {
+				result.code_node_id = aep_node_idx;
+			}
+			else {
+				result.code_node_id = Il_Insert_Load(proc, array_element_type, aep_node_idx);
+			}
+
+			result.expression_type = array_element_type;
+
+			result.ok = true;
+
+			result.lvalue = true;
+
+			return result;
+		}
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1932,7 +2204,7 @@ namespace Glass
 		return {};
 	}
 
-	Eval_Result Front_End::Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type)
+	Eval_Result Front_End::Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type, bool const_eval)
 	{
 		NodeType expression_type = expression->GetType();
 
@@ -1959,7 +2231,7 @@ namespace Glass
 		{
 			NumericLiteral* as_lit = (NumericLiteral*)expression;
 
-			GS_Type* literal_type;
+			GS_Type* literal_type = nullptr;
 
 			if (inferred_type) {
 
@@ -2002,8 +2274,8 @@ namespace Glass
 		{
 			BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
 
-			Eval_Result left_result = Expression_Evaluate(as_bin_expr->Left, scope_id, inferred_type);
-			Eval_Result right_result = Expression_Evaluate(as_bin_expr->Right, scope_id, left_result.expression_type);
+			Eval_Result left_result = Expression_Evaluate(as_bin_expr->Left, scope_id, inferred_type, const_eval);
+			Eval_Result right_result = Expression_Evaluate(as_bin_expr->Right, scope_id, left_result.expression_type, const_eval);
 
 			if (!left_result || !right_result)
 				return {};
@@ -2094,7 +2366,7 @@ namespace Glass
 			///ASSERT(identified_entity.flags & EF_Constant);
 			ASSERT(!(identified_entity.flags & EF_InComplete));
 
-			if (!(identified_entity.flags & EF_Constant)) {
+			if (!(identified_entity.flags & EF_Constant) && const_eval) {
 				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a constant", as_ident->Symbol.Symbol));
 				return {};
 			}
@@ -2365,6 +2637,36 @@ namespace Glass
 			return generated_type;
 		}
 								  break;
+		case NodeType::TE_Func:
+		{
+			TypeExpressionFunc* as_func = (TypeExpressionFunc*)expression;
+
+#define param_array_size 128
+
+			GS_Type* param_types[param_array_size] = {};
+
+			Array<GS_Type*> param_types_array;
+			param_types_array.count = 0;
+			param_types_array.capacity = param_array_size;
+			param_types_array.data = param_types;
+
+			GS_Type* return_type = Evaluate_Type(as_func->ReturnType, scope_id);
+
+			if (!return_type)
+				return nullptr;
+
+			for (size_t i = 0; i < as_func->Arguments.size(); i++)
+			{
+				GS_Type* param_type = Evaluate_Type(as_func->Arguments[i], scope_id);
+
+				if (!param_type)
+					return nullptr;
+
+				Array_Add(param_types_array, param_type);
+			}
+
+			return TypeSystem_Get_Proc_Type(Data.type_system, return_type, param_types_array);
+		}
 		default:
 			ASSERT(nullptr);
 			return nullptr;
@@ -2520,6 +2822,59 @@ namespace Glass
 
 			if (!Do_Expression_Dependecy_Pass(scope_id, as_array->ElementType, indirect_dependencies, ignore_indirect)) {
 				return {};
+			}
+
+			for (size_t i = 0; i < indirect_dependencies.count; i++)
+			{
+				if (indirect_dependencies[i] != ignore_indirect) {
+					Array_Add(dependencies, indirect_dependencies[i]);
+				}
+			}
+
+			return { true };
+		}
+		break;
+		case NodeType::ArrayAccess:
+		{
+			ArrayAccess* as_array_access = (ArrayAccess*)expr;
+			ASSERT(as_array_access->Index);
+			ASSERT(as_array_access->Object);
+
+			Array<Entity_ID> indirect_dependencies;
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_array_access->Index, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_array_access->Object, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			for (size_t i = 0; i < indirect_dependencies.count; i++)
+			{
+				if (indirect_dependencies[i] != ignore_indirect) {
+					Array_Add(dependencies, indirect_dependencies[i]);
+				}
+			}
+
+			return { true };
+		}
+		break;
+		case NodeType::TE_Func:
+		{
+			TypeExpressionFunc* as_func = (TypeExpressionFunc*)expr;
+
+			Array<Entity_ID> indirect_dependencies;
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_func->ReturnType, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			for (size_t i = 0; i < as_func->Arguments.size(); i++)
+			{
+				if (!Do_Expression_Dependecy_Pass(scope_id, as_func->Arguments[i], indirect_dependencies, ignore_indirect)) {
+					return {};
+				}
 			}
 
 			for (size_t i = 0; i < indirect_dependencies.count; i++)

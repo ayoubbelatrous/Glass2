@@ -125,8 +125,14 @@ namespace Glass
 				}
 				break;
 				case Il_Call:
+				case Il_Call_Ptr:
 				{
-					stream << "call " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.call.proc_idx << "(";
+					if (node.node_type == Il_Call) {
+						stream << "call " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.call.proc_idx << "(";
+					}
+					else {
+						stream << "call_ptr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " ptr [" << node.call.proc_idx << "] (";
+					}
 
 					for (size_t i = 0; i < node.call.argument_count; i++)
 					{
@@ -210,6 +216,21 @@ namespace Glass
 					stream << "sep " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "." << node.element_ptr.element_idx << " $" << node.element_ptr.ptr_node_idx << "\n";
 				}
 				break;
+				case Il_ArrayElementPtr:
+				{
+					stream << "aep " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "[$" << node.aep.index_node_idx << "] $" << node.aep.ptr_node_idx << "\n";
+				}
+				break;
+				case Il_Global_Address:
+				{
+					stream << "global_addr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.global_address.global_idx << "\n";
+				}
+				break;
+				case Il_Proc_Address:
+				{
+					stream << "proc_addr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.proc_address.proc_idx << "\n";
+				}
+				break;
 				default:
 					GS_ASSERT_UNIMPL();
 					break;
@@ -220,9 +241,69 @@ namespace Glass
 		return stream.str();
 	}
 
+	Const_Union EE_Constant_Evaluate(Execution_Engine& ee, Array<Il_Node>& nodes, Il_IDX node_idx)
+	{
+		Il_Node node = nodes[node_idx];
+
+		GS_Type* type = &ee.type_system->type_storage[node.type_idx];
+		auto type_size = TypeSystem_Get_Type_Size(*ee.type_system, type);
+
+		switch (node.node_type)
+		{
+		case Il_Const:
+		{
+			return node.constant.as;
+		}
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+	}
+
 	Const_Union EE_Exec_Program(Execution_Engine& ee, Il_Program* prog, Il_IDX entry)
 	{
-		//		ee.library_handles = Array_Reserved<void*>(prog->libraries.count);
+		u64 globals_storage_size = 0;
+
+		for (size_t i = 0; i < prog->globals.count; i++)
+		{
+			globals_storage_size += TypeSystem_Get_Type_Size(*prog->type_system, prog->globals[i].type);
+		}
+
+		if (globals_storage_size != 0)
+			ee.globals_storage = malloc(globals_storage_size);
+
+		ee.globals_address_table = Array_Reserved<void*>(prog->globals.count);
+
+		memset(ee.globals_storage, 0xcc, globals_storage_size);
+
+		u8* global_storage_pointer = (u8*)ee.globals_storage;
+
+		for (size_t i = 0; i < prog->globals.count; i++)
+		{
+			Il_Global& global = prog->globals[i];
+
+			auto type_size = TypeSystem_Get_Type_Size(*prog->type_system, global.type);
+			Array_Add(ee.globals_address_table, (void*)global_storage_pointer);
+
+			if (global.initializer != (Il_IDX)-1)
+			{
+				auto const_eval_res = EE_Constant_Evaluate(ee, global.initializer_storage, global.initializer);
+
+				void* init_data_ptr = &const_eval_res;
+
+				if (type_size > sizeof(Const_Union)) {
+					init_data_ptr = const_eval_res.ptr;
+				}
+
+				memcpy(global_storage_pointer, init_data_ptr, type_size);
+			}
+			else
+			{
+				memset(global_storage_pointer, 0, type_size);
+			}
+
+			global_storage_pointer += type_size;
+		}
 
 		for (size_t i = 0; i < prog->libraries.count; i++)
 		{
@@ -234,8 +315,6 @@ namespace Glass
 			void* dll_main_proc_pointer = GetProcAddress(loaded_dll, "glfw3");
 			int x = 30;
 		}
-
-		//ee.proc_pointers = Array_Reserved<void*>(prog->procedures.count);
 
 		for (size_t i = 0; i < prog->procedures.count; i++)
 		{
@@ -272,10 +351,6 @@ namespace Glass
 		u64 stack_pointer = 0;
 
 		Const_Union returned_value = { 0 };
-		// 
-		// 		if (String_Equal(proc.proc_name, String_Make("aabb_test"))) {
-		// 			__debugbreak();
-		// 		}
 
 		for (size_t block_idx = 0; block_idx < proc.blocks.count; block_idx++)
 		{
@@ -312,6 +387,14 @@ namespace Glass
 					register_buffer[i] = arguments[node.param.index];
 				}
 							 break;
+				case Il_Global_Address: {
+					register_buffer[i].ptr = ee.globals_address_table[node.global_address.global_idx];
+				}
+									  break;
+				case Il_Proc_Address: {
+					register_buffer[i].ptr = ee.proc_pointers[node.proc_address.proc_idx];
+				}
+									break;
 				case Il_Alloca: {
 					register_buffer[i].ptr = &stack[stack_pointer];
 					stack_pointer += std::max(type_size, sizeof(Const_Union));
@@ -364,6 +447,10 @@ namespace Glass
 					register_buffer[i].ptr = ((u8*)register_buffer[node.element_ptr.ptr_node_idx].ptr) + strct.offsets[node.element_ptr.element_idx];
 				}
 										break;
+				case Il_ArrayElementPtr: {
+					register_buffer[i].ptr = ((u8*)register_buffer[node.aep.ptr_node_idx].ptr) + register_buffer[node.aep.index_node_idx].us8 * type_size;
+				}
+									   break;
 #define DO_OP(OP, SZ) register_buffer[i].SZ = register_buffer[node.math_op.left_node_idx].SZ OP register_buffer[node.math_op.right_node_idx].SZ
 
 				case Il_Add: {
@@ -528,6 +615,20 @@ namespace Glass
 					register_buffer[i] = EE_Exec_Proc(ee, proc.program->procedures[node.call.proc_idx], call_arguments, call_argument_types);
 				}
 							break;
+				case Il_Call_Ptr: {
+
+					Array<Const_Union> call_arguments;
+					Array<GS_Type*> call_argument_types;
+
+					for (size_t i = 0; i < node.call.argument_count; i++)
+					{
+						Array_Add(call_arguments, register_buffer[node.call.arguments[i]]);
+						Array_Add(call_argument_types, register_type_buffer[node.call.arguments[i]]);
+					}
+
+					register_buffer[i] = EE_Dynamic_Invoke_Proc(ee, register_buffer[node.call.proc_idx].ptr, &ee.type_system->type_storage[node.call.signature], false, call_arguments, call_argument_types);
+				}
+								break;
 				case Il_String: {
 					register_buffer[i].ptr = node.string.str.data;
 				}
@@ -620,14 +721,19 @@ namespace Glass
 		void* external_proc_pointer = ee.proc_pointers[proc_idx];
 		ASSERT(external_proc_pointer);
 
+		return EE_Dynamic_Invoke_Proc(ee, external_proc_pointer, proc.signature, proc.variadic, arguments, argument_types);
+	}
+
+	Const_Union EE_Dynamic_Invoke_Proc(Execution_Engine& ee, void* proc_pointer, GS_Type* signature, bool variadic, Array<Const_Union> arguments, Array<GS_Type*> argument_types /*= {}*/)
+	{
 		dynamic_invoke_f_t f = (dynamic_invoke_f_t)dynamic_invoke;
 		dynamic_invoke_d_t d = (dynamic_invoke_d_t)dynamic_invoke;
 		dynamic_invoke_i_t i = (dynamic_invoke_i_t)dynamic_invoke;
 
 		Const_Union return_value = { 0 };
 
-		auto return_flags = TypeSystem_Get_Type_Flags(*proc.program->type_system, proc.signature->proc.return_type);
-		auto return_size = TypeSystem_Get_Type_Size(*proc.program->type_system, proc.signature->proc.return_type);
+		auto return_flags = TypeSystem_Get_Type_Flags(*ee.type_system, signature->proc.return_type);
+		auto return_size = TypeSystem_Get_Type_Size(*ee.type_system, signature->proc.return_type);
 
 		enum Arg_Type {
 			Dyn_ARG_FLOAT = 0,
@@ -640,15 +746,15 @@ namespace Glass
 
 		for (size_t i = 0; i < arguments.count; i++)
 		{
-			auto argument_flags = TypeSystem_Get_Type_Flags(*proc.program->type_system, argument_types[i]);
-			auto argument_size = TypeSystem_Get_Type_Size(*proc.program->type_system, argument_types[i]);
+			auto argument_flags = TypeSystem_Get_Type_Flags(*ee.type_system, argument_types[i]);
+			auto argument_size = TypeSystem_Get_Type_Size(*ee.type_system, argument_types[i]);
 
 			if (argument_flags & TN_Float_Type) {
 				if (argument_size == 4) {
 					call_argument_data[i] = *(size_t*)&arguments[i].f32;
 					call_argument_types[i] = Dyn_ARG_FLOAT;
 
-					if (proc.variadic) {
+					if (variadic) {
 						double as_double = arguments[i].f32;
 						call_argument_data[i] = *(size_t*)&as_double;
 						call_argument_types[i] = Dyn_ARG_DOUBLE;
@@ -669,14 +775,14 @@ namespace Glass
 		}
 
 		if (!(return_flags & TN_Float_Type)) {
-			return_value.us8 = i(external_proc_pointer, arguments.count, call_argument_data, call_argument_types);
+			return_value.us8 = i(proc_pointer, arguments.count, call_argument_data, call_argument_types);
 		}
 		else {
 			if (return_size == 4) {
-				return_value.f32 = f(external_proc_pointer, arguments.count, call_argument_data, call_argument_types);
+				return_value.f32 = f(proc_pointer, arguments.count, call_argument_data, call_argument_types);
 			}
 			else if (return_size == 8) {
-				return_value.f64 = d(external_proc_pointer, arguments.count, call_argument_data, call_argument_types);
+				return_value.f64 = d(proc_pointer, arguments.count, call_argument_data, call_argument_types);
 			}
 			else {
 				ASSERT(nullptr);

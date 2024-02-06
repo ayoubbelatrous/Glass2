@@ -185,6 +185,7 @@ namespace Glass
 	void Emit_Mov(Array<u8>& bytes, Inst_Op op1, Inst_Op op2, u8 op_size);
 	void Emit_Ret(Array<u8>& bytes);
 	u32 Emit_Call(Array<u8>& bytes, u32 displacement);
+	void Emit_Call(Array<u8>& bytes, Inst_Op op);
 
 	u32 Emit_Jmp(Array<u8>& bytes, u32 displacement);
 

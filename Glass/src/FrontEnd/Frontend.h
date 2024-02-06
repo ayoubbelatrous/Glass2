@@ -115,6 +115,7 @@ namespace Glass
 
 	struct Entity_Variable
 	{
+		bool global;
 		Il_IDX location;
 	};
 
@@ -216,6 +217,19 @@ namespace Glass
 		Type_Name_ID f32_tn;
 		Type_Name_ID f64_tn;
 
+		GS_Type* int_Ty = nullptr;
+		GS_Type* float_Ty = nullptr;
+
+		GS_Type* i8_Ty = nullptr;
+		GS_Type* i16_Ty = nullptr;
+		GS_Type* i32_Ty = nullptr;
+		GS_Type* i64_Ty = nullptr;
+
+		GS_Type* u8_Ty = nullptr;
+		GS_Type* u16_Ty = nullptr;
+		GS_Type* u32_Ty = nullptr;
+		GS_Type* u64_Ty = nullptr;
+
 		GS_Type* Type_Ty = nullptr;
 		GS_Type* void_Ty = nullptr;
 		GS_Type* bool_Ty = nullptr;
@@ -299,7 +313,7 @@ namespace Glass
 		CodeGen_Result Statement_CodeGen(Statement* statement, Entity_ID scope_id, Il_Proc& proc);
 		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type = nullptr, bool by_reference = false);
 
-		Eval_Result Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type);
+		Eval_Result Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type, bool const_eval = true);
 
 		GS_Type* Evaluate_Type(Expression* expression, Entity_ID scope_id);
 

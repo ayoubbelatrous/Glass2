@@ -194,6 +194,36 @@ namespace Glass
 		return u32(bytes.count - 4);
 	}
 
+	void Emit_Call(Array<u8>& bytes, Inst_Op op)
+	{
+		ASSERT(op.type == Op_Reg || op.type == Op_Reg_Disp4, "invalid operand");
+
+		u8 mod = Mod_Reg;
+		u8 reg_op_code = 2;
+		u8 rm = op.reg;
+
+		bool b = 0;
+
+		if (op.reg >= R8) {
+			b = 1;
+			op.reg -= R8;
+		}
+
+		if (op.type == Op_Reg_Disp4) {
+			mod = Mod_Disp4;
+		}
+
+		if (b)
+			Emit_Rex(bytes, 0, 0, 0, b);
+
+		Write_8(bytes, 0xff);
+		Emit_Mod_RM(bytes, mod, reg_op_code, rm);
+
+		if (op.type == Op_Reg_Disp4) {
+			Write_32(bytes, op.reg_disp.disp);
+		}
+	}
+
 	u32 Emit_Jmp(Array<u8>& bytes, u32 displacement)
 	{
 		Write_8(bytes, 0xe9);
@@ -864,7 +894,7 @@ namespace Glass
 		}
 
 		bool disp = 0;
-		i32 displacement = 0xffffffff;
+		u32 displacement = 0xffffffff;
 
 		if (op2.type == Op_Disp4) {
 			mod = Mod_Ind;
@@ -877,7 +907,7 @@ namespace Glass
 			mod = Mod_Disp4;
 			rm = op2.reg_disp.r;
 			disp = 1;
-			displacement = (i32)op2.disp_4;
+			displacement = op2.reg_disp.disp;
 		}
 
 		Write_8(bytes, 0x8d);
@@ -889,7 +919,7 @@ namespace Glass
 		if (disp)
 		{
 			displacement_byte_idx = (u32)bytes.count;
-			Write_32(bytes, (u32)displacement);
+			Write_32(bytes, displacement);
 		}
 
 		return displacement_byte_idx;

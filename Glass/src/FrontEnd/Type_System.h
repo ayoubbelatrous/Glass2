@@ -164,4 +164,6 @@ namespace Glass
 
 	String TypeSystem_Print_Type(Type_System& ts, GS_Type* type);
 	String TypeSystem_Print_Type_Index(Type_System& ts, u64 type_idx);
+
+	GS_Type* TypeSystem_Reduce_Indirection(Type_System& ts, GS_Type* type);
 }

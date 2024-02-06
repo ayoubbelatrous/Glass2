@@ -203,6 +203,9 @@ namespace Glass
 		else if (type->kind == Type_Dyn_Array) {
 			return 8;
 		}
+		else if (type->kind == Type_Array) {
+			return TypeSystem_Get_Type_Alignment(ts, type->array.element_type);
+		}
 		else {
 			ASSERT(nullptr);
 			return 0;
@@ -215,6 +218,9 @@ namespace Glass
 			return ts.type_name_storage[type->basic.type_name_id].size;
 		}
 		else if (type->kind == Type_Pointer) {
+			return 8;
+		}
+		else if (type->kind == Type_Proc) {
 			return 8;
 		}
 		else if (type->kind == Type_Dyn_Array) {
@@ -303,6 +309,25 @@ namespace Glass
 			stream << type->array.size;
 			stream << ']';
 			break;
+		case Type_Proc:
+
+			stream << '(';
+
+			for (size_t i = 0; i < type->proc.params.count; i++)
+			{
+				stream << TypeSystem_Print_Type(ts, type->proc.params[i]).data;
+
+				if (i != type->proc.params.count - 1)
+					stream << ",";
+			}
+
+			stream << ')';
+
+			stream << " : ";
+
+			stream << TypeSystem_Print_Type(ts, type->proc.return_type).data;
+
+			break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -315,4 +340,20 @@ namespace Glass
 	{
 		return TypeSystem_Print_Type(ts, &ts.type_storage[type_idx]);
 	}
+
+	GS_Type* TypeSystem_Reduce_Indirection(Type_System& ts, GS_Type* type)
+	{
+		if (type->kind == Type_Pointer) {
+			if (type->pointer.indirection - 1 != 0) {
+				return TypeSystem_Get_Pointer_Type(ts, type->pointer.pointee, type->pointer.indirection - 1);
+			}
+			else {
+				return type->pointer.pointee;
+			}
+		}
+		else {
+			return type;
+		}
+	}
+
 }

@@ -1,3 +1,5 @@
+; TODO: jit instead of having it here
+
 .code
 dynamic_invoke PROC
 	; rcx pointer, rdx arg_count, r8 args_pointer, r9 args_types_pointer

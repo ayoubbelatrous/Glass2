@@ -32,14 +32,19 @@ namespace Glass
 
 		u16 text_symbol_index = 0;
 		u16 rdata_symbol_index = 2;
+		u16 data_symbol_index = 4;
 
 		u16 text_section_index = 1;
 		u16 rdata_section_index = 2;
+		u16 data_section_index = 3;
 
-		Array<u8> rdata;
 		Array<u8> code;
+		Array<u8> rdata;
+		Array<u8> data;
 		Array<u8> coff_obj;
 		Array<u32> proc_to_symbol;
+		Array<u32> global_to_symbol;
+		Array<u32> global_section_offsets;
 		Array<MC_Symbol> symbols;
 		Array<MC_Relocation> code_relocations;
 		Array<MC_Relocation> code_relocations_sections;

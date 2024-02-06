@@ -30,6 +30,7 @@ namespace Glass
 
 		Il_Ret,
 		Il_Call,
+		Il_Call_Ptr,
 
 		Il_Add,
 		Il_Sub,
@@ -39,6 +40,7 @@ namespace Glass
 		Il_Bit_Or,
 
 		Il_StructElementPtr,
+		Il_ArrayElementPtr,
 
 		Il_ZI,
 
@@ -50,6 +52,9 @@ namespace Glass
 		Il_Cond_Branch,
 		Il_Branch,
 		Il_Cast,
+
+		Il_Global_Address,
+		Il_Proc_Address,
 
 		Il_Max,
 	};
@@ -122,12 +127,24 @@ namespace Glass
 		Type_IDX type_idx = 0;
 	};
 
+	struct Il_Node_AEP
+	{
+		Il_IDX ptr_node_idx;
+		Il_IDX index_node_idx;
+	};
+
+	struct Il_Node_Proc_Address
+	{
+		Il_IDX proc_idx;
+	};
+
 #define SMALL_ARG_COUNT 16 / sizeof(Il_IDX)
 
 	struct Il_Node_Call
 	{
 		Il_IDX proc_idx;
 		u16 argument_count;
+		Type_IDX signature;
 
 		union {
 			Il_IDX arguments[SMALL_ARG_COUNT];
@@ -201,6 +218,11 @@ namespace Glass
 		};
 	};
 
+	struct Il_Node_Global_Address
+	{
+		Il_IDX global_idx;
+	};
+
 	struct Il_Node
 	{
 		Type_IDX type_idx;
@@ -216,6 +238,7 @@ namespace Glass
 			Il_Node_Compare				cmp_op;
 			Il_Node_Ret					ret;
 			Il_Node_Struct_Element_Ptr  element_ptr;
+			Il_Node_AEP					aep;
 			Il_Node_Param				param;
 			Il_Node_Call				call;
 			Il_Node_String				string;
@@ -223,6 +246,8 @@ namespace Glass
 			Il_Node_Branch				br;
 			Il_Node_Cast				cast;
 			Il_Node_Struct_Initializer  si;
+			Il_Node_Global_Address		global_address;
+			Il_Node_Proc_Address		proc_address;
 		};
 	};
 
@@ -230,6 +255,16 @@ namespace Glass
 	{
 		String name;
 		Array<Il_IDX> instructions;
+	};
+
+	struct Il_Global
+	{
+		String name;
+		GS_Type* type = nullptr;
+		Array<Il_Node> initializer_storage;
+		Il_IDX initializer = (Il_IDX)-1;
+		bool read_only = false;
+		bool external = false;
 	};
 
 	struct Il_Program;
@@ -261,8 +296,14 @@ namespace Glass
 	{
 		Array<Il_Proc> procedures;
 		Array<Il_Library> libraries;
+		Array<Il_Global> globals;
 		Type_System* type_system = nullptr;
 	};
+
+	inline Il_IDX Il_Insert_Global(Il_Program& prog, Il_Global global) {
+		Array_Add(prog.globals, global);
+		return (Il_IDX)(prog.globals.count - 1);
+	}
 
 	inline Il_Node Il_Make_Param(Il_IDX type_index, Il_IDX param_index) {
 
@@ -353,6 +394,18 @@ namespace Glass
 		const_node.constant.as.ptr = value;
 
 		return const_node;
+	}
+
+	inline Il_Node Il_Make_AEP(Type_IDX type_index, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
+
+		Il_Node aep_node = { 0 };
+		aep_node.node_type = Il_ArrayElementPtr;
+		aep_node.type_idx = type_index;
+
+		aep_node.aep.ptr_node_idx = ptr_node_idx;
+		aep_node.aep.index_node_idx = index_node_idx;
+
+		return aep_node;
 	}
 
 	inline Il_Node Il_Make_Zero_Init(Type_IDX type_index) {
@@ -553,6 +606,58 @@ namespace Glass
 		return call_node;
 	}
 
+	inline Il_Node Il_Make_Call_Ptr(Type_IDX return_type_index, Array<Il_Argument> arguments, Il_IDX ptr_node_idx, Type_IDX signature) {
+
+		Il_Node call_node = { 0 };
+		call_node.node_type = Il_Call_Ptr;
+		call_node.type_idx = return_type_index;
+
+		if (arguments.count <= SMALL_ARG_COUNT) {
+			for (size_t i = 0; i < arguments.count; i++)
+			{
+				call_node.call.arguments[i] = arguments[i].value_node_idx;
+			}
+		}
+		else {
+
+			call_node.call.arguments_ptr = (Il_IDX*)malloc(arguments.count * sizeof(Il_IDX));
+
+			for (size_t i = 0; i < arguments.count; i++)
+			{
+				call_node.call.arguments_ptr[i] = arguments[i].value_node_idx;
+			}
+		}
+
+		call_node.call.argument_count = (u16)arguments.count;
+		call_node.call.proc_idx = ptr_node_idx;
+		call_node.call.signature = signature;
+
+		return call_node;
+	}
+
+
+	inline Il_Node Il_Make_Global_Address(Il_IDX global_idx, Type_IDX type_idx) {
+
+		Il_Node ga_node = { 0 };
+
+		ga_node.node_type = Il_Global_Address;
+		ga_node.type_idx = type_idx;
+		ga_node.global_address.global_idx = global_idx;
+
+		return ga_node;
+	}
+
+	inline Il_Node Il_Make_Proc_Address(Il_IDX proc_idx, Type_IDX type_idx) {
+
+		Il_Node proc_addr_node = { 0 };
+
+		proc_addr_node.node_type = Il_Proc_Address;
+		proc_addr_node.type_idx = type_idx;
+		proc_addr_node.proc_address.proc_idx = proc_idx;
+
+		return proc_addr_node;
+	}
+
 	inline Il_IDX Il_Insert_Alloca(Il_Proc& proc, GS_Type* type) {
 		Il_Node alloca_node = Il_Make_Alloca((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
 		return Il_Proc_Insert(proc, alloca_node);
@@ -586,6 +691,11 @@ namespace Glass
 	inline Il_IDX Il_Insert_Call(Il_Proc& proc, GS_Type* signature, Array<Il_Argument> arguments, Il_IDX callee_proc) {
 		Il_Node call_node = Il_Make_Call((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature->proc.return_type), arguments, callee_proc);
 		return Il_Proc_Insert(proc, call_node);
+	}
+
+	inline Il_IDX Il_Insert_Call_Ptr(Il_Proc& proc, GS_Type* signature, Array<Il_Argument> arguments, Il_IDX ptr_node_idx) {
+		Il_Node call_ptr_node = Il_Make_Call_Ptr((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature->proc.return_type), arguments, ptr_node_idx, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature));
+		return Il_Proc_Insert(proc, call_ptr_node);
 	}
 
 	inline Il_IDX Il_Insert_Zero_Init(Il_Proc& proc, GS_Type* type) {
@@ -626,8 +736,23 @@ namespace Glass
 	}
 
 	inline Il_IDX Il_Insert_SEP(Il_Proc& proc, GS_Type* struct_type, u64 member_index, Il_IDX struct_pointer_node_idx) {
-		Il_Node sep_node = Il_Make_Struct_Element_Ptr((u16)TypeSystem_Get_Type_Index(*proc.program->type_system, struct_type), member_index, struct_pointer_node_idx);
+		Il_Node sep_node = Il_Make_Struct_Element_Ptr((Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, struct_type), member_index, struct_pointer_node_idx);
 		return Il_Proc_Insert(proc, sep_node);
+	}
+
+	inline Il_IDX Il_Insert_Global_Address(Il_Proc& proc, Il_IDX global_idx) {
+		Il_Node ga_node = Il_Make_Global_Address(global_idx, (Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, proc.program->globals[global_idx].type));
+		return Il_Proc_Insert(proc, ga_node);
+	}
+
+	inline Il_IDX Il_Insert_Proc_Address(Il_Proc& proc, Il_IDX proc_idx) {
+		Il_Node proc_addr_node = Il_Make_Proc_Address(proc_idx, (Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, proc.program->procedures[proc_idx].signature));
+		return Il_Proc_Insert(proc, proc_addr_node);
+	}
+
+	inline Il_IDX Il_Insert_AEP(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
+		Il_Node aep_node = Il_Make_AEP((Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type), ptr_node_idx, index_node_idx);
+		return Il_Proc_Insert(proc, aep_node);
 	}
 
 	inline Il_IDX Il_Insert_Block(Il_Proc& proc, String name = {}) {
@@ -649,7 +774,7 @@ namespace Glass
 
 	std::string Il_Print_Proc(Il_Proc& proc);
 
-#define REG_BUF_SZ 1024
+#define REG_BUF_SZ 4091
 #define STACK_SZ 512
 
 	struct Execution_Engine {
@@ -657,9 +782,13 @@ namespace Glass
 		Il_Program* program = nullptr;
 		Array<void*> library_handles;
 		Array<void*> proc_pointers;
+
+		void* globals_storage = nullptr;
+		Array<void*> globals_address_table;
 	};
 
 	Const_Union EE_Exec_Program(Execution_Engine& ee, Il_Program* prog, Il_IDX entry);
 	Const_Union EE_Exec_Proc(Execution_Engine& ee, Il_Proc& proc, Array<Const_Union> arguments, Array<GS_Type*> argument_types = {});
 	Const_Union EE_Exec_External_Proc(Execution_Engine& ee, Il_Proc& proc, Array<Const_Union> arguments, Array<GS_Type*> argument_types = {});
+	Const_Union EE_Dynamic_Invoke_Proc(Execution_Engine& ee, void* proc_pointer, GS_Type* signature, bool variadic, Array<Const_Union> arguments, Array<GS_Type*> argument_types = {});
 }
