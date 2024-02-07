@@ -8,7 +8,7 @@ namespace Glass
 {
 
 #define X64_REG_COUNT 10
-#define REG_BUFS_SZ 20000
+#define REG_BUFS_SZ 65553
 
 	const u8 x64_registers[X64_REG_COUNT] = { RAX, RBX, RCX, RDX, R8 ,R9, RSI, RDI, RSP, RBP };
 
@@ -16,6 +16,7 @@ namespace Glass
 	{
 		u8 allocated_register = 0xff;
 		u8 temp_register = 0xff;
+		u8 temp_register2 = 0xff;
 		bool spilled = false;
 	};
 
@@ -80,6 +81,7 @@ namespace Glass
 				case Il_Call:
 					for (size_t i = 0; i < node.call.argument_count; i++)
 						lifetimes[node.call.arguments[i]]++;
+					break;
 				case Il_Call_Ptr:
 				{
 					lifetimes[node.call.proc_idx]++;
@@ -114,12 +116,15 @@ namespace Glass
 
 	u8 call_conv_parameter_registers[4] = { RCX,RDX,R8,R9 };
 
+	u8 vreg_lifetimes_buffer[REG_BUFS_SZ];
+
 	inline void MC_Reg_Alloc_Proc(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx, Array<Reg_Allocation>& allocations)
 	{
 		u8 allocated[X64_REG_COUNT] = { };
 		Il_IDX reg_to_v_reg[X64_REG_COUNT] = { };
 
-		u8 vreg_lifetimes[REG_BUFS_SZ] = { 0 };
+		u8* vreg_lifetimes = vreg_lifetimes_buffer;
+		memset(vreg_lifetimes, 0, REG_BUFS_SZ);
 
 		Array<u8> vreg_lifetimes_view;
 		vreg_lifetimes_view.data = vreg_lifetimes;
@@ -217,6 +222,8 @@ namespace Glass
 
 				GS_Type* node_type = &g.prog->type_system->type_storage[node.type_idx];
 
+				auto node_type_size = TypeSystem_Get_Type_Size(*g.prog->type_system, node_type);
+
 				if (node.node_type == Il_Cast)
 				{
 					use_register(node.cast.castee_node_idx);
@@ -234,7 +241,7 @@ namespace Glass
 				if (node.node_type == Il_StructElementPtr)
 				{
 					use_register(node.element_ptr.ptr_node_idx);
-					allocations[idx].allocated_register = temp_allocate_register(idx);
+					allocations[idx].allocated_register = allocate_register(idx);
 				}
 
 				if (node.node_type == Il_Alloca)
@@ -263,9 +270,23 @@ namespace Glass
 
 				if (node.node_type == Il_Store)
 				{
-					u8 allocated_register = temp_allocate_register(idx);
+					u8 allocated_register = allocate_register(idx);
 
 					allocations[idx].allocated_register = allocated_register;
+
+					if (node_type_size > 8)
+					{
+						u8 allocated_temp_register = allocate_register(idx);
+
+						allocations[idx].temp_register = allocated_temp_register;
+						allocations[idx].temp_register2 = temp_allocate_register(idx);
+
+						allocated[allocated_temp_register] = 0;
+						reg_to_v_reg[allocated_temp_register] = -1;
+					}
+
+					allocated[allocated_register] = 0;
+					reg_to_v_reg[allocated_register] = -1;
 
 					use_register(node.store.ptr_node_idx);
 					use_register(node.store.value_node_idx);
@@ -430,6 +451,10 @@ namespace Glass
 		return aligned_val;
 	}
 
+	Inst_Op register_values_buffer[REG_BUFS_SZ] = {};
+	u8 register_flags_buffer[REG_BUFS_SZ] = {};
+	Reg_Allocation register_allocations_buffer[REG_BUFS_SZ] = {};
+
 	inline void MC_Gen_Proc_Codegen(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx)
 	{
 		MC_Symbol& sym = g.symbols[g.proc_to_symbol[proc_idx]];
@@ -437,14 +462,21 @@ namespace Glass
 
 		enum Value_Flag
 		{
-			VF_Address = BIT(1),
-			VF_Stack = BIT(2),
+			VF_Address = BIT(0),
+			VF_Stack = BIT(1),
 		};
 
-		Inst_Op register_values[REG_BUFS_SZ] = {};
-		u8 register_flags[REG_BUFS_SZ] = {};
+		Inst_Op* register_values = register_values_buffer;
+		Reg_Allocation* register_allocations = register_allocations_buffer;
+		u8* register_flags = register_flags_buffer;
 
-		Reg_Allocation register_allocations[REG_BUFS_SZ] = {};
+		for (size_t i = 0; i < REG_BUF_SZ; i++)
+		{
+			register_values[i] = {};
+			register_allocations[i] = {};
+		}
+
+		memset(register_flags, 0, REG_BUFS_SZ);
 
 		Array<Reg_Allocation> reg_allocations_array_view;
 		reg_allocations_array_view.data = register_allocations;
@@ -911,6 +943,36 @@ namespace Glass
 
 							Inst_Op pointer_op = register_values[node.store.ptr_node_idx];
 
+							if (!(register_flags[node.store.ptr_node_idx] & VF_Address)) {
+
+								Inst_Op temporary_address_reg;
+								temporary_address_reg.type = Op_Reg;
+								temporary_address_reg.reg = allocation.temp_register;
+
+								Emit_Mov(g.code, temporary_address_reg, pointer_op, 64);
+
+								temporary_address_reg.type = Op_Reg_Disp4;
+								temporary_address_reg.reg_disp.r = allocation.temp_register;
+								temporary_address_reg.reg_disp.disp = 0;
+
+								pointer_op = temporary_address_reg;
+							}
+
+							if (!(register_flags[node.store.value_node_idx] & VF_Address) && value_op.type != Op_Reg) {
+
+								Inst_Op temporary_value_reg;
+								temporary_value_reg.type = Op_Reg;
+								temporary_value_reg.reg = allocation.temp_register2;
+
+								Emit_Mov(g.code, temporary_value_reg, value_op, 64);
+
+								temporary_value_reg.type = Op_Reg_Disp4;
+								temporary_value_reg.reg_disp.r = allocation.temp_register2;
+								temporary_value_reg.reg_disp.disp = 0;
+
+								value_op = temporary_value_reg;
+							}
+
 							while (remainder > 0) {
 
 								u8 moved_size = 0;
@@ -1096,6 +1158,7 @@ namespace Glass
 						register_values[i] = spillage_value;
 					}
 					else {
+
 						Inst_Op pointer_op = register_values[node.load.ptr_node_idx];
 
 						if (pointer_op.type == Op_Reg) {
@@ -1109,6 +1172,10 @@ namespace Glass
 						}
 
 						register_values[i] = pointer_op;
+
+						if (node_type_size > 8) {
+							register_flags[i] = register_flags[node.load.ptr_node_idx];
+						}
 					}
 				}
 				break;
@@ -1275,16 +1342,88 @@ namespace Glass
 				break;
 				case Il_StructElementPtr:
 				{
+					Reg_Allocation allocation = register_allocations[i];
+
 					Inst_Op pointer_op = register_values[node.element_ptr.ptr_node_idx];
 
 					auto type_system = g.prog->type_system;
-
 					GS_Struct& strct = type_system->struct_storage[type_system->type_name_storage[node_type->basic.type_name_id].struct_id];
 
-					pointer_op.reg_disp.disp += strct.offsets[node.element_ptr.element_idx];
+					Inst_Op result;
 
-					register_values[i] = pointer_op;
-					register_flags[i] = VF_Address;
+					if (register_flags[node.element_ptr.ptr_node_idx] & VF_Address) {
+
+						pointer_op.reg_disp.disp += strct.offsets[node.element_ptr.element_idx];
+
+						if (pointer_op.reg_disp.r != RBP) {
+
+							result.type = Op_Reg;
+							result.reg = allocation.allocated_register;
+
+							if (pointer_op.reg_disp.r != allocation.allocated_register) {
+								Emit_Lea(g.code, result, pointer_op, 64);
+								result.type = Op_Reg;
+								result.reg_disp.r = allocation.allocated_register;
+								result.reg_disp.disp = 0;
+							}
+							else {
+								result = pointer_op;
+							}
+
+							if (allocation.spilled) {
+
+								Inst_Op spillage_value;
+								spillage_value.type = Op_Reg_Disp4;
+								spillage_value.reg_disp.r = RBP;
+
+								stack_pointer += 8;
+								spillage_value.reg_disp.disp = -(i32)stack_pointer;
+
+								Emit_Mov(g.code, spillage_value, result, 8 * 8);
+
+								register_values[i] = spillage_value;
+							}
+							else {
+								register_flags[i] = VF_Address;
+								register_values[i] = result;
+							}
+						}
+						else {
+							register_flags[i] = VF_Address;
+							register_values[i] = pointer_op;
+						}
+
+					}
+					else {
+
+						result.type = Op_Reg;
+						result.reg_disp.r = allocation.allocated_register;
+						result.reg_disp.disp = 0;
+
+						Emit_Mov(g.code, result, pointer_op, 64);
+
+						result.type = Op_Reg_Disp4;
+						result.reg_disp.disp += strct.offsets[node.element_ptr.element_idx];
+						register_values[i] = result;
+
+						if (allocation.spilled) {
+
+							Inst_Op spillage_value;
+							spillage_value.type = Op_Reg_Disp4;
+							spillage_value.reg_disp.r = RBP;
+
+							stack_pointer += 8;
+							spillage_value.reg_disp.disp = -(i32)stack_pointer;
+
+							result.type = Op_Reg;
+							Emit_Mov(g.code, spillage_value, result, 8 * 8);
+
+							register_values[i] = spillage_value;
+						}
+						else {
+							register_flags[i] = VF_Address;
+						}
+					}
 				}
 				break;
 				case Il_ArrayElementPtr:

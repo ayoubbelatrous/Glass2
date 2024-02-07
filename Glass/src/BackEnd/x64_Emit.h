@@ -22,6 +22,15 @@ namespace Glass
 	const u8 R14 = 0b1110;	// 14
 	const u8 R15 = 0b1111;	// 15
 
+	const u8 XMM0 = 16 + 0;
+	const u8 XMM1 = 16 + 1;
+	const u8 XMM2 = 16 + 2;
+	const u8 XMM3 = 16 + 3;
+	const u8 XMM4 = 16 + 4;
+	const u8 XMM5 = 16 + 5;
+	const u8 XMM6 = 16 + 6;
+	const u8 XMM7 = 16 + 7;
+
 	const u8 mod_rm_b = 0b00011000;
 
 	const u8 Mod_Ind = 0b00000000;
@@ -215,4 +224,18 @@ namespace Glass
 	u32 Emit_Lea(Array<u8>& bytes, Inst_Op op1, Inst_Op op2, u8 op_size);
 
 	void Write_SetX(Array<u8>& bytes, u8 second_op_code, Inst_Op op1);
+
+	struct Instruction_SSE
+	{
+		u8 op_code;
+		bool has_direction;
+		bool is_double;
+	};
+
+	void Emit_SSE(Array<u8>& bytes, Instruction_SSE instruction, Inst_Op op1, Inst_Op op2);
+
+	void Emit_MovSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_MovSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_MulSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_MulSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 }

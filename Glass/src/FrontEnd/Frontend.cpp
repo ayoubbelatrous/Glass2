@@ -160,11 +160,14 @@ namespace Glass
 		Data.f32_tn = insert_base_type_name(String_Make("f32"), 4, 4, true, true);
 		Data.f64_tn = insert_base_type_name(String_Make("f64"), 8, 8, true, true);
 
+		auto begin = std::chrono::high_resolution_clock::now();
+
 		if (Load_Base()) {
 			return;
 		}
 
 		Load_First();
+
 
 		if (Do_Tl_Definition_Passes()) {
 			return;
@@ -180,8 +183,24 @@ namespace Glass
 		if (Do_CodeGen())
 			return;
 
-		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
-		GS_CORE_INFO("main returned: {}", result.us8);
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+		double front_end_time_f = microseconds;
+		front_end_time_f /= 1000000.0;
+
+		double parse_time_f = Data.parse_time_micro_seconds;
+		parse_time_f /= 1000000.0;
+
+		double lex_time_f = Data.lex_time_micro_seconds;
+		lex_time_f /= 1000000.0;
+
+		GS_CORE_INFO("frontend took: {} s", front_end_time_f - (parse_time_f + lex_time_f));
+		GS_CORE_INFO("lexing took: {} s", parse_time_f);
+		GS_CORE_INFO("parsing took: {} s", lex_time_f);
+
+		// 		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
+		// 		GS_CORE_INFO("main returned: {}", result.us8);
 
 		MC_Gen_Spec mc_gen_spec;
 		mc_gen_spec.output_path = String_Make(".bin/mc.obj");
@@ -1131,14 +1150,39 @@ namespace Glass
 					ASSERT(signature);
 					entity.func.signature = signature;
 
-
 					if (entity.func.foreign) {
 						Entity& library_entity = Data.entity_storage[entity.func.library_entity_id];
 						Il_IDX inserted_external_proc_idx = Il_Insert_External_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature, library_entity.library.library_node_idx, entity.func.c_variadic);
 						entity.func.proc_idx = inserted_external_proc_idx;
 					}
 					else {
-						Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(entity.semantic_name), entity.func.signature);
+
+						Array<GS_Type*> proc_param_types;
+
+						auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, return_type);
+						GS_Type* proc_return_type = return_type;
+
+						if (return_type_size > 8) {
+							Array_Add(proc_param_types, TypeSystem_Get_Pointer_Type(Data.type_system, return_type, 1));
+							proc_return_type = Data.void_Ty;
+						}
+
+						for (size_t i = 0; i < param_types.count; i++)
+						{
+							GS_Type* param_type = param_types[i];
+
+							auto param_type_size = TypeSystem_Get_Type_Size(Data.type_system, param_type);
+
+							if (param_type_size > 8) {
+								param_type = TypeSystem_Get_Pointer_Type(Data.type_system, param_type, 1);
+							}
+
+							Array_Add(proc_param_types, param_type);
+						}
+
+						GS_Type* proc_signature = TypeSystem_Get_Proc_Type(Data.type_system, proc_return_type, proc_param_types);
+
+						Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(entity.semantic_name), proc_signature);
 						entity.func.proc_idx = inserted_proc_idx;
 					}
 
@@ -1200,6 +1244,18 @@ namespace Glass
 			main_proc_idx = function_entity.func.proc_idx;
 		}
 
+		u64 parameters_offset = 0;
+		auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, function_entity.func.signature->proc.return_type);
+
+		if (return_type_size > 8) {
+			parameters_offset = 1;
+
+			GS_Type* return_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, function_entity.func.signature->proc.return_type, 1);
+			Il_IDX return_ptr_allocation = Il_Insert_Alloca(proc, return_type_pointer);
+			Il_Insert_Store(proc, return_type_pointer, return_ptr_allocation, proc.parameters[0]);
+			function_entity.func.return_data_ptr_node_idx = return_ptr_allocation;
+		}
+
 		for (size_t i = 0; i < function_entity.func.parameters.count; i++)
 		{
 			Function_Parameter parameter = function_entity.func.parameters[i];
@@ -1208,8 +1264,22 @@ namespace Glass
 			Entity parameter_variable = Create_Variable_Entity(parameter.name, Loc_From_Token(parameter_node->Symbol), current_file);
 			parameter_variable.semantic_type = parameter.param_type;
 
-			parameter_variable.var.location = Il_Insert_Alloca(proc, parameter.param_type);
-			Il_Insert_Store(proc, parameter.param_type, parameter_variable.var.location, proc.parameters[i]);
+			auto param_type_size = TypeSystem_Get_Type_Size(Data.type_system, parameter.param_type);
+
+			if (param_type_size > 8)
+			{
+				GS_Type* param_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, parameter.param_type, 1);
+				parameter_variable.var.location = Il_Insert_Alloca(proc, param_type_pointer);
+				Il_Insert_Store(proc, param_type_pointer, parameter_variable.var.location, proc.parameters[i + parameters_offset]);
+				parameter_variable.var.immutable = true;
+				parameter_variable.var.parameter = true;
+				parameter_variable.var.code_type = param_type_pointer;
+			}
+			else {
+				parameter_variable.var.location = Il_Insert_Alloca(proc, parameter.param_type);
+				Il_Insert_Store(proc, parameter.param_type, parameter_variable.var.location, proc.parameters[i + parameters_offset]);
+				parameter_variable.var.code_type = parameter.param_type;
+			}
 
 			Insert_Entity(parameter_variable, func_entity_id);
 		}
@@ -1223,9 +1293,8 @@ namespace Glass
 			}
 		}
 
-		std::string printed_proc = Il_Print_Proc(proc);
-
-		GS_CORE_TRACE("generated: {}", printed_proc);
+		//std::string printed_proc = Il_Print_Proc(proc);
+		//GS_CORE_TRACE("generated: {}", printed_proc);
 
 		CodeGen_Result result;
 		result.ok = true;
@@ -1250,8 +1319,12 @@ namespace Glass
 		{
 			ReturnNode* as_return = (ReturnNode*)statement;
 
-			GS_Type* func_return_type = Data.entity_storage[Front_End_Data::Get_Func_Parent(Data, scope_id)].func.signature->proc.return_type;
+			Entity& func_entity = Data.entity_storage[Front_End_Data::Get_Func_Parent(Data, scope_id)];
+
+			GS_Type* func_return_type = func_entity.func.signature->proc.return_type;
 			ASSERT(func_return_type);
+
+			auto func_return_type_size = TypeSystem_Get_Type_Size(Data.type_system, func_return_type);
 
 			GS_Type* inferred_type = nullptr;
 
@@ -1286,7 +1359,16 @@ namespace Glass
 				value_node_idx = value_result.code_node_id;
 			}
 
-			Il_Insert_Ret(proc, func_return_type, value_node_idx);
+			if (func_return_type_size > 8)
+			{
+				GS_Type* func_return_type_ptr = TypeSystem_Get_Pointer_Type(Data.type_system, func_return_type, 1);
+				Il_IDX return_data_ptr_node_idx = Il_Insert_Load(proc, func_return_type_ptr, func_entity.func.return_data_ptr_node_idx);
+				Il_Insert_Store(proc, func_return_type, return_data_ptr_node_idx, value_node_idx);
+				Il_Insert_Ret(proc, func_return_type_ptr, return_data_ptr_node_idx);
+			}
+			else {
+				Il_Insert_Ret(proc, func_return_type, value_node_idx);
+			}
 
 			CodeGen_Result result = {};
 			result.ok = true;
@@ -1550,6 +1632,12 @@ namespace Glass
 			else if (identified_entity.entity_type == Entity_Type::Variable) {
 
 				Il_IDX code_location = identified_entity.var.location;
+
+				result.immutable = identified_entity.var.immutable;
+
+				if (identified_entity.var.parameter) {
+					code_location = Il_Insert_Load(proc, identified_entity.var.code_type, code_location);
+				}
 
 				if (identified_entity.var.global) {
 					code_location = Il_Insert_Global_Address(proc, identified_entity.var.location);
@@ -1889,6 +1977,11 @@ namespace Glass
 
 			if (assignment) {
 				code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
+
+				if (left_result.immutable) {
+					Push_Error_Loc(scope_id, as_bin_expr->Left, "value is immutable");
+					return {};
+				}
 			}
 
 			CodeGen_Result result;
@@ -1965,19 +2058,31 @@ namespace Glass
 				callee_code_node_idx = callee_result.code_node_id;
 			}
 
+			Il_IDX code_node_id;
+
 			Array<Il_Argument> arguments_code;
+
+			auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, callee_signature->proc.return_type);
+
+			if (return_type_size > 8) {
+				code_node_id = Il_Insert_Alloca(proc, callee_signature->proc.return_type);
+				Array_Add(arguments_code, Il_Argument{ code_node_id, (Type_IDX)TypeSystem_Get_Type_Index(Data.type_system, callee_signature->proc.return_type) });
+			}
 
 			for (size_t i = 0; i < as_call->Arguments.size(); i++)
 			{
 				Expression* arg_node = as_call->Arguments[i];
 
-				GS_Type* inferred_type = nullptr;
+				GS_Type* parameter_type = nullptr;
+
+				bool by_reference = false;
 
 				if (i < callee_signature->proc.params.count) {
-					inferred_type = callee_signature->proc.params[i];
+					parameter_type = callee_signature->proc.params[i];
+					by_reference = TypeSystem_Get_Type_Size(Data.type_system, parameter_type) > 8;
 				}
 
-				CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, inferred_type);
+				CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, parameter_type, by_reference);
 
 				if (!arg_result) {
 					return {};
@@ -1993,13 +2098,17 @@ namespace Glass
 				Array_Add(arguments_code, Il_Argument{ arg_result.code_node_id, (Type_IDX)TypeSystem_Get_Type_Index(Data.type_system,arg_result.expression_type) });
 			}
 
-			Il_IDX code_node_id;
-
-			if (func_callee_entity) {
-				code_node_id = Il_Insert_Call(proc, callee_signature, arguments_code, func_callee_entity->func.proc_idx);
+			if (return_type_size <= 8) {
+				if (func_callee_entity) {
+					code_node_id = Il_Insert_Call(proc, callee_signature, arguments_code, func_callee_entity->func.proc_idx);
+				}
+				else {
+					code_node_id = Il_Insert_Call_Ptr(proc, callee_signature, arguments_code, callee_code_node_idx);
+				}
 			}
 			else {
-				code_node_id = Il_Insert_Call_Ptr(proc, callee_signature, arguments_code, callee_code_node_idx);
+				Il_Insert_Call(proc, callee_signature, arguments_code, func_callee_entity->func.proc_idx);
+				code_node_id = Il_Insert_Load(proc, callee_signature->proc.return_type, code_node_id);
 			}
 
 			CodeGen_Result result;
@@ -2051,7 +2160,7 @@ namespace Glass
 			}
 
 			CodeGen_Result object_result = Expression_CodeGen(as_member_access->Object, scope_id, proc, inferred_type, true);
-			if (!as_member_access->Object)
+			if (!object_result)
 				return {};
 
 			auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
@@ -2108,6 +2217,7 @@ namespace Glass
 
 			result.ok = true;
 			result.expression_type = member_type;
+			result.immutable = object_result.immutable;
 			return result;
 		}
 		break;
@@ -2998,11 +3108,17 @@ namespace Glass
 			source = buffer.str();
 		}
 
+		auto lex_start = std::chrono::high_resolution_clock::now();
 		Lexer lexer = Lexer(source, file.Path);
 		file.Tokens = lexer.Lex();
+		auto lex_end = std::chrono::high_resolution_clock::now();
+		Data.lex_time_micro_seconds += std::chrono::duration_cast<std::chrono::microseconds>(lex_end - lex_start).count();
 
+		auto parse_start = std::chrono::high_resolution_clock::now();
 		Parser parser = Parser(file.Path, file.Tokens);
 		file.Syntax = parser.CreateAST();
+		auto parse_end = std::chrono::high_resolution_clock::now();
+		Data.parse_time_micro_seconds += std::chrono::duration_cast<std::chrono::microseconds>(parse_end - parse_start).count();
 
 		File_ID file_identifier = Data.Files.count;
 

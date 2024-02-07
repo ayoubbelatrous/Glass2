@@ -111,12 +111,17 @@ namespace Glass
 		bool foreign;
 		bool c_variadic;
 		Entity_ID library_entity_id;
+
+		Il_IDX return_data_ptr_node_idx;
 	};
 
 	struct Entity_Variable
 	{
 		bool global;
+		bool immutable;
+		bool parameter;
 		Il_IDX location;
+		GS_Type* code_type;
 	};
 
 	struct Entity_Library
@@ -241,6 +246,9 @@ namespace Glass
 
 		Execution_Engine exec_engine;
 
+		u64 parse_time_micro_seconds = 0;
+		u64 lex_time_micro_seconds = 0;
+
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_Func_Parent(Front_End_Data& data, Entity_ID entity_id);
@@ -254,6 +262,7 @@ namespace Glass
 		Entity_ID entity_reference = Entity_Null;
 		bool lvalue = false;
 		bool constant = false;
+		bool immutable = false;
 		bool ok = false;
 
 		operator bool() {

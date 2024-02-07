@@ -319,15 +319,21 @@ namespace Glass
 		prog.type_system = type_system;
 	}
 
-	inline Il_IDX Il_Proc_Insert(Il_Proc& proc, Il_Node node) {
+	inline Il_IDX Il_Proc_Insert(Il_Proc& proc, Il_Node node, Il_IDX block_idx = -1) {
 
 		ASSERT(node.node_type != Il_Node_Type::Il_None, node.node_type < Il_Node_Type::Il_Max);
 
 		Il_IDX node_idx = (Il_IDX)proc.instruction_storage.count;
 		ASSERT(proc.insertion_point != -1);
 
+		Il_IDX insertion_point = proc.insertion_point;
+
+		if (block_idx != -1) {
+			insertion_point = block_idx;
+		}
+
 		Array_Add(proc.instruction_storage, node);
-		Array_Add(proc.blocks[proc.insertion_point].instructions, node_idx);
+		Array_Add(proc.blocks[insertion_point].instructions, node_idx);
 
 		return node_idx;
 	}
@@ -660,7 +666,7 @@ namespace Glass
 
 	inline Il_IDX Il_Insert_Alloca(Il_Proc& proc, GS_Type* type) {
 		Il_Node alloca_node = Il_Make_Alloca((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
-		return Il_Proc_Insert(proc, alloca_node);
+		return Il_Proc_Insert(proc, alloca_node, 0);
 	}
 
 	inline Il_IDX Il_Insert_Store(Il_Proc& proc, GS_Type* type, Il_IDX ptr, Il_IDX value) {

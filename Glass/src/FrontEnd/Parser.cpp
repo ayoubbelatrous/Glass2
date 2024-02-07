@@ -1253,6 +1253,7 @@ namespace Glass
 
 			Token bracket = Consume();
 
+			Top_Level_Expression = false;
 			Expression* index = ParseExpression();
 
 			Token close_bracket = Consume();
@@ -1322,8 +1323,8 @@ namespace Glass
 			callee = func_call;
 		}
 
-		if (At().Type == TokenType::OpenBracket) {
-			return ParseArrayAccessExpr(callee);
+		if (At().Type == TokenType::OpenBracket || At().Type == TokenType::Period) {
+			return ParseMemberExpr(callee);
 		}
 
 		return callee;
