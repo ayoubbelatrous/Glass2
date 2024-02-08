@@ -569,11 +569,7 @@ namespace Glass
 	u8 register_flags_buffer[REG_BUFS_SZ] = {};
 	Reg_Allocation register_allocations_buffer[REG_BUFS_SZ] = {};
 
-	void MC_Gen_Proc_Codegen(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx) {
-
-	}
-
-	inline void MC_Gen_Proc_Codegen2(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx)
+	inline void MC_Gen_Proc_Codegen(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx)
 	{
 		MC_Symbol& sym = g.symbols[g.proc_to_symbol[proc_idx]];
 		sym.value = (u32)g.code.count;

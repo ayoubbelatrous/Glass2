@@ -3,6 +3,7 @@
 #include "FrontEnd/Frontend.h"
 #include "FrontEnd/Lexer.h"
 #include "BackEnd/MC_Gen.h"
+#include "BackEnd/LLVM_Converter.h"
 #include "microsoft_craziness.h"
 
 #define FMT(...) fmt::format(__VA_ARGS__)
@@ -202,13 +203,26 @@ namespace Glass
 		// 		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
 		// 		GS_CORE_INFO("main returned: {}", result.us8);
 
-		MC_Gen_Spec mc_gen_spec;
-		mc_gen_spec.output_path = String_Make(".bin/mc.obj");
+		bool llvm = true;
 
-		MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
-		MC_Gen_Run(mc_generator);
+		if (llvm)
+		{
+			LLVM_Converter_Spec lc_spec;
+			lc_spec.output_path = String_Make(".bin/mc.obj");
 
-		bool disassemble = true;
+			LLVM_Converter llvm_converter = LLVM_Converter_Make(lc_spec, &Data.il_program);
+			LLVMC_Run(llvm_converter);
+		}
+		else
+		{
+			MC_Gen_Spec mc_gen_spec;
+			mc_gen_spec.output_path = String_Make(".bin/llvm.obj");
+
+			MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
+			MC_Gen_Run(mc_generator);
+		}
+
+		bool disassemble = false;
 
 		if (disassemble)
 		{
@@ -222,7 +236,7 @@ namespace Glass
 		fs_path msvc_linker_path = find_result.vs_exe_path;
 		msvc_linker_path.append("link.exe");
 
-		std::string linked_objects = "./.bin/mc.obj";
+		std::string linked_objects = "./.bin/llvm.obj";
 		std::string linker_options = "/nologo /ignore:4210 /NODEFAULTLIB /IMPLIB:C /DEBUG:FULL /SUBSYSTEM:CONSOLE /INCREMENTAL:NO";
 
 		std::string program_libraries;
