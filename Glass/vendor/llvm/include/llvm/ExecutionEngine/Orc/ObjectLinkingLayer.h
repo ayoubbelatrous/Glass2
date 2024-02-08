@@ -38,10 +38,6 @@ class LinkGraph;
 class Symbol;
 } // namespace jitlink
 
-namespace object {
-class ObjectFile;
-} // namespace object
-
 namespace orc {
 
 class ObjectLinkingLayerJITLinkContext;
@@ -84,8 +80,8 @@ public:
       return Error::success();
     }
     virtual Error notifyFailed(MaterializationResponsibility &MR) = 0;
-    virtual Error notifyRemovingResources(ResourceKey K) = 0;
-    virtual void notifyTransferringResources(ResourceKey DstKey,
+    virtual Error notifyRemovingResources(JITDylib &JD, ResourceKey K) = 0;
+    virtual void notifyTransferringResources(JITDylib &JD, ResourceKey DstKey,
                                              ResourceKey SrcKey) = 0;
 
     /// Return any dependencies that synthetic symbols (e.g. init symbols)
@@ -101,7 +97,11 @@ public:
   using ReturnObjectBufferFunction =
       std::function<void(std::unique_ptr<MemoryBuffer>)>;
 
-  /// Construct an ObjectLinkingLayer.
+  /// Construct an ObjectLinkingLayer using the ExecutorProcessControl
+  /// instance's memory manager.
+  ObjectLinkingLayer(ExecutionSession &ES);
+
+  /// Construct an ObjectLinkingLayer using a custom memory manager.
   ObjectLinkingLayer(ExecutionSession &ES,
                      jitlink::JITLinkMemoryManager &MemMgr);
 
@@ -180,16 +180,17 @@ public:
   }
 
 private:
-  using AllocPtr = std::unique_ptr<jitlink::JITLinkMemoryManager::Allocation>;
+  using FinalizedAlloc = jitlink::JITLinkMemoryManager::FinalizedAlloc;
 
   void modifyPassConfig(MaterializationResponsibility &MR,
                         jitlink::LinkGraph &G,
                         jitlink::PassConfiguration &PassConfig);
   void notifyLoaded(MaterializationResponsibility &MR);
-  Error notifyEmitted(MaterializationResponsibility &MR, AllocPtr Alloc);
+  Error notifyEmitted(MaterializationResponsibility &MR, FinalizedAlloc FA);
 
-  Error handleRemoveResources(ResourceKey K) override;
-  void handleTransferResources(ResourceKey DstKey, ResourceKey SrcKey) override;
+  Error handleRemoveResources(JITDylib &JD, ResourceKey K) override;
+  void handleTransferResources(JITDylib &JD, ResourceKey DstKey,
+                               ResourceKey SrcKey) override;
 
   mutable std::mutex LayerMutex;
   jitlink::JITLinkMemoryManager &MemMgr;
@@ -197,7 +198,7 @@ private:
   bool OverrideObjectFlags = false;
   bool AutoClaimObjectSymbols = false;
   ReturnObjectBufferFunction ReturnObjectBuffer;
-  DenseMap<ResourceKey, std::vector<AllocPtr>> Allocs;
+  DenseMap<ResourceKey, std::vector<FinalizedAlloc>> Allocs;
   std::vector<std::unique_ptr<Plugin>> Plugins;
 };
 
@@ -211,22 +212,16 @@ public:
                         jitlink::PassConfiguration &PassConfig) override;
   Error notifyEmitted(MaterializationResponsibility &MR) override;
   Error notifyFailed(MaterializationResponsibility &MR) override;
-  Error notifyRemovingResources(ResourceKey K) override;
-  void notifyTransferringResources(ResourceKey DstKey,
+  Error notifyRemovingResources(JITDylib &JD, ResourceKey K) override;
+  void notifyTransferringResources(JITDylib &JD, ResourceKey DstKey,
                                    ResourceKey SrcKey) override;
 
 private:
-
-  struct EHFrameRange {
-    JITTargetAddress Addr = 0;
-    size_t Size;
-  };
-
   std::mutex EHFramePluginMutex;
   ExecutionSession &ES;
   std::unique_ptr<jitlink::EHFrameRegistrar> Registrar;
-  DenseMap<MaterializationResponsibility *, EHFrameRange> InProcessLinks;
-  DenseMap<ResourceKey, std::vector<EHFrameRange>> EHFrameRanges;
+  DenseMap<MaterializationResponsibility *, ExecutorAddrRange> InProcessLinks;
+  DenseMap<ResourceKey, std::vector<ExecutorAddrRange>> EHFrameRanges;
 };
 
 } // end namespace orc

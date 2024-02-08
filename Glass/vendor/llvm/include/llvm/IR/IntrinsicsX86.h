@@ -13,7 +13,7 @@ namespace llvm {
 namespace Intrinsic {
 enum X86Intrinsics : unsigned {
 // Enum values for intrinsics
-    x86_3dnow_pavgusb = 9064,                         // llvm.x86.3dnow.pavgusb
+    x86_3dnow_pavgusb = 9907,                         // llvm.x86.3dnow.pavgusb
     x86_3dnow_pf2id,                           // llvm.x86.3dnow.pf2id
     x86_3dnow_pfacc,                           // llvm.x86.3dnow.pfacc
     x86_3dnow_pfadd,                           // llvm.x86.3dnow.pfadd
@@ -37,6 +37,10 @@ enum X86Intrinsics : unsigned {
     x86_3dnowa_pfpnacc,                        // llvm.x86.3dnowa.pfpnacc
     x86_3dnowa_pi2fw,                          // llvm.x86.3dnowa.pi2fw
     x86_3dnowa_pswapd,                         // llvm.x86.3dnowa.pswapd
+    x86_aadd32,                                // llvm.x86.aadd32
+    x86_aadd64,                                // llvm.x86.aadd64
+    x86_aand32,                                // llvm.x86.aand32
+    x86_aand64,                                // llvm.x86.aand64
     x86_addcarry_32,                           // llvm.x86.addcarry.32
     x86_addcarry_64,                           // llvm.x86.addcarry.64
     x86_aesdec128kl,                           // llvm.x86.aesdec128kl
@@ -61,6 +65,19 @@ enum X86Intrinsics : unsigned {
     x86_aesni_aesenclast_512,                  // llvm.x86.aesni.aesenclast.512
     x86_aesni_aesimc,                          // llvm.x86.aesni.aesimc
     x86_aesni_aeskeygenassist,                 // llvm.x86.aesni.aeskeygenassist
+    x86_aor32,                                 // llvm.x86.aor32
+    x86_aor64,                                 // llvm.x86.aor64
+    x86_atomic_add_cc,                         // llvm.x86.atomic.add.cc
+    x86_atomic_and_cc,                         // llvm.x86.atomic.and.cc
+    x86_atomic_btc,                            // llvm.x86.atomic.btc
+    x86_atomic_btc_rm,                         // llvm.x86.atomic.btc.rm
+    x86_atomic_btr,                            // llvm.x86.atomic.btr
+    x86_atomic_btr_rm,                         // llvm.x86.atomic.btr.rm
+    x86_atomic_bts,                            // llvm.x86.atomic.bts
+    x86_atomic_bts_rm,                         // llvm.x86.atomic.bts.rm
+    x86_atomic_or_cc,                          // llvm.x86.atomic.or.cc
+    x86_atomic_sub_cc,                         // llvm.x86.atomic.sub.cc
+    x86_atomic_xor_cc,                         // llvm.x86.atomic.xor.cc
     x86_avx_addsub_pd_256,                     // llvm.x86.avx.addsub.pd.256
     x86_avx_addsub_ps_256,                     // llvm.x86.avx.addsub.ps.256
     x86_avx_blendv_pd_256,                     // llvm.x86.avx.blendv.pd.256
@@ -194,6 +211,18 @@ enum X86Intrinsics : unsigned {
     x86_avx2_psrlv_d_256,                      // llvm.x86.avx2.psrlv.d.256
     x86_avx2_psrlv_q,                          // llvm.x86.avx2.psrlv.q
     x86_avx2_psrlv_q_256,                      // llvm.x86.avx2.psrlv.q.256
+    x86_avx2_vpdpbssd_128,                     // llvm.x86.avx2.vpdpbssd.128
+    x86_avx2_vpdpbssd_256,                     // llvm.x86.avx2.vpdpbssd.256
+    x86_avx2_vpdpbssds_128,                    // llvm.x86.avx2.vpdpbssds.128
+    x86_avx2_vpdpbssds_256,                    // llvm.x86.avx2.vpdpbssds.256
+    x86_avx2_vpdpbsud_128,                     // llvm.x86.avx2.vpdpbsud.128
+    x86_avx2_vpdpbsud_256,                     // llvm.x86.avx2.vpdpbsud.256
+    x86_avx2_vpdpbsuds_128,                    // llvm.x86.avx2.vpdpbsuds.128
+    x86_avx2_vpdpbsuds_256,                    // llvm.x86.avx2.vpdpbsuds.256
+    x86_avx2_vpdpbuud_128,                     // llvm.x86.avx2.vpdpbuud.128
+    x86_avx2_vpdpbuud_256,                     // llvm.x86.avx2.vpdpbuud.256
+    x86_avx2_vpdpbuuds_128,                    // llvm.x86.avx2.vpdpbuuds.128
+    x86_avx2_vpdpbuuds_256,                    // llvm.x86.avx2.vpdpbuuds.256
     x86_avx512_add_pd_512,                     // llvm.x86.avx512.add.pd.512
     x86_avx512_add_ps_512,                     // llvm.x86.avx512.add.ps.512
     x86_avx512_broadcastmb_128,                // llvm.x86.avx512.broadcastmb.128
@@ -781,6 +810,162 @@ enum X86Intrinsics : unsigned {
     x86_avx512bf16_dpbf16ps_256,               // llvm.x86.avx512bf16.dpbf16ps.256
     x86_avx512bf16_dpbf16ps_512,               // llvm.x86.avx512bf16.dpbf16ps.512
     x86_avx512bf16_mask_cvtneps2bf16_128,      // llvm.x86.avx512bf16.mask.cvtneps2bf16.128
+    x86_avx512fp16_add_ph_512,                 // llvm.x86.avx512fp16.add.ph.512
+    x86_avx512fp16_div_ph_512,                 // llvm.x86.avx512fp16.div.ph.512
+    x86_avx512fp16_fpclass_ph_128,             // llvm.x86.avx512fp16.fpclass.ph.128
+    x86_avx512fp16_fpclass_ph_256,             // llvm.x86.avx512fp16.fpclass.ph.256
+    x86_avx512fp16_fpclass_ph_512,             // llvm.x86.avx512fp16.fpclass.ph.512
+    x86_avx512fp16_mask_add_sh_round,          // llvm.x86.avx512fp16.mask.add.sh.round
+    x86_avx512fp16_mask_cmp_ph_128,            // llvm.x86.avx512fp16.mask.cmp.ph.128
+    x86_avx512fp16_mask_cmp_ph_256,            // llvm.x86.avx512fp16.mask.cmp.ph.256
+    x86_avx512fp16_mask_cmp_ph_512,            // llvm.x86.avx512fp16.mask.cmp.ph.512
+    x86_avx512fp16_mask_cmp_sh,                // llvm.x86.avx512fp16.mask.cmp.sh
+    x86_avx512fp16_mask_div_sh_round,          // llvm.x86.avx512fp16.mask.div.sh.round
+    x86_avx512fp16_mask_fpclass_sh,            // llvm.x86.avx512fp16.mask.fpclass.sh
+    x86_avx512fp16_mask_getexp_ph_128,         // llvm.x86.avx512fp16.mask.getexp.ph.128
+    x86_avx512fp16_mask_getexp_ph_256,         // llvm.x86.avx512fp16.mask.getexp.ph.256
+    x86_avx512fp16_mask_getexp_ph_512,         // llvm.x86.avx512fp16.mask.getexp.ph.512
+    x86_avx512fp16_mask_getexp_sh,             // llvm.x86.avx512fp16.mask.getexp.sh
+    x86_avx512fp16_mask_getmant_ph_128,        // llvm.x86.avx512fp16.mask.getmant.ph.128
+    x86_avx512fp16_mask_getmant_ph_256,        // llvm.x86.avx512fp16.mask.getmant.ph.256
+    x86_avx512fp16_mask_getmant_ph_512,        // llvm.x86.avx512fp16.mask.getmant.ph.512
+    x86_avx512fp16_mask_getmant_sh,            // llvm.x86.avx512fp16.mask.getmant.sh
+    x86_avx512fp16_mask_max_sh_round,          // llvm.x86.avx512fp16.mask.max.sh.round
+    x86_avx512fp16_mask_min_sh_round,          // llvm.x86.avx512fp16.mask.min.sh.round
+    x86_avx512fp16_mask_mul_sh_round,          // llvm.x86.avx512fp16.mask.mul.sh.round
+    x86_avx512fp16_mask_rcp_ph_128,            // llvm.x86.avx512fp16.mask.rcp.ph.128
+    x86_avx512fp16_mask_rcp_ph_256,            // llvm.x86.avx512fp16.mask.rcp.ph.256
+    x86_avx512fp16_mask_rcp_ph_512,            // llvm.x86.avx512fp16.mask.rcp.ph.512
+    x86_avx512fp16_mask_rcp_sh,                // llvm.x86.avx512fp16.mask.rcp.sh
+    x86_avx512fp16_mask_reduce_ph_128,         // llvm.x86.avx512fp16.mask.reduce.ph.128
+    x86_avx512fp16_mask_reduce_ph_256,         // llvm.x86.avx512fp16.mask.reduce.ph.256
+    x86_avx512fp16_mask_reduce_ph_512,         // llvm.x86.avx512fp16.mask.reduce.ph.512
+    x86_avx512fp16_mask_reduce_sh,             // llvm.x86.avx512fp16.mask.reduce.sh
+    x86_avx512fp16_mask_rndscale_ph_128,       // llvm.x86.avx512fp16.mask.rndscale.ph.128
+    x86_avx512fp16_mask_rndscale_ph_256,       // llvm.x86.avx512fp16.mask.rndscale.ph.256
+    x86_avx512fp16_mask_rndscale_ph_512,       // llvm.x86.avx512fp16.mask.rndscale.ph.512
+    x86_avx512fp16_mask_rndscale_sh,           // llvm.x86.avx512fp16.mask.rndscale.sh
+    x86_avx512fp16_mask_rsqrt_ph_128,          // llvm.x86.avx512fp16.mask.rsqrt.ph.128
+    x86_avx512fp16_mask_rsqrt_ph_256,          // llvm.x86.avx512fp16.mask.rsqrt.ph.256
+    x86_avx512fp16_mask_rsqrt_ph_512,          // llvm.x86.avx512fp16.mask.rsqrt.ph.512
+    x86_avx512fp16_mask_rsqrt_sh,              // llvm.x86.avx512fp16.mask.rsqrt.sh
+    x86_avx512fp16_mask_scalef_ph_128,         // llvm.x86.avx512fp16.mask.scalef.ph.128
+    x86_avx512fp16_mask_scalef_ph_256,         // llvm.x86.avx512fp16.mask.scalef.ph.256
+    x86_avx512fp16_mask_scalef_ph_512,         // llvm.x86.avx512fp16.mask.scalef.ph.512
+    x86_avx512fp16_mask_scalef_sh,             // llvm.x86.avx512fp16.mask.scalef.sh
+    x86_avx512fp16_mask_sqrt_sh,               // llvm.x86.avx512fp16.mask.sqrt.sh
+    x86_avx512fp16_mask_sub_sh_round,          // llvm.x86.avx512fp16.mask.sub.sh.round
+    x86_avx512fp16_mask_vcvtdq2ph_128,         // llvm.x86.avx512fp16.mask.vcvtdq2ph.128
+    x86_avx512fp16_mask_vcvtpd2ph_128,         // llvm.x86.avx512fp16.mask.vcvtpd2ph.128
+    x86_avx512fp16_mask_vcvtpd2ph_256,         // llvm.x86.avx512fp16.mask.vcvtpd2ph.256
+    x86_avx512fp16_mask_vcvtpd2ph_512,         // llvm.x86.avx512fp16.mask.vcvtpd2ph.512
+    x86_avx512fp16_mask_vcvtph2dq_128,         // llvm.x86.avx512fp16.mask.vcvtph2dq.128
+    x86_avx512fp16_mask_vcvtph2dq_256,         // llvm.x86.avx512fp16.mask.vcvtph2dq.256
+    x86_avx512fp16_mask_vcvtph2dq_512,         // llvm.x86.avx512fp16.mask.vcvtph2dq.512
+    x86_avx512fp16_mask_vcvtph2pd_128,         // llvm.x86.avx512fp16.mask.vcvtph2pd.128
+    x86_avx512fp16_mask_vcvtph2pd_256,         // llvm.x86.avx512fp16.mask.vcvtph2pd.256
+    x86_avx512fp16_mask_vcvtph2pd_512,         // llvm.x86.avx512fp16.mask.vcvtph2pd.512
+    x86_avx512fp16_mask_vcvtph2psx_128,        // llvm.x86.avx512fp16.mask.vcvtph2psx.128
+    x86_avx512fp16_mask_vcvtph2psx_256,        // llvm.x86.avx512fp16.mask.vcvtph2psx.256
+    x86_avx512fp16_mask_vcvtph2psx_512,        // llvm.x86.avx512fp16.mask.vcvtph2psx.512
+    x86_avx512fp16_mask_vcvtph2qq_128,         // llvm.x86.avx512fp16.mask.vcvtph2qq.128
+    x86_avx512fp16_mask_vcvtph2qq_256,         // llvm.x86.avx512fp16.mask.vcvtph2qq.256
+    x86_avx512fp16_mask_vcvtph2qq_512,         // llvm.x86.avx512fp16.mask.vcvtph2qq.512
+    x86_avx512fp16_mask_vcvtph2udq_128,        // llvm.x86.avx512fp16.mask.vcvtph2udq.128
+    x86_avx512fp16_mask_vcvtph2udq_256,        // llvm.x86.avx512fp16.mask.vcvtph2udq.256
+    x86_avx512fp16_mask_vcvtph2udq_512,        // llvm.x86.avx512fp16.mask.vcvtph2udq.512
+    x86_avx512fp16_mask_vcvtph2uqq_128,        // llvm.x86.avx512fp16.mask.vcvtph2uqq.128
+    x86_avx512fp16_mask_vcvtph2uqq_256,        // llvm.x86.avx512fp16.mask.vcvtph2uqq.256
+    x86_avx512fp16_mask_vcvtph2uqq_512,        // llvm.x86.avx512fp16.mask.vcvtph2uqq.512
+    x86_avx512fp16_mask_vcvtph2uw_128,         // llvm.x86.avx512fp16.mask.vcvtph2uw.128
+    x86_avx512fp16_mask_vcvtph2uw_256,         // llvm.x86.avx512fp16.mask.vcvtph2uw.256
+    x86_avx512fp16_mask_vcvtph2uw_512,         // llvm.x86.avx512fp16.mask.vcvtph2uw.512
+    x86_avx512fp16_mask_vcvtph2w_128,          // llvm.x86.avx512fp16.mask.vcvtph2w.128
+    x86_avx512fp16_mask_vcvtph2w_256,          // llvm.x86.avx512fp16.mask.vcvtph2w.256
+    x86_avx512fp16_mask_vcvtph2w_512,          // llvm.x86.avx512fp16.mask.vcvtph2w.512
+    x86_avx512fp16_mask_vcvtps2phx_128,        // llvm.x86.avx512fp16.mask.vcvtps2phx.128
+    x86_avx512fp16_mask_vcvtps2phx_256,        // llvm.x86.avx512fp16.mask.vcvtps2phx.256
+    x86_avx512fp16_mask_vcvtps2phx_512,        // llvm.x86.avx512fp16.mask.vcvtps2phx.512
+    x86_avx512fp16_mask_vcvtqq2ph_128,         // llvm.x86.avx512fp16.mask.vcvtqq2ph.128
+    x86_avx512fp16_mask_vcvtqq2ph_256,         // llvm.x86.avx512fp16.mask.vcvtqq2ph.256
+    x86_avx512fp16_mask_vcvtsd2sh_round,       // llvm.x86.avx512fp16.mask.vcvtsd2sh.round
+    x86_avx512fp16_mask_vcvtsh2sd_round,       // llvm.x86.avx512fp16.mask.vcvtsh2sd.round
+    x86_avx512fp16_mask_vcvtsh2ss_round,       // llvm.x86.avx512fp16.mask.vcvtsh2ss.round
+    x86_avx512fp16_mask_vcvtss2sh_round,       // llvm.x86.avx512fp16.mask.vcvtss2sh.round
+    x86_avx512fp16_mask_vcvttph2dq_128,        // llvm.x86.avx512fp16.mask.vcvttph2dq.128
+    x86_avx512fp16_mask_vcvttph2dq_256,        // llvm.x86.avx512fp16.mask.vcvttph2dq.256
+    x86_avx512fp16_mask_vcvttph2dq_512,        // llvm.x86.avx512fp16.mask.vcvttph2dq.512
+    x86_avx512fp16_mask_vcvttph2qq_128,        // llvm.x86.avx512fp16.mask.vcvttph2qq.128
+    x86_avx512fp16_mask_vcvttph2qq_256,        // llvm.x86.avx512fp16.mask.vcvttph2qq.256
+    x86_avx512fp16_mask_vcvttph2qq_512,        // llvm.x86.avx512fp16.mask.vcvttph2qq.512
+    x86_avx512fp16_mask_vcvttph2udq_128,       // llvm.x86.avx512fp16.mask.vcvttph2udq.128
+    x86_avx512fp16_mask_vcvttph2udq_256,       // llvm.x86.avx512fp16.mask.vcvttph2udq.256
+    x86_avx512fp16_mask_vcvttph2udq_512,       // llvm.x86.avx512fp16.mask.vcvttph2udq.512
+    x86_avx512fp16_mask_vcvttph2uqq_128,       // llvm.x86.avx512fp16.mask.vcvttph2uqq.128
+    x86_avx512fp16_mask_vcvttph2uqq_256,       // llvm.x86.avx512fp16.mask.vcvttph2uqq.256
+    x86_avx512fp16_mask_vcvttph2uqq_512,       // llvm.x86.avx512fp16.mask.vcvttph2uqq.512
+    x86_avx512fp16_mask_vcvttph2uw_128,        // llvm.x86.avx512fp16.mask.vcvttph2uw.128
+    x86_avx512fp16_mask_vcvttph2uw_256,        // llvm.x86.avx512fp16.mask.vcvttph2uw.256
+    x86_avx512fp16_mask_vcvttph2uw_512,        // llvm.x86.avx512fp16.mask.vcvttph2uw.512
+    x86_avx512fp16_mask_vcvttph2w_128,         // llvm.x86.avx512fp16.mask.vcvttph2w.128
+    x86_avx512fp16_mask_vcvttph2w_256,         // llvm.x86.avx512fp16.mask.vcvttph2w.256
+    x86_avx512fp16_mask_vcvttph2w_512,         // llvm.x86.avx512fp16.mask.vcvttph2w.512
+    x86_avx512fp16_mask_vcvtudq2ph_128,        // llvm.x86.avx512fp16.mask.vcvtudq2ph.128
+    x86_avx512fp16_mask_vcvtuqq2ph_128,        // llvm.x86.avx512fp16.mask.vcvtuqq2ph.128
+    x86_avx512fp16_mask_vcvtuqq2ph_256,        // llvm.x86.avx512fp16.mask.vcvtuqq2ph.256
+    x86_avx512fp16_mask_vfcmadd_cph_128,       // llvm.x86.avx512fp16.mask.vfcmadd.cph.128
+    x86_avx512fp16_mask_vfcmadd_cph_256,       // llvm.x86.avx512fp16.mask.vfcmadd.cph.256
+    x86_avx512fp16_mask_vfcmadd_cph_512,       // llvm.x86.avx512fp16.mask.vfcmadd.cph.512
+    x86_avx512fp16_mask_vfcmadd_csh,           // llvm.x86.avx512fp16.mask.vfcmadd.csh
+    x86_avx512fp16_mask_vfcmul_cph_128,        // llvm.x86.avx512fp16.mask.vfcmul.cph.128
+    x86_avx512fp16_mask_vfcmul_cph_256,        // llvm.x86.avx512fp16.mask.vfcmul.cph.256
+    x86_avx512fp16_mask_vfcmul_cph_512,        // llvm.x86.avx512fp16.mask.vfcmul.cph.512
+    x86_avx512fp16_mask_vfcmul_csh,            // llvm.x86.avx512fp16.mask.vfcmul.csh
+    x86_avx512fp16_mask_vfmadd_cph_128,        // llvm.x86.avx512fp16.mask.vfmadd.cph.128
+    x86_avx512fp16_mask_vfmadd_cph_256,        // llvm.x86.avx512fp16.mask.vfmadd.cph.256
+    x86_avx512fp16_mask_vfmadd_cph_512,        // llvm.x86.avx512fp16.mask.vfmadd.cph.512
+    x86_avx512fp16_mask_vfmadd_csh,            // llvm.x86.avx512fp16.mask.vfmadd.csh
+    x86_avx512fp16_mask_vfmul_cph_128,         // llvm.x86.avx512fp16.mask.vfmul.cph.128
+    x86_avx512fp16_mask_vfmul_cph_256,         // llvm.x86.avx512fp16.mask.vfmul.cph.256
+    x86_avx512fp16_mask_vfmul_cph_512,         // llvm.x86.avx512fp16.mask.vfmul.cph.512
+    x86_avx512fp16_mask_vfmul_csh,             // llvm.x86.avx512fp16.mask.vfmul.csh
+    x86_avx512fp16_maskz_vfcmadd_cph_128,      // llvm.x86.avx512fp16.maskz.vfcmadd.cph.128
+    x86_avx512fp16_maskz_vfcmadd_cph_256,      // llvm.x86.avx512fp16.maskz.vfcmadd.cph.256
+    x86_avx512fp16_maskz_vfcmadd_cph_512,      // llvm.x86.avx512fp16.maskz.vfcmadd.cph.512
+    x86_avx512fp16_maskz_vfcmadd_csh,          // llvm.x86.avx512fp16.maskz.vfcmadd.csh
+    x86_avx512fp16_maskz_vfmadd_cph_128,       // llvm.x86.avx512fp16.maskz.vfmadd.cph.128
+    x86_avx512fp16_maskz_vfmadd_cph_256,       // llvm.x86.avx512fp16.maskz.vfmadd.cph.256
+    x86_avx512fp16_maskz_vfmadd_cph_512,       // llvm.x86.avx512fp16.maskz.vfmadd.cph.512
+    x86_avx512fp16_maskz_vfmadd_csh,           // llvm.x86.avx512fp16.maskz.vfmadd.csh
+    x86_avx512fp16_max_ph_128,                 // llvm.x86.avx512fp16.max.ph.128
+    x86_avx512fp16_max_ph_256,                 // llvm.x86.avx512fp16.max.ph.256
+    x86_avx512fp16_max_ph_512,                 // llvm.x86.avx512fp16.max.ph.512
+    x86_avx512fp16_min_ph_128,                 // llvm.x86.avx512fp16.min.ph.128
+    x86_avx512fp16_min_ph_256,                 // llvm.x86.avx512fp16.min.ph.256
+    x86_avx512fp16_min_ph_512,                 // llvm.x86.avx512fp16.min.ph.512
+    x86_avx512fp16_mul_ph_512,                 // llvm.x86.avx512fp16.mul.ph.512
+    x86_avx512fp16_sqrt_ph_512,                // llvm.x86.avx512fp16.sqrt.ph.512
+    x86_avx512fp16_sub_ph_512,                 // llvm.x86.avx512fp16.sub.ph.512
+    x86_avx512fp16_vcomi_sh,                   // llvm.x86.avx512fp16.vcomi.sh
+    x86_avx512fp16_vcvtsh2si32,                // llvm.x86.avx512fp16.vcvtsh2si32
+    x86_avx512fp16_vcvtsh2si64,                // llvm.x86.avx512fp16.vcvtsh2si64
+    x86_avx512fp16_vcvtsh2usi32,               // llvm.x86.avx512fp16.vcvtsh2usi32
+    x86_avx512fp16_vcvtsh2usi64,               // llvm.x86.avx512fp16.vcvtsh2usi64
+    x86_avx512fp16_vcvtsi2sh,                  // llvm.x86.avx512fp16.vcvtsi2sh
+    x86_avx512fp16_vcvtsi642sh,                // llvm.x86.avx512fp16.vcvtsi642sh
+    x86_avx512fp16_vcvttsh2si32,               // llvm.x86.avx512fp16.vcvttsh2si32
+    x86_avx512fp16_vcvttsh2si64,               // llvm.x86.avx512fp16.vcvttsh2si64
+    x86_avx512fp16_vcvttsh2usi32,              // llvm.x86.avx512fp16.vcvttsh2usi32
+    x86_avx512fp16_vcvttsh2usi64,              // llvm.x86.avx512fp16.vcvttsh2usi64
+    x86_avx512fp16_vcvtusi2sh,                 // llvm.x86.avx512fp16.vcvtusi2sh
+    x86_avx512fp16_vcvtusi642sh,               // llvm.x86.avx512fp16.vcvtusi642sh
+    x86_avx512fp16_vfmadd_f16,                 // llvm.x86.avx512fp16.vfmadd.f16
+    x86_avx512fp16_vfmadd_ph_512,              // llvm.x86.avx512fp16.vfmadd.ph.512
+    x86_avx512fp16_vfmaddsub_ph_128,           // llvm.x86.avx512fp16.vfmaddsub.ph.128
+    x86_avx512fp16_vfmaddsub_ph_256,           // llvm.x86.avx512fp16.vfmaddsub.ph.256
+    x86_avx512fp16_vfmaddsub_ph_512,           // llvm.x86.avx512fp16.vfmaddsub.ph.512
+    x86_axor32,                                // llvm.x86.axor32
+    x86_axor64,                                // llvm.x86.axor64
     x86_bmi_bextr_32,                          // llvm.x86.bmi.bextr.32
     x86_bmi_bextr_64,                          // llvm.x86.bmi.bextr.64
     x86_bmi_bzhi_32,                           // llvm.x86.bmi.bzhi.32
@@ -789,12 +974,16 @@ enum X86Intrinsics : unsigned {
     x86_bmi_pdep_64,                           // llvm.x86.bmi.pdep.64
     x86_bmi_pext_32,                           // llvm.x86.bmi.pext.32
     x86_bmi_pext_64,                           // llvm.x86.bmi.pext.64
+    x86_cast_tile_to_vector,                   // llvm.x86.cast.tile.to.vector
+    x86_cast_vector_to_tile,                   // llvm.x86.cast.vector.to.tile
     x86_cldemote,                              // llvm.x86.cldemote
     x86_clflushopt,                            // llvm.x86.clflushopt
     x86_clrssbsy,                              // llvm.x86.clrssbsy
     x86_clui,                                  // llvm.x86.clui
     x86_clwb,                                  // llvm.x86.clwb
     x86_clzero,                                // llvm.x86.clzero
+    x86_cmpccxadd32,                           // llvm.x86.cmpccxadd32
+    x86_cmpccxadd64,                           // llvm.x86.cmpccxadd64
     x86_directstore32,                         // llvm.x86.directstore32
     x86_directstore64,                         // llvm.x86.directstore64
     x86_encodekey128,                          // llvm.x86.encodekey128
@@ -911,6 +1100,7 @@ enum X86Intrinsics : unsigned {
     x86_rdpid,                                 // llvm.x86.rdpid
     x86_rdpkru,                                // llvm.x86.rdpkru
     x86_rdpmc,                                 // llvm.x86.rdpmc
+    x86_rdpru,                                 // llvm.x86.rdpru
     x86_rdrand_16,                             // llvm.x86.rdrand.16
     x86_rdrand_32,                             // llvm.x86.rdrand.32
     x86_rdrand_64,                             // llvm.x86.rdrand.64
@@ -1124,6 +1314,8 @@ enum X86Intrinsics : unsigned {
     x86_tdpbusd_internal,                      // llvm.x86.tdpbusd.internal
     x86_tdpbuud,                               // llvm.x86.tdpbuud
     x86_tdpbuud_internal,                      // llvm.x86.tdpbuud.internal
+    x86_tdpfp16ps,                             // llvm.x86.tdpfp16ps
+    x86_tdpfp16ps_internal,                    // llvm.x86.tdpfp16ps.internal
     x86_testui,                                // llvm.x86.testui
     x86_tileloadd64,                           // llvm.x86.tileloadd64
     x86_tileloadd64_internal,                  // llvm.x86.tileloadd64.internal
@@ -1137,6 +1329,20 @@ enum X86Intrinsics : unsigned {
     x86_tpause,                                // llvm.x86.tpause
     x86_umonitor,                              // llvm.x86.umonitor
     x86_umwait,                                // llvm.x86.umwait
+    x86_vbcstnebf162ps128,                     // llvm.x86.vbcstnebf162ps128
+    x86_vbcstnebf162ps256,                     // llvm.x86.vbcstnebf162ps256
+    x86_vbcstnesh2ps128,                       // llvm.x86.vbcstnesh2ps128
+    x86_vbcstnesh2ps256,                       // llvm.x86.vbcstnesh2ps256
+    x86_vcvtneebf162ps128,                     // llvm.x86.vcvtneebf162ps128
+    x86_vcvtneebf162ps256,                     // llvm.x86.vcvtneebf162ps256
+    x86_vcvtneeph2ps128,                       // llvm.x86.vcvtneeph2ps128
+    x86_vcvtneeph2ps256,                       // llvm.x86.vcvtneeph2ps256
+    x86_vcvtneobf162ps128,                     // llvm.x86.vcvtneobf162ps128
+    x86_vcvtneobf162ps256,                     // llvm.x86.vcvtneobf162ps256
+    x86_vcvtneoph2ps128,                       // llvm.x86.vcvtneoph2ps128
+    x86_vcvtneoph2ps256,                       // llvm.x86.vcvtneoph2ps256
+    x86_vcvtneps2bf16128,                      // llvm.x86.vcvtneps2bf16128
+    x86_vcvtneps2bf16256,                      // llvm.x86.vcvtneps2bf16256
     x86_vcvtps2ph_128,                         // llvm.x86.vcvtps2ph.128
     x86_vcvtps2ph_256,                         // llvm.x86.vcvtps2ph.256
     x86_vgf2p8affineinvqb_128,                 // llvm.x86.vgf2p8affineinvqb.128
