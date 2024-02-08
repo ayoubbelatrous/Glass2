@@ -943,13 +943,9 @@ namespace Glass
 		}
 	}
 
-	void Emit_SSE(Array<u8>& bytes, Instruction_SSE instruction, Inst_Op op1, Inst_Op op2)
+	u32 Emit_SSE(Array<u8>& bytes, Instruction_SSE instruction, Inst_Op op1, Inst_Op op2)
 	{
 		u8 direction = instruction.has_direction ? op1.type != Op_Reg : 0;
-
-		Write_8(bytes, instruction.is_double ? 0xF2 : 0xF3);
-		Write_8(bytes, 0x0f);
-		Write_8(bytes, instruction.op_code + direction);
 
 		if (instruction.has_direction) {
 			if (op1.type != Op_Reg) {
@@ -963,37 +959,102 @@ namespace Glass
 		u8 reg = op1.reg;
 		u8 rm = op2.reg;
 
+		bool r = 0;
+		bool b = 0;
+
+		if (op2.type == Op_Disp4) {
+			mod = Mod_Ind;
+			rm = 0b101;
+		}
+
+		bool rsp_sib = false;
+
 		if (reg >= XMM0)
 			reg -= XMM0;
 
 		if (rm >= XMM0)
 			rm -= XMM0;
 
+		if (reg >= R8 && reg < XMM0) {
+			reg -= R8;
+			r = true;
+		}
+
+		if (rm == RSP) {
+			rsp_sib = true;
+			rm = 0b100;
+		}
+
+		if (rm >= R8 && rm < XMM0) {
+			rm -= R8;
+			b = true;
+		}
+
+		if (instruction.op_code == 0x6e || instruction.op_code == 0x7e) {
+			Write_8(bytes, 0x66);
+		}
+		else {
+			Write_8(bytes, instruction.is_double ? 0xF2 : 0xF3);
+		}
+
+		if (instruction.rex_w || r || b) {
+			Emit_Rex(bytes, instruction.rex_w, r, 0, b);
+		}
+
+		Write_8(bytes, 0x0f);
+		Write_8(bytes, instruction.op_code + direction);
 		Write_Mod_RM(bytes, mod, reg, rm);
 
+		if (rsp_sib) Emit_SIB(bytes, 0, RSP, RSP);
+
+		u32 disp_byte_offset = -1;
+
 		if (op2.type == Op_Reg_Disp4) {
+			disp_byte_offset = (u32)bytes.count;
 			Write_32(bytes, op2.reg_disp.disp);
 		}
+
+		if (op2.type == Op_Disp4) {
+			disp_byte_offset = (u32)bytes.count;
+			Write_32(bytes, op2.disp_4);
+		}
+
+		return disp_byte_offset;
 	}
 
-	void Emit_MovSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	void Emit_MovQ(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x7e;
+		inst.is_double = false;
+		inst.rex_w = true;
+
+		auto tmp = op1;
+		op1 = op2;
+		op2 = tmp;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	u32 Emit_MovSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
 	{
 		Instruction_SSE inst;
 		inst.has_direction = true;
 		inst.op_code = 0x10;
 		inst.is_double = false;
 
-		Emit_SSE(bytes, inst, op1, op2);
+		return Emit_SSE(bytes, inst, op1, op2);
 	}
 
-	void Emit_MovSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	u32 Emit_MovSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
 	{
 		Instruction_SSE inst;
 		inst.has_direction = true;
 		inst.op_code = 0x10;
 		inst.is_double = true;
 
-		Emit_SSE(bytes, inst, op1, op2);
+		return Emit_SSE(bytes, inst, op1, op2);
 	}
 
 	void Emit_MulSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
@@ -1012,6 +1073,56 @@ namespace Glass
 		inst.has_direction = false;
 		inst.op_code = 0x59;
 		inst.is_double = true;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_AddSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x58;
+		inst.is_double = false;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_AddSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x58;
+		inst.is_double = true;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_SubSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x5c;
+		inst.is_double = false;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_SubSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x5c;
+		inst.is_double = true;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_CVTSS2SD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x5a;
+		inst.is_double = false;
 
 		Emit_SSE(bytes, inst, op1, op2);
 	}

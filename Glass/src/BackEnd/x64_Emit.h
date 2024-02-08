@@ -92,6 +92,20 @@ namespace Glass
 		Array_Add(code, as_byte[3]);
 	}
 
+	inline void Write_64(Array<u8>& code, u64 v) {
+
+		u8* as_byte = (u8*)&v;
+
+		Array_Add(code, as_byte[0]);
+		Array_Add(code, as_byte[1]);
+		Array_Add(code, as_byte[2]);
+		Array_Add(code, as_byte[3]);
+		Array_Add(code, as_byte[4]);
+		Array_Add(code, as_byte[5]);
+		Array_Add(code, as_byte[6]);
+		Array_Add(code, as_byte[7]);
+	}
+
 	inline u32* Write_32_Ptr(Array<u8>& code) {
 
 		u8* ptr = code.data + code.count;
@@ -227,15 +241,24 @@ namespace Glass
 
 	struct Instruction_SSE
 	{
-		u8 op_code;
-		bool has_direction;
-		bool is_double;
+		u8 op_code = 0;
+		bool has_direction = false;
+		bool is_double = false;
+		bool rex_w = false;
 	};
 
-	void Emit_SSE(Array<u8>& bytes, Instruction_SSE instruction, Inst_Op op1, Inst_Op op2);
+	u32 Emit_SSE(Array<u8>& bytes, Instruction_SSE instruction, Inst_Op op1, Inst_Op op2);
 
-	void Emit_MovSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
-	void Emit_MovSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_MovQ(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+
+	u32 Emit_MovSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	u32 Emit_MovSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 	void Emit_MulSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 	void Emit_MulSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_AddSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_AddSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_SubSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_SubSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+
+	void Emit_CVTSS2SD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 }

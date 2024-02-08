@@ -7,10 +7,12 @@
 namespace Glass
 {
 
-#define X64_REG_COUNT 10
+#define X64_REG_COUNT 8
+#define X64_FP_REG_COUNT 5
 #define REG_BUFS_SZ 65553
 
-	const u8 x64_registers[X64_REG_COUNT] = { RAX, RBX, RCX, RDX, R8 ,R9, RSI, RDI, RSP, RBP };
+	const u8 x64_fp_registers[X64_FP_REG_COUNT] = { XMM0, XMM1, XMM2, XMM3, XMM4 };
+	const u8 x64_registers[X64_REG_COUNT] = { RAX, RBX, RCX, RDX, R8 ,R9, RSI, RDI };
 
 	struct Reg_Allocation
 	{
@@ -115,13 +117,14 @@ namespace Glass
 	}
 
 	u8 call_conv_parameter_registers[4] = { RCX,RDX,R8,R9 };
+	u8 call_conv_parameter_fp_registers[4] = { XMM0, XMM1, XMM2, XMM3 };
 
 	u8 vreg_lifetimes_buffer[REG_BUFS_SZ];
 
 	inline void MC_Reg_Alloc_Proc(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx, Array<Reg_Allocation>& allocations)
 	{
-		u8 allocated[X64_REG_COUNT] = { };
-		Il_IDX reg_to_v_reg[X64_REG_COUNT] = { };
+		u8 allocated[XMM7] = { };
+		Il_IDX reg_to_v_reg[XMM7] = { };
 
 		u8* vreg_lifetimes = vreg_lifetimes_buffer;
 		memset(vreg_lifetimes, 0, REG_BUFS_SZ);
@@ -160,8 +163,6 @@ namespace Glass
 			{
 				auto phys_reg = x64_registers[i];
 
-				if (phys_reg == RBP) __debugbreak();
-
 				if (allocated[phys_reg] == 0) {
 					allocated_register = phys_reg;
 					allocated[phys_reg] = 1;
@@ -180,6 +181,42 @@ namespace Glass
 			return allocated_register;
 		};
 
+		auto allocate_fp_register = [&](Il_IDX vreg_idx) -> u8 {
+
+			u8 allocated_register = 0xff;
+
+			for (u8 i = 0; i < X64_FP_REG_COUNT; i++)
+			{
+				auto phys_reg = x64_fp_registers[i];
+
+				if (allocated[phys_reg] == 0) {
+					allocated_register = phys_reg;
+					allocated[phys_reg] = 1;
+					reg_to_v_reg[phys_reg] = vreg_idx;
+					break;
+				}
+			}
+
+			if (allocated_register == 0xff) {
+				allocations[reg_to_v_reg[XMM0]].spilled = true;
+				allocated[reg_to_v_reg[XMM0]] = 1;
+				reg_to_v_reg[XMM0] = vreg_idx;
+				allocated_register = XMM0;
+			}
+
+			return allocated_register;
+		};
+
+		auto temp_allocate_fp_register = [&](Il_IDX vreg_idx) -> u8 {
+
+			u8 allocated_register = allocate_fp_register(vreg_idx);
+
+			allocated[allocated_register] = 0;
+			reg_to_v_reg[allocated_register] = -1;
+
+			return allocated_register;
+		};
+
 		auto temp_allocate_register = [&](Il_IDX vreg_idx) -> u8 {
 
 			u8 allocated_register = 0xff;
@@ -187,8 +224,6 @@ namespace Glass
 			for (u8 i = 0; i < X64_REG_COUNT; i++)
 			{
 				auto phys_reg = x64_registers[i];
-
-				if (phys_reg == RBP) __debugbreak();
 
 				if (allocated[phys_reg] == 0) {
 					allocated_register = phys_reg;
@@ -223,6 +258,15 @@ namespace Glass
 				GS_Type* node_type = &g.prog->type_system->type_storage[node.type_idx];
 
 				auto node_type_size = TypeSystem_Get_Type_Size(*g.prog->type_system, node_type);
+
+				auto node_type_flags = TypeSystem_Get_Type_Flags(*g.prog->type_system, node_type);
+
+				if (node.node_type == Il_Const)
+				{
+					if (node_type_flags & TN_Float_Type) {
+						allocations[idx].allocated_register = allocate_fp_register(idx);
+					}
+				}
 
 				if (node.node_type == Il_Cast)
 				{
@@ -270,23 +314,31 @@ namespace Glass
 
 				if (node.node_type == Il_Store)
 				{
-					u8 allocated_register = allocate_register(idx);
-
-					allocations[idx].allocated_register = allocated_register;
-
-					if (node_type_size > 8)
+					if (node_type_flags & TN_Float_Type)
 					{
-						u8 allocated_temp_register = allocate_register(idx);
-
-						allocations[idx].temp_register = allocated_temp_register;
-						allocations[idx].temp_register2 = temp_allocate_register(idx);
-
-						allocated[allocated_temp_register] = 0;
-						reg_to_v_reg[allocated_temp_register] = -1;
+						allocations[idx].allocated_register = temp_allocate_fp_register(idx);
 					}
+					else
+					{
 
-					allocated[allocated_register] = 0;
-					reg_to_v_reg[allocated_register] = -1;
+						u8 allocated_register = allocate_register(idx);
+
+						allocations[idx].allocated_register = allocated_register;
+
+						if (node_type_size > 8)
+						{
+							u8 allocated_temp_register = allocate_register(idx);
+
+							allocations[idx].temp_register = allocated_temp_register;
+							allocations[idx].temp_register2 = temp_allocate_register(idx);
+
+							allocated[allocated_temp_register] = 0;
+							reg_to_v_reg[allocated_temp_register] = -1;
+						}
+
+						allocated[allocated_register] = 0;
+						reg_to_v_reg[allocated_register] = -1;
+					}
 
 					use_register(node.store.ptr_node_idx);
 					use_register(node.store.value_node_idx);
@@ -299,6 +351,7 @@ namespace Glass
 					if (vreg_lifetimes[node.load.ptr_node_idx] - 1 <= 0) {
 						allocations[idx].allocated_register = allocate_register(idx);
 						reg_to_v_reg[allocations[node.load.ptr_node_idx].allocated_register] = idx;
+						use_register(node.load.ptr_node_idx);
 					}
 					else {
 						use_register(node.load.ptr_node_idx);
@@ -350,9 +403,13 @@ namespace Glass
 
 				if (node.node_type == Il_Add || node.node_type == Il_Sub || node.node_type == Il_Mul) {
 
-					u8 allocated_register = allocate_register(idx);
-
-					allocations[idx].allocated_register = allocated_register;
+					if (node_type_flags & TN_Float_Type) {
+						allocations[idx].allocated_register = allocate_fp_register(idx);
+					}
+					else {
+						u8 allocated_register = allocate_register(idx);
+						allocations[idx].allocated_register = allocated_register;
+					}
 
 					use_register(node.math_op.left_node_idx);
 					use_register(node.math_op.right_node_idx);
@@ -391,22 +448,79 @@ namespace Glass
 
 				if (node.node_type == Il_Call || node.node_type == Il_Call_Ptr) {
 
-					for (size_t i = 0; i < node.call.argument_count; i++)
-					{
-						Il_IDX argument_node_idx = node.call.arguments[i];
+					auto save = [&](u8 reg) {
+						if (allocated[reg] == 1) {
+							allocations[reg_to_v_reg[reg]].spilled = true;
+							allocated[reg] = 1;
+						}
+					};
 
-						u8 needed_register = call_conv_parameter_registers[i];
+					auto spill = [&](u8 reg) {
+						if (allocated[reg] == 1) {
+							allocations[reg_to_v_reg[reg]].spilled = true;
+							allocated[reg] = 0;
+						}
+					};
 
-						if (allocated[needed_register] == 1) {
-							allocations[reg_to_v_reg[needed_register]].spilled = true;
-							allocated[needed_register] = 0;
+					bool variadic = false;
+					if (node.node_type == Il_Call) {
+						if (g.prog->procedures[node.call.proc_idx].variadic) {
+							variadic = true;
 						}
 					}
 
+					u8 saved_registers[8];
+					u8 saved_registers_count = 0;
+
 					for (size_t i = 0; i < node.call.argument_count; i++)
 					{
-						Il_IDX argument_node_idx = node.call.arguments[i];
+						Il_IDX argument_node_idx;
+
+						if (node.call.argument_count > SMALL_ARG_COUNT) {
+							argument_node_idx = node.call.arguments_ptr[i];
+						}
+						else {
+							argument_node_idx = node.call.arguments[i];
+						}
+
+						GS_Type* argument_type = &g.prog->type_system->type_storage[proc.instruction_storage[argument_node_idx].type_idx];
+						auto argument_type_flags = TypeSystem_Get_Type_Flags(*g.prog->type_system, argument_type);
+
+						if (argument_type_flags & TN_Float_Type) {
+
+							if (variadic) {
+								spill(call_conv_parameter_registers[i]);
+							}
+
+							u8 fp_param_reg = call_conv_parameter_fp_registers[i];
+
+							save(fp_param_reg);
+							saved_registers[saved_registers_count] = fp_param_reg;
+							saved_registers_count += 1;
+						}
+						else {
+							spill(call_conv_parameter_registers[i]);
+						}
+					}
+
+					allocations[idx].temp_register = temp_allocate_fp_register(idx);
+
+					for (size_t i = 0; i < node.call.argument_count; i++)
+					{
+						Il_IDX argument_node_idx;
+
+						if (node.call.argument_count > SMALL_ARG_COUNT) {
+							argument_node_idx = node.call.arguments_ptr[i];
+						}
+						else {
+							argument_node_idx = node.call.arguments[i];
+						}
+
 						use_register(argument_node_idx);
+					}
+
+					for (size_t i = 0; i < saved_registers_count; i++) {
+						allocated[saved_registers[i]] = 0;
 					}
 
 					u8 needed_register = RAX;
@@ -455,7 +569,11 @@ namespace Glass
 	u8 register_flags_buffer[REG_BUFS_SZ] = {};
 	Reg_Allocation register_allocations_buffer[REG_BUFS_SZ] = {};
 
-	inline void MC_Gen_Proc_Codegen(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx)
+	void MC_Gen_Proc_Codegen(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx) {
+
+	}
+
+	inline void MC_Gen_Proc_Codegen2(MC_Gen& g, Il_Proc& proc, Il_IDX proc_idx)
 	{
 		MC_Symbol& sym = g.symbols[g.proc_to_symbol[proc_idx]];
 		sym.value = (u32)g.code.count;
@@ -529,6 +647,7 @@ namespace Glass
 
 				GS_Type* node_type = &g.prog->type_system->type_storage[node.type_idx];
 				auto node_type_size = TypeSystem_Get_Type_Size(*g.prog->type_system, node_type);
+				auto node_type_flags = TypeSystem_Get_Type_Flags(*g.prog->type_system, node_type);
 
 				switch (node.node_type)
 				{
@@ -696,6 +815,8 @@ namespace Glass
 				case Il_Call:
 				case Il_Call_Ptr:
 				{
+					Reg_Allocation allocation = register_allocations[i];
+
 					Inst_Op stack_top_offset;
 					stack_top_offset.type = Op_Reg_Disp4;
 					stack_top_offset.reg_disp.r = RSP;
@@ -705,21 +826,67 @@ namespace Glass
 
 					for (size_t i = 0; i < node.call.argument_count; i++)
 					{
-						Il_IDX argument_node_idx = node.call.arguments[i];
+						Il_IDX argument_node_idx;
+
+						if (node.call.argument_count > SMALL_ARG_COUNT) {
+							argument_node_idx = node.call.arguments_ptr[i];
+						}
+						else {
+							argument_node_idx = node.call.arguments[i];
+						}
+
 						GS_Type* argument_type = &g.prog->type_system->type_storage[proc.instruction_storage[argument_node_idx].type_idx];
 
 						auto argument_type_size = TypeSystem_Get_Type_Size(*g.prog->type_system, argument_type);
+						auto argument_type_flags = TypeSystem_Get_Type_Flags(*g.prog->type_system, argument_type);
 
-						Inst_Op argument_register;
-						argument_register.type = Op_Reg;
-						argument_register.reg = call_conv_parameter_registers[i];
+						bool variadic = false;
+						if (node.node_type == Il_Call) {
+							if (g.prog->procedures[node.call.proc_idx].variadic)
+								variadic = true;
+						}
 
 						if (i < 4) {
-							if (register_flags[argument_node_idx] & VF_Address && register_values[argument_node_idx].type == Op_Reg_Disp4) {
-								Emit_Lea(g.code, argument_register, register_values[argument_node_idx], 64);
+
+							if (argument_type_flags & TN_Float_Type) {
+
+								Inst_Op argument_register;
+								argument_register.type = Op_Reg;
+								argument_register.reg = call_conv_parameter_fp_registers[i];
+
+								if (argument_type_size == 4) {
+									Emit_MovSS(g.code, argument_register, register_values[argument_node_idx]);
+								}
+								else if (argument_type_size == 8) {
+									Emit_MovSD(g.code, argument_register, register_values[argument_node_idx]);
+								}
+
+								if (variadic)
+								{
+									if (argument_type_size == 4)
+									{
+										Emit_CVTSS2SD(g.code, argument_register, argument_register);
+									}
+
+									Inst_Op int_argument_register;
+									int_argument_register.type = Op_Reg;
+									int_argument_register.reg = call_conv_parameter_registers[i];
+
+									Emit_MovQ(g.code, int_argument_register, argument_register);
+								}
 							}
 							else {
-								Emit_Mov(g.code, argument_register, register_values[argument_node_idx], (u32)(argument_type_size * 8));
+
+								Inst_Op argument_register;
+								argument_register.type = Op_Reg;
+								argument_register.reg = call_conv_parameter_registers[i];
+
+								if (register_flags[argument_node_idx] & VF_Address && register_values[argument_node_idx].type == Op_Reg_Disp4) {
+									Emit_Lea(g.code, argument_register, register_values[argument_node_idx], 64);
+								}
+								else {
+									Emit_Mov(g.code, argument_register, register_values[argument_node_idx], (u32)(argument_type_size * 8));
+								}
 							}
 						}
 						else {
@@ -732,13 +899,47 @@ namespace Glass
 
 							Inst_Op argument_op = register_values[argument_node_idx];
 
-							if (argument_op.type != Op_Reg && (argument_op.type != Op_Imm8 && argument_op.type != Op_Imm16 && argument_op.type != Op_Imm32)) {
-								Emit_Mov(g.code, tmp_register, argument_op, (u32)(argument_type_size * 8));
-								argument_op = tmp_register;
-							}
+							if (argument_type_flags & TN_Float_Type) {
 
-							Emit_Mov(g.code, stack_top_offset, argument_op, (u32)(argument_type_size * 8));
-							stack_top_offset.reg_disp.disp += 8;
+								if (argument_op.type != Op_Reg || (variadic && argument_type_size == 4)) {
+
+									Inst_Op tmp_op;
+									tmp_op.type = Op_Reg;
+									tmp_op.reg = allocation.temp_register;
+
+									if (argument_type_size == 4)
+										Emit_MovSS(g.code, tmp_op, argument_op);
+									if (argument_type_size == 8)
+										Emit_MovSD(g.code, tmp_op, argument_op);
+
+									if (variadic) {
+										Emit_CVTSS2SD(g.code, tmp_op, tmp_op);
+									}
+
+									argument_op = tmp_op;
+								}
+
+								if (variadic) {
+									Emit_MovSD(g.code, stack_top_offset, argument_op);
+								}
+								else {
+									if (argument_type_size == 4)
+										Emit_MovSS(g.code, stack_top_offset, argument_op);
+									if (argument_type_size == 8)
+										Emit_MovSD(g.code, stack_top_offset, argument_op);
+								}
+
+								stack_top_offset.reg_disp.disp += 8;
+							}
+							else {
+								if (argument_op.type != Op_Reg && (argument_op.type != Op_Imm8 && argument_op.type != Op_Imm16 && argument_op.type != Op_Imm32)) {
+									Emit_Mov(g.code, tmp_register, argument_op, (u32)(argument_type_size * 8));
+									argument_op = tmp_register;
+								}
+
+								Emit_Mov(g.code, stack_top_offset, argument_op, (u32)(argument_type_size * 8));
+								stack_top_offset.reg_disp.disp += 8;
+							}
 						}
 					}
 
@@ -756,8 +957,6 @@ namespace Glass
 					else {
 						Emit_Call(g.code, register_values[node.call.proc_idx]);
 					}
-
-					Reg_Allocation allocation = register_allocations[i];
 
 					Inst_Op result_register;
 					result_register.type = Op_Reg;
@@ -872,131 +1071,158 @@ namespace Glass
 					Reg_Allocation allocation = register_allocations[i];
 					Inst_Op value_op = register_values[node.store.value_node_idx];
 
-					if (proc.instruction_storage[node.store.value_node_idx].node_type == Il_ZI) {
-
-						u64 remainder = node_type_size;
-
+					if (node_type_flags & TN_Float_Type)
+					{
 						Inst_Op pointer_op = register_values[node.store.ptr_node_idx];
 
-						while (remainder > 0) {
+						if (value_op.type != Op_Reg)
+						{
+							Inst_Op tmp_reg;
+							tmp_reg.type = Op_Reg;
+							tmp_reg.reg = allocation.allocated_register;
 
-							Inst_Op zero;
-							zero.imm32 = 0;
-							zero.type = Op_Imm8;
+							if (node_type_size == 4)
+								Emit_MovSS(g.code, tmp_reg, value_op);
+							if (node_type_size == 8)
+								Emit_MovSD(g.code, tmp_reg, value_op);
 
-							u8 zeroed_size = 0;
+							value_op = tmp_reg;
+						}
 
-							if (remainder >= 8) {
-								zeroed_size = 8;
-								remainder -= zeroed_size;
-								zero.type = Op_Imm32;
-							}
-							else if (remainder >= 4) {
-								zeroed_size = 4;
-								remainder -= zeroed_size;
-								zero.type = Op_Imm32;
-							}
-							else if (remainder >= 2) {
-								zeroed_size = 2;
-								remainder -= zeroed_size;
-								zero.type = Op_Imm16;
-							}
-							else {
-								zeroed_size = 1;
-								remainder -= zeroed_size;
-								zero.type = Op_Imm8;
-							}
-
-							Emit_Mov(g.code, pointer_op, zero, zeroed_size * 8);
-							pointer_op.reg_disp.disp += zeroed_size;
+						if (node_type_size == 4) {
+							Emit_MovSS(g.code, pointer_op, value_op);
+						}
+						else if (node_type_size == 8) {
+							Emit_MovSD(g.code, pointer_op, value_op);
 						}
 					}
 					else {
-
-						Inst_Op tmp_op;
-						tmp_op.type = Op_Reg;
-						tmp_op.reg = allocation.allocated_register;
-
-						if (node_type_size <= 8) {
-
-							if (register_flags[node.store.value_node_idx] & VF_Address && value_op.type == Op_Reg_Disp4) {
-								Emit_Lea(g.code, tmp_op, value_op, 64);
-								value_op = tmp_op;
-							}
-
-							if (value_op.type == Op_Reg_Disp4 || value_op.type == Op_Reg_Disp1) {
-
-								Inst_Op tmp_op;
-								tmp_op.type = Op_Reg;
-								tmp_op.reg = allocation.allocated_register;
-
-								Emit_Mov(g.code, tmp_op, value_op, (u32)(node_type_size * 8));
-
-								value_op = tmp_op;
-							}
-
-							Emit_Mov(g.code, register_values[node.store.ptr_node_idx], value_op, (u32)(node_type_size * 8));
-						}
-						else {
+						if (proc.instruction_storage[node.store.value_node_idx].node_type == Il_ZI) {
 
 							u64 remainder = node_type_size;
 
 							Inst_Op pointer_op = register_values[node.store.ptr_node_idx];
 
-							if (!(register_flags[node.store.ptr_node_idx] & VF_Address)) {
-
-								Inst_Op temporary_address_reg;
-								temporary_address_reg.type = Op_Reg;
-								temporary_address_reg.reg = allocation.temp_register;
-
-								Emit_Mov(g.code, temporary_address_reg, pointer_op, 64);
-
-								temporary_address_reg.type = Op_Reg_Disp4;
-								temporary_address_reg.reg_disp.r = allocation.temp_register;
-								temporary_address_reg.reg_disp.disp = 0;
-
-								pointer_op = temporary_address_reg;
-							}
-
-							if (!(register_flags[node.store.value_node_idx] & VF_Address) && value_op.type != Op_Reg) {
-
-								Inst_Op temporary_value_reg;
-								temporary_value_reg.type = Op_Reg;
-								temporary_value_reg.reg = allocation.temp_register2;
-
-								Emit_Mov(g.code, temporary_value_reg, value_op, 64);
-
-								temporary_value_reg.type = Op_Reg_Disp4;
-								temporary_value_reg.reg_disp.r = allocation.temp_register2;
-								temporary_value_reg.reg_disp.disp = 0;
-
-								value_op = temporary_value_reg;
-							}
-
 							while (remainder > 0) {
 
-								u8 moved_size = 0;
+								Inst_Op zero;
+								zero.imm32 = 0;
+								zero.type = Op_Imm8;
+
+								u8 zeroed_size = 0;
 
 								if (remainder >= 8) {
-									moved_size = 8;
+									zeroed_size = 8;
+									remainder -= zeroed_size;
+									zero.type = Op_Imm32;
 								}
 								else if (remainder >= 4) {
-									moved_size = 4;
+									zeroed_size = 4;
+									remainder -= zeroed_size;
+									zero.type = Op_Imm32;
 								}
 								else if (remainder >= 2) {
-									moved_size = 2;
+									zeroed_size = 2;
+									remainder -= zeroed_size;
+									zero.type = Op_Imm16;
 								}
 								else {
-									moved_size = 1;
+									zeroed_size = 1;
+									remainder -= zeroed_size;
+									zero.type = Op_Imm8;
 								}
 
-								remainder -= moved_size;
+								Emit_Mov(g.code, pointer_op, zero, zeroed_size * 8);
+								pointer_op.reg_disp.disp += zeroed_size;
+							}
+						}
+						else {
 
-								Emit_Mov(g.code, tmp_op, value_op, moved_size * 8);
-								Emit_Mov(g.code, pointer_op, tmp_op, moved_size * 8);
+							Inst_Op tmp_op;
+							tmp_op.type = Op_Reg;
+							tmp_op.reg = allocation.allocated_register;
 
-								pointer_op.reg_disp.disp += moved_size;
-								value_op.reg_disp.disp += moved_size;
+							if (node_type_size <= 8) {
+
+								if (register_flags[node.store.value_node_idx] & VF_Address && value_op.type == Op_Reg_Disp4) {
+									Emit_Lea(g.code, tmp_op, value_op, 64);
+									value_op = tmp_op;
+								}
+
+								if (value_op.type == Op_Reg_Disp4 || value_op.type == Op_Reg_Disp1) {
+
+									Inst_Op tmp_op;
+									tmp_op.type = Op_Reg;
+									tmp_op.reg = allocation.allocated_register;
+
+									Emit_Mov(g.code, tmp_op, value_op, (u32)(node_type_size * 8));
+
+									value_op = tmp_op;
+								}
+
+								Emit_Mov(g.code, register_values[node.store.ptr_node_idx], value_op, (u32)(node_type_size * 8));
+							}
+							else {
+
+								u64 remainder = node_type_size;
+
+								Inst_Op pointer_op = register_values[node.store.ptr_node_idx];
+
+								if (!(register_flags[node.store.ptr_node_idx] & VF_Address)) {
+
+									Inst_Op temporary_address_reg;
+									temporary_address_reg.type = Op_Reg;
+									temporary_address_reg.reg = allocation.temp_register;
+
+									Emit_Mov(g.code, temporary_address_reg, pointer_op, 64);
+
+									temporary_address_reg.type = Op_Reg_Disp4;
+									temporary_address_reg.reg_disp.r = allocation.temp_register;
+									temporary_address_reg.reg_disp.disp = 0;
+
+									pointer_op = temporary_address_reg;
+								}
+
+								if (!(register_flags[node.store.value_node_idx] & VF_Address) && value_op.type != Op_Reg) {
+
+									Inst_Op temporary_value_reg;
+									temporary_value_reg.type = Op_Reg;
+									temporary_value_reg.reg = allocation.temp_register2;
+
+									Emit_Mov(g.code, temporary_value_reg, value_op, 64);
+
+									temporary_value_reg.type = Op_Reg_Disp4;
+									temporary_value_reg.reg_disp.r = allocation.temp_register2;
+									temporary_value_reg.reg_disp.disp = 0;
+
+									value_op = temporary_value_reg;
+								}
+
+								while (remainder > 0) {
+
+									u8 moved_size = 0;
+
+									if (remainder >= 8) {
+										moved_size = 8;
+									}
+									else if (remainder >= 4) {
+										moved_size = 4;
+									}
+									else if (remainder >= 2) {
+										moved_size = 2;
+									}
+									else {
+										moved_size = 1;
+									}
+
+									remainder -= moved_size;
+
+									Emit_Mov(g.code, tmp_op, value_op, moved_size * 8);
+									Emit_Mov(g.code, pointer_op, tmp_op, moved_size * 8);
+
+									pointer_op.reg_disp.disp += moved_size;
+									value_op.reg_disp.disp += moved_size;
+								}
 							}
 						}
 					}
@@ -1015,46 +1241,95 @@ namespace Glass
 					Inst_Op left_op = register_values[node.math_op.left_node_idx];
 					Inst_Op right_op = register_values[node.math_op.right_node_idx];
 
-					if (left_op.type == Op_Reg) {
-						if (left_op.reg != result_register.reg)
-							Emit_Mov(g.code, result_register, left_op, (u32)(node_type_size * 8));
-					}
-					else {
-						Emit_Mov(g.code, result_register, left_op, (u32)(node_type_size * 8));
-					}
-
-					if (node.node_type == Il_Add) {
-						Emit_Add(g.code, result_register, right_op, (u32)(node_type_size * 8));
-					}
-
-					if (node.node_type == Il_Sub) {
-						Emit_Sub(g.code, result_register, right_op, (u32)(node_type_size * 8));
-					}
-
-					if (node.node_type == Il_Mul) {
-						if (right_op.type == Op_Imm8 || right_op.type == Op_Imm16 || right_op.type == Op_Imm32) {
-							Emit_IMul3(g.code, result_register, result_register, right_op, (u32)(node_type_size * 8));
+					if (node_type_flags & TN_Float_Type)
+					{
+						if (node_type_size == 4) {
+							Emit_MovSS(g.code, result_register, left_op);
 						}
 						else {
-							Emit_IMul(g.code, result_register, right_op, (u32)(node_type_size * 8));
+							Emit_MovSD(g.code, result_register, left_op);
+						}
+
+						if (node_type_size == 4) {
+							if (node.node_type == Il_Add)
+								Emit_AddSS(g.code, result_register, right_op);
+							if (node.node_type == Il_Sub)
+								Emit_SubSS(g.code, result_register, right_op);
+							if (node.node_type == Il_Mul)
+								Emit_MulSS(g.code, result_register, right_op);
+						}
+						else {
+							if (node.node_type == Il_Add)
+								Emit_AddSD(g.code, result_register, right_op);
+							if (node.node_type == Il_Sub)
+								Emit_SubSD(g.code, result_register, right_op);
+							if (node.node_type == Il_Mul)
+								Emit_MulSD(g.code, result_register, right_op);
+						}
+
+						if (allocation.spilled) {
+
+							Inst_Op spillage_value;
+							spillage_value.type = Op_Reg_Disp4;
+							spillage_value.reg_disp.r = RBP;
+
+							stack_pointer += node_type_size;
+							spillage_value.reg_disp.disp = -(i32)stack_pointer;
+
+							if (node_type_size == 4)
+								Emit_MovSS(g.code, spillage_value, result_register);
+							if (node_type_size == 8)
+								Emit_MovSD(g.code, spillage_value, result_register);
+
+							register_values[i] = spillage_value;
+						}
+						else {
+							register_values[i] = result_register;
 						}
 					}
+					else
+					{
+						if (left_op.type == Op_Reg) {
+							if (left_op.reg != result_register.reg)
+								Emit_Mov(g.code, result_register, left_op, (u32)(node_type_size * 8));
+						}
+						else {
+							Emit_Mov(g.code, result_register, left_op, (u32)(node_type_size * 8));
+						}
 
-					if (allocation.spilled) {
+						if (node.node_type == Il_Add) {
+							Emit_Add(g.code, result_register, right_op, (u32)(node_type_size * 8));
+						}
 
-						Inst_Op spillage_value;
-						spillage_value.type = Op_Reg_Disp4;
-						spillage_value.reg_disp.r = RBP;
+						if (node.node_type == Il_Sub) {
+							Emit_Sub(g.code, result_register, right_op, (u32)(node_type_size * 8));
+						}
 
-						stack_pointer += node_type_size;
-						spillage_value.reg_disp.disp = -(i32)stack_pointer;
+						if (node.node_type == Il_Mul) {
+							if (right_op.type == Op_Imm8 || right_op.type == Op_Imm16 || right_op.type == Op_Imm32) {
+								Emit_IMul3(g.code, result_register, result_register, right_op, (u32)(node_type_size * 8));
+							}
+							else {
+								Emit_IMul(g.code, result_register, right_op, (u32)(node_type_size * 8));
+							}
+						}
 
-						Emit_Mov(g.code, spillage_value, result_register, (u32)(node_type_size * 8));
+						if (allocation.spilled) {
 
-						register_values[i] = spillage_value;
-					}
-					else {
-						register_values[i] = result_register;
+							Inst_Op spillage_value;
+							spillage_value.type = Op_Reg_Disp4;
+							spillage_value.reg_disp.r = RBP;
+
+							stack_pointer += node_type_size;
+							spillage_value.reg_disp.disp = -(i32)stack_pointer;
+
+							Emit_Mov(g.code, spillage_value, result_register, (u32)(node_type_size * 8));
+
+							register_values[i] = spillage_value;
+						}
+						else {
+							register_values[i] = result_register;
+						}
 					}
 				}
 				break;
@@ -1149,13 +1424,22 @@ namespace Glass
 							}
 
 							Emit_Mov(g.code, spillage_value, tmp_reg, node_type_size * 64);
+
+							register_values[i] = spillage_value;
 						}
 						else {
+
+							if (pointer_op.reg == RBP && (pointer_op.type == Op_Reg || pointer_op.type == Op_Reg_Disp4) && (register_flags[node.load.ptr_node_idx] & VF_Address))
+							{
+								register_values[i] = pointer_op;
+							}
+							else {
+
+							}
 							Emit_Mov(g.code, tmp_reg, pointer_op, node_type_size * 8);
 							Emit_Mov(g.code, spillage_value, tmp_reg, node_type_size * 8);
+							register_values[i] = spillage_value;
 						}
-
-						register_values[i] = spillage_value;
 					}
 					else {
 
@@ -1181,16 +1465,67 @@ namespace Glass
 				break;
 				case Il_Const:
 				{
-					Inst_Op op;
+					if (node_type_flags & TN_Float_Type)
+					{
+						Reg_Allocation allocation = register_allocations[i];
 
-					op.imm32 = node.constant.as.s4;
+						Inst_Op result_op;
+						result_op.type = Op_Reg;
+						result_op.reg = allocation.allocated_register;
 
-					if (node_type_size == 4) op.type = Op_Imm32;
-					if (node_type_size == 2) op.type = Op_Imm16;
-					if (node_type_size == 1) op.type = Op_Imm8;
-					if (node_type_size > 4) op.type = Op_Imm32;
+						Inst_Op rel_disp4;
+						rel_disp4.type = Op_Disp4;
+						rel_disp4.disp_4 = (u32)g.rdata.count;
 
-					register_values[i] = op;
+						MC_Relocation relocation;
+
+						if (node_type_size == 4) {
+							float as_f32 = (float)node.constant.as.f64;
+							Write_32(g.rdata, *(u64*)&as_f32);
+							relocation.reloaction_offset = Emit_MovSS(g.code, result_op, rel_disp4);
+						}
+						else if (node_type_size == 8) {
+							Write_64(g.rdata, node.constant.as.us8);
+							relocation.reloaction_offset = Emit_MovSD(g.code, result_op, rel_disp4);
+						}
+
+						register_values[i] = result_op;
+
+						relocation.symbol_idx = g.rdata_symbol_index;
+						relocation.relocation_type = IMAGE_REL_AMD64_REL32;
+
+						Array_Add(g.code_relocations_sections, relocation);
+
+						if (allocation.spilled) {
+
+							Inst_Op spillage_value;
+							spillage_value.type = Op_Reg_Disp4;
+							spillage_value.reg_disp.r = RBP;
+
+							stack_pointer += node_type_size;
+							spillage_value.reg_disp.disp = -(i32)stack_pointer;
+
+							if (node_type_size == 4)
+								Emit_MovSS(g.code, spillage_value, register_values[i]);
+							if (node_type_size == 8)
+								Emit_MovSS(g.code, spillage_value, register_values[i]);
+
+							register_values[i] = spillage_value;
+						}
+
+					}
+					else {
+						Inst_Op op;
+
+						op.imm32 = node.constant.as.s4;
+
+						if (node_type_size == 4) op.type = Op_Imm32;
+						if (node_type_size == 2) op.type = Op_Imm16;
+						if (node_type_size == 1) op.type = Op_Imm8;
+						if (node_type_size > 4) op.type = Op_Imm32;
+
+						register_values[i] = op;
+					}
 				}
 				break;
 				case Il_Ret:
