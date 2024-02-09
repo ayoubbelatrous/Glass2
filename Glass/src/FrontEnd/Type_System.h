@@ -107,6 +107,28 @@ namespace Glass
 		std::unordered_map<u64, GS_Type*> type_lookup;
 
 		GS_Type* void_Ty = nullptr;
+
+		GS_Type* i8_Ty = nullptr;
+		GS_Type* i16_Ty = nullptr;
+		GS_Type* i32_Ty = nullptr;
+		GS_Type* i64_Ty = nullptr;
+
+		GS_Type* u8_Ty = nullptr;
+		GS_Type* u16_Ty = nullptr;
+		GS_Type* u32_Ty = nullptr;
+		GS_Type* u64_Ty = nullptr;
+
+		GS_Type* f64_Ty = nullptr;
+		GS_Type* f32_Ty = nullptr;
+
+		GS_Type* int_Ty = nullptr;
+		GS_Type* float_Ty = nullptr;
+		GS_Type* void_ptr_Ty = nullptr;
+
+		GS_Type* Array_Ty = nullptr;
+		GS_Type* Type_Ty = nullptr;
+		GS_Type* Any_Ty = nullptr;
+		GS_Type* string_Ty = nullptr;
 	};
 
 	struct GS_Struct_Data_Layout

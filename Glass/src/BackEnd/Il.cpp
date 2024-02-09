@@ -399,6 +399,9 @@ namespace Glass
 					register_buffer[i].ptr = &stack[stack_pointer];
 					stack_pointer += std::max(type_size, sizeof(Const_Union));
 					register_type_buffer[i] = TypeSystem_Get_Pointer_Type(*proc.program->type_system, register_type_buffer[i], 1);
+					if (stack_pointer > STACK_SZ * sizeof(u64)) {
+						ASSERT(nullptr, "Stack Overflow!");
+					}
 				}
 							  break;
 				case Il_Store: {

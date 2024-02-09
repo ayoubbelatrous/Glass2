@@ -116,6 +116,7 @@ namespace Glass
 
 			Data.void_tn = void_type_name_id;
 			Data.void_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.void_tn);
+			Data.void_ptr_Ty = TypeSystem_Get_Pointer_Type(Data.type_system, Data.void_Ty, 1);
 
 			Data.type_system.void_Ty = Data.void_Ty;
 
@@ -161,6 +162,27 @@ namespace Glass
 		Data.f32_tn = insert_base_type_name(String_Make("f32"), 4, 4, true, true);
 		Data.f64_tn = insert_base_type_name(String_Make("f64"), 8, 8, true, true);
 
+		Data.f32_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.f32_tn);
+		Data.f64_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.f64_tn);
+
+		Data.type_system.i8_Ty = Data.i8_Ty;
+		Data.type_system.i16_Ty = Data.i16_Ty;
+		Data.type_system.i32_Ty = Data.i32_Ty;
+		Data.type_system.i64_Ty = Data.i64_Ty;
+
+		Data.type_system.u8_Ty = Data.u8_Ty;
+		Data.type_system.u16_Ty = Data.u16_Ty;
+		Data.type_system.u32_Ty = Data.u32_Ty;
+		Data.type_system.u64_Ty = Data.u64_Ty;
+
+		Data.type_system.f64_Ty = Data.f64_Ty;
+		Data.type_system.f32_Ty = Data.f32_Ty;
+
+		Data.type_system.float_Ty = Data.float_Ty;
+		Data.type_system.int_Ty = Data.int_Ty;
+		Data.type_system.void_ptr_Ty = Data.void_ptr_Ty;
+		Data.type_system.Type_Ty = Data.Type_Ty;
+
 		auto begin = std::chrono::high_resolution_clock::now();
 
 		if (Load_Base()) {
@@ -184,6 +206,10 @@ namespace Glass
 		if (Do_CodeGen())
 			return;
 
+		Data.type_system.Array_Ty = Data.Array_Ty;
+		Data.type_system.Any_Ty = Data.Any_Ty;
+		Data.type_system.string_Ty = Data.string_Ty;
+
 		auto end = std::chrono::high_resolution_clock::now();
 
 		auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
@@ -200,15 +226,20 @@ namespace Glass
 		GS_CORE_INFO("lexing took: {} s", parse_time_f);
 		GS_CORE_INFO("parsing took: {} s", lex_time_f);
 
-		// 		auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
-		// 		GS_CORE_INFO("main returned: {}", result.us8);
+		Generate_Output();
+	}
+
+	void Front_End::Generate_Output()
+	{
+		//auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
+		//GS_CORE_INFO("main returned: {}", result.us8);
 
 		bool llvm = true;
 
 		if (llvm)
 		{
 			LLVM_Converter_Spec lc_spec;
-			lc_spec.output_path = String_Make(".bin/mc.obj");
+			lc_spec.output_path = String_Make(".bin/llvm.obj");
 
 			LLVM_Converter llvm_converter = LLVM_Converter_Make(lc_spec, &Data.il_program);
 			LLVMC_Run(llvm_converter);
@@ -216,7 +247,7 @@ namespace Glass
 		else
 		{
 			MC_Gen_Spec mc_gen_spec;
-			mc_gen_spec.output_path = String_Make(".bin/llvm.obj");
+			mc_gen_spec.output_path = String_Make(".bin/mc.obj");
 
 			MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
 			MC_Gen_Run(mc_generator);
@@ -230,6 +261,8 @@ namespace Glass
 		}
 
 		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
+
+		std::string output_exe_name = "a.exe";
 
 		Find_Result find_result = find_visual_studio_and_windows_sdk();
 
@@ -258,7 +291,7 @@ namespace Glass
 
 		std::string linker_lib_paths = fmt::format("/LIBPATH:\"{}\" /LIBPATH:\"{}\" /LIBPATH:\"{}\"", vs_lib_path.string(), um_lib_path.string(), ucrt_lib_path.string());
 
-		std::string linker_command = fmt::format("{} {} {} {} {}", msvc_linker_path.string(), linker_lib_paths, program_libraries, linker_options, linked_objects);
+		std::string linker_command = fmt::format("{} {} {} {} {} /OUT:{}", msvc_linker_path.string(), linker_lib_paths, program_libraries, linker_options, linked_objects, output_exe_name);
 
 		GS_CORE_INFO("running linker: {}", linker_command);
 
@@ -1057,7 +1090,7 @@ namespace Glass
 						ASSERT(struct_member_entity.semantic_type);
 
 						if (struct_member_entity.semantic_type->kind == Type_Dyn_Array) {
-							Array_Add(struct_type.members, Data.array_Ty);
+							Array_Add(struct_type.members, Data.Array_Ty);
 						}
 						else {
 							Array_Add(struct_type.members, struct_member_entity.semantic_type);
@@ -1084,8 +1117,13 @@ namespace Glass
 					}
 
 					if (String_Equal(String_Make("Array"), entity.semantic_name)) {
-						Data.array_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
-						ASSERT(Data.array_Ty);
+						Data.Array_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+						ASSERT(Data.Array_Ty);
+					}
+
+					if (String_Equal(String_Make("Any"), entity.semantic_name)) {
+						Data.Any_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+						ASSERT(Data.Any_Ty);
 					}
 				}
 				else if (entity.entity_type == Entity_Type::Enum_Entity) {
@@ -1250,24 +1288,33 @@ namespace Glass
 	{
 		FunctionNode* as_func_node = (FunctionNode*)function_entity.syntax_node;
 
+		function_returns = false;
+
 		File_ID current_file = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id;
 
 		Il_Proc& proc = Data.il_program.procedures[function_entity.func.proc_idx];
+
+		return_branches.count = 0;
 
 		if (as_func_node->Symbol.Symbol == "main") {
 			main_proc_idx = function_entity.func.proc_idx;
 		}
 
+		auto function_return_type = function_entity.func.signature->proc.return_type;
+
 		u64 parameters_offset = 0;
-		auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, function_entity.func.signature->proc.return_type);
+		auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, function_return_type);
 
 		if (return_type_size > 8) {
 			parameters_offset = 1;
 
-			GS_Type* return_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, function_entity.func.signature->proc.return_type, 1);
+			GS_Type* return_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, function_return_type, 1);
 			Il_IDX return_ptr_allocation = Il_Insert_Alloca(proc, return_type_pointer);
 			Il_Insert_Store(proc, return_type_pointer, return_ptr_allocation, proc.parameters[0]);
 			function_entity.func.return_data_ptr_node_idx = return_ptr_allocation;
+		}
+		else if (return_type_size != 0) {
+			function_entity.func.return_data_ptr_node_idx = Il_Insert_Alloca(proc, function_return_type);
 		}
 
 		for (size_t i = 0; i < function_entity.func.parameters.count; i++)
@@ -1307,8 +1354,35 @@ namespace Glass
 			}
 		}
 
-		//std::string printed_proc = Il_Print_Proc(proc);
-		//GS_CORE_TRACE("generated: {}", printed_proc);
+		if (!function_returns) {
+
+			if (Data.void_Ty != function_entity.func.signature->proc.return_type) {
+				Push_Error_Loc(scope_id, as_func_node, FMT("function '{}' does not return", as_func_node->Symbol.Symbol));
+				return {};
+			}
+		}
+
+		Il_IDX return_block_idx = Il_Insert_Block(proc, String_Make("final"));
+
+		for (size_t i = 0; i < return_branches.count; i++)
+		{
+			Il_Node& branch_node = proc.instruction_storage[return_branches[i]];
+			ASSERT(branch_node.node_type == Il_Branch);
+			branch_node.br.block_idx = return_block_idx;
+		}
+
+		if (return_type_size == 0) {
+			Il_Insert_Ret(proc, Data.void_Ty, -1);
+		}
+		else if (return_type_size < 8) {
+			Il_Insert_Ret(proc, function_return_type, Il_Insert_Load(proc, function_return_type, function_entity.func.return_data_ptr_node_idx));
+		}
+		else {
+			Il_Insert_Ret(proc, Data.void_Ty, -1);
+		}
+
+		std::string printed_proc = Il_Print_Proc(proc);
+		GS_CORE_TRACE("generated: {}", printed_proc);
 
 		CodeGen_Result result;
 		result.ok = true;
@@ -1327,10 +1401,15 @@ namespace Glass
 		case NodeType::Call:
 		case NodeType::Cast:
 		case NodeType::MemberAccess:
+		case NodeType::Reference:
+		case NodeType::DeReference:
 			return Expression_CodeGen((Expression*)statement, scope_id, proc);
 			break;
 		case NodeType::Return:
 		{
+			terminator_encountered = true;
+			function_returns = true;
+
 			ReturnNode* as_return = (ReturnNode*)statement;
 
 			Entity& func_entity = Data.entity_storage[Front_End_Data::Get_Func_Parent(Data, scope_id)];
@@ -1378,10 +1457,11 @@ namespace Glass
 				GS_Type* func_return_type_ptr = TypeSystem_Get_Pointer_Type(Data.type_system, func_return_type, 1);
 				Il_IDX return_data_ptr_node_idx = Il_Insert_Load(proc, func_return_type_ptr, func_entity.func.return_data_ptr_node_idx);
 				Il_Insert_Store(proc, func_return_type, return_data_ptr_node_idx, value_node_idx);
-				Il_Insert_Ret(proc, func_return_type_ptr, return_data_ptr_node_idx);
+				Array_Add(return_branches, Il_Insert_Br(proc, 0));
 			}
 			else {
-				Il_Insert_Ret(proc, func_return_type, value_node_idx);
+				Il_Insert_Store(proc, func_return_type, func_entity.func.return_data_ptr_node_idx, value_node_idx);
+				Array_Add(return_branches, Il_Insert_Br(proc, -1));
 			}
 
 			CodeGen_Result result = {};
@@ -1534,7 +1614,7 @@ namespace Glass
 
 			Il_IDX cond_block_idx = Il_Insert_Block(proc, String_Make("cond"));
 
-			CodeGen_Result condition_result = Expression_CodeGen(as_while->Condition, scope_id, proc, Data.bool_Ty);
+			CodeGen_Result condition_result = Expression_CodeGen(as_while->Condition, scope_id, proc, nullptr);
 			if (!condition_result) return {};
 
 			if (condition_result.expression_type != Data.bool_Ty) {
@@ -1554,6 +1634,14 @@ namespace Glass
 			Il_IDX body_block_idx = Il_Insert_Block(proc, String_Make("body"));
 			CodeGen_Result body_result = Statement_CodeGen(as_while->Scope, scope_id, proc);
 			if (!body_result) return {};
+
+			if (terminator_encountered)
+			{
+				terminator_encountered = false;
+			}
+			else {
+
+			}
 
 			Il_Insert_Br(proc, cond_block_idx);
 
@@ -1658,7 +1746,6 @@ namespace Glass
 				}
 
 				if (by_reference) {
-					result.lvalue = true;
 					result.code_node_id = code_location;
 					result.expression_type = identified_entity.semantic_type;
 				}
@@ -1670,6 +1757,10 @@ namespace Glass
 						if (TypeSystem_Reduce_Indirection(Data.type_system, inferred_type) == identified_entity.semantic_type->array.element_type) {
 							result.code_node_id = code_location;
 							result.expression_type = inferred_type;
+						}
+						else {
+							result.code_node_id = Il_Insert_Load(proc, identified_entity.semantic_type, code_location);
+							result.expression_type = identified_entity.semantic_type;
 						}
 					}
 					else {
@@ -1685,6 +1776,8 @@ namespace Glass
 			else {
 				ASSERT(nullptr);
 			}
+
+			result.lvalue = true;
 
 			result.ok = true;
 
@@ -2060,12 +2153,12 @@ namespace Glass
 				callee_signature = callee_result.expression_type;
 
 				if (as_call->Arguments.size() > callee_signature->proc.params.count) {
-					Push_Error_Loc(scope_id, as_call, FMT("call too few arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
+					Push_Error_Loc(scope_id, as_call, FMT("call too many arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
 					return {};
 				}
 
 				if (as_call->Arguments.size() < callee_signature->proc.params.count) {
-					Push_Error_Loc(scope_id, as_call, FMT("call too many arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
+					Push_Error_Loc(scope_id, as_call, FMT("call too few arguments (needed: {}, given: {})", callee_signature->proc.params.count, as_call->Arguments.size()));
 					return {};
 				}
 
@@ -2100,6 +2193,13 @@ namespace Glass
 
 				if (!arg_result) {
 					return {};
+				}
+
+				if (!arg_result.lvalue && by_reference) {
+					auto lvalue_alloca = Il_Insert_Alloca(proc, arg_result.expression_type);
+					Il_Insert_Store(proc, arg_result.expression_type, lvalue_alloca, arg_result.code_node_id);
+
+					arg_result.code_node_id = lvalue_alloca;
 				}
 
 				if (i < callee_signature->proc.params.count) {
@@ -2320,6 +2420,50 @@ namespace Glass
 
 			return result;
 		}
+		case NodeType::Reference:
+		{
+			RefNode* as_ref = (RefNode*)expression;
+
+			CodeGen_Result expr_result = Expression_CodeGen(as_ref->What, scope_id, proc, inferred_type, true);
+			if (!expr_result)
+				return {};
+
+			CodeGen_Result result = {};
+			result.ok = true;
+			result.code_node_id = expr_result.code_node_id;
+			result.expression_type = TypeSystem_Get_Pointer_Type(Data.type_system, expr_result.expression_type, 1);
+
+			return result;
+		}
+		break;
+		case NodeType::DeReference:
+		{
+			DeRefNode* as_de_ref = (DeRefNode*)expression;
+
+			CodeGen_Result expr_result = Expression_CodeGen(as_de_ref->What, scope_id, proc, inferred_type, false);
+			if (!expr_result)
+				return {};
+
+			if (expr_result.expression_type->kind != Type_Pointer) {
+				Push_Error_Loc(scope_id, as_de_ref->What, FMT("trying to dereference a non pointer type!"));
+				return {};
+			}
+
+			CodeGen_Result result = {};
+			result.ok = true;
+			result.expression_type = TypeSystem_Reduce_Indirection(Data.type_system, expr_result.expression_type);
+
+			if (by_reference)
+			{
+				result.code_node_id = expr_result.code_node_id;
+			}
+			else {
+				result.code_node_id = Il_Insert_Load(proc, result.expression_type, expr_result.code_node_id);
+			}
+
+			return result;
+		}
+		break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -2504,6 +2648,7 @@ namespace Glass
 		}
 		break;
 		case NodeType::TE_Pointer:
+		case NodeType::TE_Func:
 		{
 			GS_Type* evaluated_type = Evaluate_Type(expression, scope_id);
 			if (!evaluated_type)

@@ -235,12 +235,17 @@ namespace Glass
 		GS_Type* u32_Ty = nullptr;
 		GS_Type* u64_Ty = nullptr;
 
+		GS_Type* f32_Ty = nullptr;
+		GS_Type* f64_Ty = nullptr;
+
 		GS_Type* Type_Ty = nullptr;
 		GS_Type* void_Ty = nullptr;
+		GS_Type* void_ptr_Ty = nullptr;
 		GS_Type* bool_Ty = nullptr;
 
 		GS_Type* string_Ty = nullptr;
-		GS_Type* array_Ty = nullptr;
+		GS_Type* Array_Ty = nullptr;
+		GS_Type* Any_Ty = nullptr;
 
 		Il_Program il_program;
 
@@ -306,6 +311,7 @@ namespace Glass
 		Front_End(ApplicationOptions options);
 
 		void Compile();
+		void Generate_Output();
 		bool Load_Base();
 		void Load_First();
 		void Do_Load_Pass(Entity_ID entity_id);
@@ -365,5 +371,11 @@ namespace Glass
 		ApplicationOptions Options;
 
 		Il_IDX main_proc_idx;
+
+		bool function_returns = false;
+		bool terminator_encountered = false;
+
+		Array<Il_IDX> return_branches;
+		Il_IDX return_storage_node_id;
 	};
 }

@@ -1345,7 +1345,6 @@ namespace Glass
 		break;
 		case TokenType::OpenParen:
 		{
-			bool var_decl = false;
 			bool func_type = false;
 
 			//check if a function type
@@ -1359,10 +1358,6 @@ namespace Glass
 					if (At(i).Type == TokenType::CloseParen) {
 						if (At(i + 1).Type == TokenType::Colon) {
 							func_type = true;
-							if (At(i + 2).Type == TokenType::Symbol) {
-								var_decl = true;
-								func_type = false;
-							}
 						}
 						break;
 					}
@@ -1371,10 +1366,7 @@ namespace Glass
 				}
 			}
 
-			if (var_decl) {
-				return ParseVarDecl();
-			}
-			else if (func_type) {
+			if (func_type) {
 				return ParseTypeExpr();
 			}
 

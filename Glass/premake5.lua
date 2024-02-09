@@ -126,6 +126,8 @@ project "Glass"
         "LLVMXRay.lib",
         "LTO.lib",
         "Remarks.lib",
+        "LLVMX86TargetMCA.lib",
+        "LLVMTargetParser.lib",
     }
 
     defines
