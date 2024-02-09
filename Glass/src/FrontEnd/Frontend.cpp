@@ -2456,6 +2456,7 @@ namespace Glass
 			if (by_reference)
 			{
 				result.code_node_id = expr_result.code_node_id;
+				result.lvalue = true;
 			}
 			else {
 				result.code_node_id = Il_Insert_Load(proc, result.expression_type, expr_result.code_node_id);
@@ -2850,7 +2851,7 @@ namespace Glass
 		}
 		break;
 		case NodeType::TE_Pointer: {
-			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)expression;
+			PointerExpr* as_pointer = (PointerExpr*)expression;
 
 			GS_Type* pointee_result = Evaluate_Type(as_pointer->Pointee, scope_id);
 
@@ -2862,53 +2863,52 @@ namespace Glass
 		}
 								 break;
 		case NodeType::TE_Array: {
-			TypeExpressionArray* as_array = (TypeExpressionArray*)expression;
+			ArrayTypeExpr* as_array = (ArrayTypeExpr*)expression;
 
 			GS_Type* element_type = Evaluate_Type(as_array->ElementType, scope_id);
 
 			if (!element_type)
 				return nullptr;
 
-			GS_Type* generated_type = TypeSystem_Get_Dyn_Array_Type(Data.type_system, element_type);
-			return generated_type;
+			if (as_array->Size) {
+
+				Eval_Result size_eval_result = Expression_Evaluate(as_array->Size, scope_id, nullptr);
+				if (!size_eval_result)
+					return nullptr;
+
+				if (!size_eval_result.expression_type) {
+					Push_Error_Loc(scope_id, as_array->Size, "expected array type size to have an integral numeric type");
+					return nullptr;
+				}
+
+				auto array_size_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, size_eval_result.expression_type);
+
+				if (!(array_size_type_flags & TN_Numeric_Type) || (array_size_type_flags & TN_Float_Type)) {
+					Push_Error_Loc(scope_id, as_array->Size, "expected array type size to have an integral numeric type");
+					return nullptr;
+				}
+
+				if (size_eval_result.result.s8 <= 0) {
+					Push_Error_Loc(scope_id, as_array->Size, FMT("expected array type size: [{}] to be greater than zero", size_eval_result.result.s8));
+					return nullptr;
+				}
+
+				GS_Type* generated_type = TypeSystem_Get_Array_Type(Data.type_system, element_type, size_eval_result.result.s8);
+				return generated_type;
+
+			}
+			else if (as_array->Dynamic) {
+				GS_Type* generated_type = TypeSystem_Get_Dyn_Array_Type(Data.type_system, element_type);
+				return generated_type;
+			}
+			else {
+				ASSERT(nullptr);
+			}
 		}
 							   break;
-		case NodeType::ArrayAccess: {
-			ArrayAccess* as_array_access = (ArrayAccess*)expression;
-
-			GS_Type* element_type = Evaluate_Type(as_array_access->Object, scope_id);
-			if (!element_type)
-				return nullptr;
-
-			Eval_Result size_eval_result = Expression_Evaluate(as_array_access->Index, scope_id, nullptr);
-			if (!size_eval_result)
-				return nullptr;
-
-			if (!size_eval_result.expression_type) {
-				Push_Error_Loc(scope_id, as_array_access->Index, "expected array type size to have an integral numeric type");
-				return nullptr;
-			}
-
-			auto array_size_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, size_eval_result.expression_type);
-
-			if (!(array_size_type_flags & TN_Numeric_Type) || (array_size_type_flags & TN_Float_Type)) {
-				Push_Error_Loc(scope_id, as_array_access->Index, "expected array type size to have an integral numeric type");
-				return nullptr;
-			}
-
-			if (size_eval_result.result.s8 <= 0) {
-				Push_Error_Loc(scope_id, as_array_access->Index, FMT("expected array type size: [{}] to be greater than zero", size_eval_result.result.s8));
-				return nullptr;
-			}
-
-			GS_Type* generated_type = TypeSystem_Get_Array_Type(Data.type_system, element_type, size_eval_result.result.us8);
-
-			return generated_type;
-		}
-								  break;
 		case NodeType::TE_Func:
 		{
-			TypeExpressionFunc* as_func = (TypeExpressionFunc*)expression;
+			FuncExpr* as_func = (FuncExpr*)expression;
 
 #define param_array_size 128
 
@@ -3063,33 +3063,12 @@ namespace Glass
 								   break;
 		case NodeType::TE_Pointer:
 		{
-			TypeExpressionPointer* as_pointer = (TypeExpressionPointer*)expr;
+			PointerExpr* as_pointer = (PointerExpr*)expr;
 			ASSERT(as_pointer->Pointee);
 
 			Array<Entity_ID> indirect_dependencies;
 
 			if (!Do_Expression_Dependecy_Pass(scope_id, as_pointer->Pointee, indirect_dependencies, ignore_indirect)) {
-				return {};
-			}
-
-			for (size_t i = 0; i < indirect_dependencies.count; i++)
-			{
-				if (indirect_dependencies[i] != ignore_indirect) {
-					Array_Add(dependencies, indirect_dependencies[i]);
-				}
-			}
-
-			return { true };
-		}
-		break;
-		case NodeType::TE_Array:
-		{
-			TypeExpressionArray* as_array = (TypeExpressionArray*)expr;
-			ASSERT(as_array->ElementType);
-
-			Array<Entity_ID> indirect_dependencies;
-
-			if (!Do_Expression_Dependecy_Pass(scope_id, as_array->ElementType, indirect_dependencies, ignore_indirect)) {
 				return {};
 			}
 
@@ -3131,7 +3110,7 @@ namespace Glass
 		break;
 		case NodeType::TE_Func:
 		{
-			TypeExpressionFunc* as_func = (TypeExpressionFunc*)expr;
+			FuncExpr* as_func = (FuncExpr*)expr;
 
 			Array<Entity_ID> indirect_dependencies;
 
@@ -3155,6 +3134,33 @@ namespace Glass
 
 			return { true };
 		}
+		case NodeType::TE_Array:
+		{
+			ArrayTypeExpr* as_array = (ArrayTypeExpr*)expr;
+			ASSERT(as_array->ElementType);
+
+			Array<Entity_ID> indirect_dependencies;
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_array->ElementType, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			if (as_array->Size) {
+				if (!Do_Expression_Dependecy_Pass(scope_id, as_array->Size, indirect_dependencies, ignore_indirect)) {
+					return {};
+				}
+			}
+
+			for (size_t i = 0; i < indirect_dependencies.count; i++)
+			{
+				if (indirect_dependencies[i] != ignore_indirect) {
+					Array_Add(dependencies, indirect_dependencies[i]);
+				}
+			}
+
+			return { true };
+		}
+		break;
 		break;
 		default:
 			GS_ASSERT_UNIMPL();

@@ -224,19 +224,14 @@ namespace Glass
 		}
 	};
 
-
-	class TypeExpression : public Expression
-	{
-	};
-
-	class TypeExpressionFunc : public TypeExpression
+	class FuncExpr : public Expression
 	{
 	public:
 
 		Token Symbol;
 
-		std::vector<TypeExpression*> Arguments;
-		TypeExpression* ReturnType = nullptr;
+		std::vector<Expression*> Arguments;
+		Expression* ReturnType = nullptr;
 
 		virtual NodeType GetType() const override {
 			return NodeType::TE_Func;
@@ -251,30 +246,11 @@ namespace Glass
 		}
 	};
 
-	class TypeExpressionTypeName : public TypeExpression
+	class PointerExpr : public Expression
 	{
 	public:
 
-		Token Symbol;
-
-		virtual NodeType GetType() const override {
-			return NodeType::TE_TypeName;
-		}
-
-		virtual std::string ToString() const {
-			return "<" + Symbol.Symbol + ">";
-		}
-
-		virtual const Token& GetLocation() const override {
-			return Symbol;
-		}
-	};
-
-	class TypeExpressionPointer : public TypeExpression
-	{
-	public:
-
-		TypeExpression* Pointee = nullptr;
+		Expression* Pointee = nullptr;
 		u16 Indirection = 0;
 
 		virtual NodeType GetType() const override {
@@ -290,11 +266,13 @@ namespace Glass
 		}
 	};
 
-	class TypeExpressionArray : public TypeExpression
+	class ArrayTypeExpr : public Expression
 	{
 	public:
 
-		TypeExpression* ElementType;
+		Expression* Size = nullptr;
+		Expression* ElementType = nullptr;
+		bool Dynamic = false;
 
 		virtual NodeType GetType() const override {
 			return NodeType::TE_Array;
@@ -309,11 +287,11 @@ namespace Glass
 		}
 	};
 
-	class TypeExpressionDollar : public TypeExpression
+	class TypeExpressionDollar : public Expression
 	{
 	public:
 
-		TypeExpression* TypeName = nullptr;
+		Expression* Type = nullptr;
 
 		virtual NodeType GetType() const override {
 			return NodeType::TE_Dollar;
@@ -324,7 +302,7 @@ namespace Glass
 		}
 
 		virtual const Token& GetLocation() const override {
-			return TypeName->GetLocation();
+			return Type->GetLocation();
 		}
 	};
 
@@ -522,7 +500,7 @@ namespace Glass
 	public:
 
 		Token Symbol;
-		TypeExpression* Type = nullptr;
+		Expression* Type = nullptr;
 		bool Variadic = false;
 		bool PolyMorphic = false;
 
@@ -582,7 +560,7 @@ namespace Glass
 		Token DefinitionTk;
 		Token Symbol;
 
-		TypeExpression* ReturnType = nullptr;
+		Expression* ReturnType = nullptr;
 
 		bool CVariadic = false;
 
@@ -606,7 +584,7 @@ namespace Glass
 		}
 
 		Token Symbol;
-		TypeExpression* Type = nullptr;
+		Expression* Type = nullptr;
 
 		Expression* Assignment = nullptr;
 
@@ -1000,7 +978,7 @@ namespace Glass
 	public:
 
 		Expression* Expr;
-		TypeExpression* Type;
+		Expression* Type;
 
 		virtual NodeType GetType() const override
 		{

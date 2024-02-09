@@ -74,7 +74,7 @@ namespace Glass
 		case NodeType::TE_Array:
 		case NodeType::TE_Func:
 		case NodeType::TE_Dollar:
-			return CopyTypeExpr((TypeExpression*)stmt);
+			return CopyTypeExpr((Expression*)stmt);
 			break;
 		case NodeType::For:
 			return CopyFor((ForNode*)stmt);
@@ -90,10 +90,10 @@ namespace Glass
 	{
 		FunctionNode* new_func = Application::AllocateAstNode(*func);
 
-		new_func->ReturnType = (TypeExpression*)CopyStatement(func->ReturnType);
+		new_func->ReturnType = (Expression*)CopyStatement(func->ReturnType);
 		new_func->SetScope((ScopeNode*)CopyStatement(func->GetScope()));
 		new_func->SetArgList((ArgumentList*)CopyStatement(func->GetArgList()));
-		new_func->ReturnType = (TypeExpression*)CopyStatement(func->ReturnType);
+		new_func->ReturnType = (Expression*)CopyStatement(func->ReturnType);
 		return new_func;
 	}
 
@@ -114,7 +114,7 @@ namespace Glass
 	Statement* ASTCopier::CopyArgument(ArgumentNode* argument)
 	{
 		ArgumentNode* copy = AST(*argument);
-		copy->Type = (TypeExpression*)CopyStatement(argument->Type);
+		copy->Type = (Expression*)CopyStatement(argument->Type);
 		return copy;
 	}
 
@@ -138,7 +138,7 @@ namespace Glass
 	{
 		VariableNode* new_var = Application::AllocateAstNode(*var);
 
-		new_var->Type = (TypeExpression*)CopyStatement(var->Type);
+		new_var->Type = (Expression*)CopyStatement(var->Type);
 		new_var->Assignment = (Expression*)CopyStatement(var->Assignment);
 
 		return new_var;
@@ -298,55 +298,56 @@ namespace Glass
 		return new_expr;
 	}
 
-	Statement* ASTCopier::CopyTypeExpr(TypeExpression* expr)
+	Statement* ASTCopier::CopyTypeExpr(Expression* expr)
 	{
-		NodeType node_type = expr->GetType();
-
-		switch (node_type) {
-		case NodeType::TE_TypeName: {
-			return AST(*(TypeExpressionTypeName*)expr);
-		}
-								  break;
-		case NodeType::TE_Dollar: {
-
-			TypeExpressionDollar* dollar = (TypeExpressionDollar*)expr;
-			auto copy = AST(*dollar);
-			copy->TypeName = (TypeExpression*)CopyStatement(dollar->TypeName);
-			return copy;
-		}
-								break;
-		case NodeType::TE_Pointer: {
-
-			TypeExpressionPointer* pointer = (TypeExpressionPointer*)expr;
-			auto copy = AST(*pointer);
-			copy->Pointee = (TypeExpression*)CopyStatement(pointer->Pointee);
-			return copy;
-		}
-								 break;
-		case NodeType::TE_Array: {
-
-			TypeExpressionArray* array = (TypeExpressionArray*)expr;
-			auto copy = AST(*array);
-			copy->ElementType = (TypeExpression*)CopyStatement(array->ElementType);
-			return copy;
-		}
-							   break;
-		case NodeType::TE_Func: {
-
-			TypeExpressionFunc* func = (TypeExpressionFunc*)expr;
-			auto copy = AST(*func);
-
-			u32 i = 0;
-			for (auto arg : func->Arguments) {
-				func->Arguments[i] = (TypeExpression*)CopyStatement(arg);
-				i++;
-			}
-
-			copy->ReturnType = (TypeExpression*)CopyStatement(func->ReturnType);
-			return copy;
-		}
-							  break;
-		}
+		// 	{
+		// 		NodeType node_type = expr->GetType();
+		// 
+		// 		switch (node_type) {
+		// 		case NodeType::TE_TypeName: {
+		// 			return AST(*(ExpressionTypeName*)expr);
+		// 		}
+		// 								  break;
+		// 		case NodeType::TE_Dollar: {
+		// 
+		// 			ExpressionDollar* dollar = (TypeExpressionDollar*)expr;
+		// 			auto copy = AST(*dollar);
+		// 			copy->TypeName = (TypeExpression*)CopyStatement(dollar->TypeName);
+		// 			return copy;
+		// 		}
+		// 								break;
+		// 		case NodeType::TE_Pointer: {
+		// 
+		// 			PointerExpr* pointer = (PointerExpr*)expr;
+		// 			auto copy = AST(*pointer);
+		// 			copy->Pointee = (TypeExpression*)CopyStatement(pointer->Pointee);
+		// 			return copy;
+		// 		}
+		// 								 break;
+		// 		case NodeType::TE_Array: {
+		// 
+		// 			ArrayTypeExpr* array = (ArrayTypeExpr*)expr;
+		// 			auto copy = AST(*array);
+		// 			copy->ElementType = (TypeExpression*)CopyStatement(array->ElementType);
+		// 			return copy;
+		// 		}
+		// 							   break;
+		// 		case NodeType::TE_Func: {
+		// 
+		// 			FuncExpr* func = (FuncExpr*)expr;
+		// 			auto copy = AST(*func);
+		// 
+		// 			u32 i = 0;
+		// 			for (auto arg : func->Arguments) {
+		// 				func->Arguments[i] = (TypeExpression*)CopyStatement(arg);
+		// 				i++;
+		// 			}
+		// 
+		// 			copy->ReturnType = (TypeExpression*)CopyStatement(func->ReturnType);
+		// 			return copy;
+		// 		}
+		// 							  break;
+		// 		}
 
 		GS_CORE_ASSERT(0);
 		return nullptr;
@@ -381,7 +382,7 @@ namespace Glass
 	{
 		CastNode* new_cast = AST(CastNode());
 		new_cast->Expr = (Expression*)CopyExpression(cast->Expr);
-		new_cast->Type = (TypeExpression*)CopyTypeExpr(cast->Type);
+		new_cast->Type = (Expression*)CopyTypeExpr(cast->Type);
 		return new_cast;
 	}
 

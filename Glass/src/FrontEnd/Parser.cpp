@@ -108,14 +108,16 @@ namespace Glass
 		Top_Level_Expression = true;
 		auto expr = ParseExpression();
 
-		if (expr->GetType() == NodeType::Identifier ||
-			expr->GetType() == NodeType::TE_TypeName ||
-			expr->GetType() == NodeType::TE_Pointer ||
-			expr->GetType() == NodeType::TE_Array ||
-			expr->GetType() == NodeType::ArrayAccess ||
-			expr->GetType() == NodeType::TE_Func) {
-			if (At().Type == TokenType::Symbol) {
-				return ParseVarDecl(expr);
+		if (expr) {
+			if (expr->GetType() == NodeType::Identifier ||
+				expr->GetType() == NodeType::TE_TypeName ||
+				expr->GetType() == NodeType::TE_Pointer ||
+				expr->GetType() == NodeType::TE_Array ||
+				expr->GetType() == NodeType::ArrayAccess ||
+				expr->GetType() == NodeType::TE_Func) {
+				if (At().Type == TokenType::Symbol) {
+					return ParseVarDecl(expr);
+				}
 			}
 		}
 
@@ -336,157 +338,20 @@ namespace Glass
 		return Application::AllocateAstNode(Node);
 	}
 
-	Statement* Parser::ParseTypeExpr(Expression* type /*= nullptr*/)
-	{
-		TypeExpression* current = (TypeExpression*)type;
-
-		while (true) {
-
-			TokenType tk_type = At().Type;
-
-			if (tk_type == TokenType::OpenParen) {
-				current = (TypeExpression*)ParseFuncTypeExpr();
-				continue;
-			}
-
-			if (tk_type == TokenType::Symbol && !current) {
-				TypeExpressionTypeName type_name;
-				type_name.Symbol = Consume();
-				current = AST(type_name);
-				continue;
-			}
-
-			if (tk_type == TokenType::Multiply) {
-				TypeExpressionPointer pointer;
-				pointer.Pointee = current;
-
-				while (At().Type == TokenType::Multiply) {
-					Consume();
-					pointer.Indirection++;
-				}
-
-				current = AST(pointer);
-				continue;
-			}
-
-			if (tk_type == TokenType::OpenBracket) {
-
-				Consume();
-
-				if (At().Type == TokenType::Period) {
-
-					TypeExpressionArray array;
-					array.ElementType = current;
-
-					Consume();
-					if (ExpectedToken(TokenType::Period)) {
-						Abort("Expected another '.' in array type expression, Instead Got: ");
-					}
-					Consume();
-
-					if (ExpectedToken(TokenType::CloseBracket)) {
-						Abort("Expected ']' in array type expression, Instead Got: ");
-					}
-					Consume();
-
-					current = AST(array);
-				}
-				else {
-
-					ArrayAccess array_access_expr;
-					array_access_expr.Object = current;
-					array_access_expr.Index = ParseExpression();
-
-					if (!array_access_expr.Index) {
-						Abort("Expected expression, Instead Got: ");
-					}
-
-					if (ExpectedToken(TokenType::CloseBracket)) {
-						Abort("Expected ']' in array type expression, Instead Got: ");
-					}
-
-					Consume();
-
-					current = (TypeExpression*)AST(array_access_expr);
-				}
-
-				continue;
-			}
-
-			if (tk_type == TokenType::Dollar) {
-
-				if (current) {
-					return current;
-				}
-
-				Consume();
-
-				if (At().Type == TokenType::Symbol) {
-
-					auto dollar = AST(TypeExpressionDollar());
-
-					TypeExpressionTypeName type_name;
-					type_name.Symbol = Consume();
-
-					dollar->TypeName = IR(type_name);
-					current = dollar;
-				}
-				else {
-					Abort("Expected name after '$', Instead Got:");
-				}
-
-				continue;
-			}
-
-			break;
-		}
-
-		return current;
-	}
-
 	Statement* Parser::ParseFuncTypeExpr()
 	{
-		TypeExpressionFunc Node;
-
-		Consume();
-
-		while (At().Type != TokenType::CloseParen) {
-
-			auto argument = ParseTypeExpr();
-
-			Node.Arguments.push_back((TypeExpression*)argument);
-
-			if (At().Type != TokenType::CloseParen) {
-				if (ExpectedToken(TokenType::Comma)) {
-					Abort("Expected a ',' inside function type () after argument, Instead Got: ");
-				}
-				Consume();
-			}
-		}
-
-		if (ExpectedToken(TokenType::CloseParen)) {
-			Abort("Expected ')' at the ending of a function type expression, Instead Got: ");
-		}
-
-		Consume();
-
-		if (At().Type == TokenType::Colon) {
-			Consume();
-			auto return_type = ParseTypeExpr();
-			Node.ReturnType = (TypeExpression*)return_type;
-		}
-
-		return AST(Node);
+		ASSERT(nullptr);
+		return nullptr;
 	}
 
 	Statement* Parser::ParseVarDecl(Expression* type /*= nullptr*/)
 	{
 		VariableNode Node;
 		if (!type) {
-			Node.Type = (TypeExpression*)ParseTypeExpr();
+			ASSERT(nullptr);
 		}
 		else {
-			Node.Type = (TypeExpression*)type;
+			Node.Type = type;
 		}
 
 		if (ExpectedToken(TokenType::Symbol)) {
@@ -613,7 +478,11 @@ namespace Glass
 		Consume();
 
 		while (At().Type != TokenType::CloseCurly) {
-			Node.m_Members.push_back((VariableNode*)ParseVarDecl());
+
+			Top_Level_Expression = true;
+			auto member = ParseVarDecl(ParseExpression());
+
+			Node.m_Members.push_back((VariableNode*)member);
 			if (ExpectedToken(TokenType::SemiColon)) {
 				Abort("Expected a ';' after struct member declaration, Instead Got: ");
 			}
@@ -717,7 +586,8 @@ namespace Glass
 	Statement* Parser::ParseArgument()
 	{
 		ArgumentNode Node;
-		Node.Type = (TypeExpression*)ParseTypeExpr();
+		Top_Level_Expression = true;
+		Node.Type = ParseExpression();
 
 		if (At().Type == TokenType::Dollar) {
 			Consume();
@@ -809,7 +679,8 @@ namespace Glass
 		if (At().Type == TokenType::Colon) {
 			Consume();
 
-			Node.ReturnType = (TypeExpression*)ParseTypeExpr();
+			Top_Level_Expression = true;
+			Node.ReturnType = ParseExpression();
 
 			if (!Node.ReturnType) {
 				Abort("Expected a type after ':' in function definition, Instead Got: ");
@@ -850,14 +721,14 @@ namespace Glass
 
 	Expression* Parser::ParseRangeExpr()
 	{
-		Expression* begin = ParsePointerExpr();
+		Expression* begin = ParseAssignExpr();
 
 		while (At().Type == TokenType::Period && At(1).Type == TokenType::Period) {
 
 			Token period = Consume();
 			period = Consume();
 
-			Expression* end = ParsePointerExpr();
+			Expression* end = ParseAssignExpr();
 
 			RangeNode Node;
 
@@ -865,18 +736,6 @@ namespace Glass
 			Node.End = end;
 
 			begin = Application::AllocateAstNode(Node);
-		}
-
-		return begin;
-	}
-
-
-	Expression* Parser::ParsePointerExpr()
-	{
-		Expression* begin = ParseAssignExpr();
-
-		while (At().Type == TokenType::Multiply || (At().Type == TokenType::OpenBracket && At(1).Type == TokenType::Period)) {
-			begin = (Expression*)ParseTypeExpr(begin);
 		}
 
 		return begin;
@@ -1092,15 +951,10 @@ namespace Glass
 			return false;
 		};
 
-		while (is_multiplicative_op(GetOperator(At())) && !Top_Level_Expression) {
+		while (is_multiplicative_op(GetOperator(At()))) {
 
 			Token Op = Consume();
 			auto right = ParseNegateExpr();
-
-			if (!right) {
-				m_Location--;
-				return left;
-			}
 
 			BinaryExpression binExpr;
 
@@ -1155,7 +1009,7 @@ namespace Glass
 
 			Consume();
 
-			right = ParseDeRefExpr();
+			right = ParsePointerExpr();
 
 			RefNode Node;
 			Node.What = right;
@@ -1165,6 +1019,128 @@ namespace Glass
 			}
 
 			right = (Expression*)AST(Node);
+		}
+		else {
+			right = ParsePointerExpr();
+		}
+
+		return right;
+	}
+
+	Expression* Parser::ParsePointerExpr()
+	{
+		Expression* right = nullptr;
+
+		if (At().Type == TokenType::Multiply || At().Type == TokenType::OpenBracket || At().Type == TokenType::OpenParen) {
+
+			if (At().Type == TokenType::Multiply) {
+
+				Consume();
+
+				right = ParseExpression();
+
+				PointerExpr Node;
+				Node.Indirection = 1;
+				Node.Pointee = right;
+
+				right = (Expression*)AST(Node);
+			}
+			else if (At().Type == TokenType::OpenBracket) {
+
+				Consume();
+
+				bool dynamic = false;
+
+				if (At().Type == TokenType::Period) {
+					Consume();
+
+					if (At().Type == TokenType::Period) {
+						Consume();
+						dynamic = true;
+					}
+				}
+
+				if (!dynamic) {
+					right = ParseExpression();
+				}
+
+				if (ExpectedToken(TokenType::CloseBracket)) {
+					Abort("expected closing bracket ']' while parsing array type expression!");
+				}
+
+				Consume();
+
+				ArrayTypeExpr Node;
+				Node.ElementType = ParseExpression();
+				Node.Size = right;
+				Node.Dynamic = dynamic;
+
+				right = (Expression*)AST(Node);
+			}
+			else {
+
+				int i = 1;
+				while (At(i).Type != TokenType::E_OF) {
+					if (At(i).Type == TokenType::CloseParen) {
+						if (At(i + 1).Type != TokenType::Colon) {
+							return ParseDeRefExpr();
+						}
+						else {
+							break;
+						}
+					}
+					i++;
+				}
+
+				Consume();
+
+				FuncExpr Node;
+
+				while (At().Type != TokenType::E_OF) {
+
+					auto expr = ParseExpression();
+
+					if (!expr && At().Type != TokenType::CloseParen) {
+						Abort("expected parameter type while parsing function type parameter list!, instead got:");
+					}
+
+					if (!expr && At().Type == TokenType::CloseParen) {
+						Consume();
+						break;
+					}
+
+					Node.Arguments.push_back(expr);
+
+					if (At().Type == TokenType::CloseParen) {
+						Consume();
+						break;
+					}
+
+					if (ExpectedToken(TokenType::Comma)) {
+						Abort("expected comma ',' while parsing function type expression!, instead got:");
+					}
+
+					Consume();
+				}
+
+				if (ExpectedToken(TokenType::Colon)) {
+					Abort("expected colon ':' while parsing function type expression!, instead got:");
+				}
+
+				Consume();
+
+				auto return_type_expr = ParseExpression();
+
+				if (!return_type_expr) {
+					Abort("expected return type while parsing function type!, instead got:");
+				}
+
+				Node.ReturnType = return_type_expr;
+
+				right = (Expression*)AST(Node);
+
+				i++;
+			}
 		}
 		else {
 			right = ParseDeRefExpr();
@@ -1177,7 +1153,7 @@ namespace Glass
 	{
 		Expression* right = nullptr;
 
-		if (At().Type == TokenType::Multiply) {
+		if (At().Type == TokenType::OpenAngular) {
 
 			Consume();
 
@@ -1345,31 +1321,6 @@ namespace Glass
 		break;
 		case TokenType::OpenParen:
 		{
-			bool func_type = false;
-
-			//check if a function type
-			if (At().Type == TokenType::OpenParen) {
-
-				u32 i = 1;
-				while (true) {
-					if (At(i).Type == TokenType::OpenParen) {
-						break;
-					}
-					if (At(i).Type == TokenType::CloseParen) {
-						if (At(i + 1).Type == TokenType::Colon) {
-							func_type = true;
-						}
-						break;
-					}
-
-					i++;
-				}
-			}
-
-			if (func_type) {
-				return ParseTypeExpr();
-			}
-
 			Consume();
 			auto expr = ParseExpression();
 
@@ -1516,7 +1467,7 @@ namespace Glass
 
 		Consume();
 
-		Node.Type = (TypeExpression*)ParseTypeExpr();
+		Node.Type = ParseExpression();
 
 		if (ExpectedToken(TokenType::CloseParen)) {
 			Abort("Expected '(' on cast expression");

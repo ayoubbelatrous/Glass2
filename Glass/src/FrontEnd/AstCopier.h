@@ -33,7 +33,7 @@ namespace Glass
 		Statement* CopyBinaryExpression(BinaryExpression* binExpr);
 		Statement* CopyMemberAccess(MemberAccess* expr);
 		Statement* CopyCallExpr(FunctionCall* expr);
-		Statement* CopyTypeExpr(TypeExpression* expr);
+		Statement* CopyTypeExpr(Expression* expr);
 		Statement* CopyArrayAccess(ArrayAccess* expr);
 
 		Statement* CopyRange(RangeNode* expr);

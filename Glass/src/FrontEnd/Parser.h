@@ -26,7 +26,6 @@ namespace Glass
 		Statement* ParseWhile();
 		Statement* ParseFor();
 
-		Statement* ParseTypeExpr(Expression* type = nullptr);
 		Statement* ParseFuncTypeExpr();
 
 		Statement* ParseScope();
