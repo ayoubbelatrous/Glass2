@@ -77,7 +77,7 @@ namespace Glass
 			type_name_entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, type_name_id);
 			type_name_entity.semantic_type = Data.Type_Ty;
 
-			Insert_Entity(type_name_entity, Data.global_scope_entity);
+			Data.typename_to_entity_id[type_name_id] = Insert_Entity(type_name_entity, Data.global_scope_entity);
 
 			return type_name_id;
 		};
@@ -91,6 +91,8 @@ namespace Glass
 
 			Type_Name_ID Type_type_name_id = TypeSystem_Insert_TypeName(Data.type_system, tn_Type);
 
+			Data.Type_tn = Type_type_name_id;
+
 			Data.Type_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Type_type_name_id);
 
 			Entity Type_type_name_entity = Create_TypeName_Entity(tn_Type.name, { 0,0 }, -1);
@@ -100,7 +102,7 @@ namespace Glass
 			Type_type_name_entity.semantic_type = Data.Type_Ty;
 			Type_type_name_entity.constant_value.type = Data.Type_Ty;
 
-			Insert_Entity(Type_type_name_entity, Data.global_scope_entity);
+			Data.typename_to_entity_id[Type_type_name_id] = Insert_Entity(Type_type_name_entity, Data.global_scope_entity);
 
 			Data.Type_tn = Type_type_name_id;
 		}
@@ -127,7 +129,7 @@ namespace Glass
 			void_type_name_entity.semantic_type = Data.Type_Ty;
 			void_type_name_entity.constant_value.type = Data.void_Ty;
 
-			Insert_Entity(void_type_name_entity, Data.global_scope_entity);
+			Data.typename_to_entity_id[void_type_name_id] = Insert_Entity(void_type_name_entity, Data.global_scope_entity);
 		}
 
 		Data.bool_tn = insert_base_type_name(String_Make("bool"), 1, 1, true, false, false, true);
@@ -191,6 +193,52 @@ namespace Glass
 
 		Load_First();
 
+		{
+			Il_Global struct_member_typeinfo_global;
+			struct_member_typeinfo_global.type = Data.void_Ty;
+			struct_member_typeinfo_global.name = String_Make("__TypeInfo_Members_Array__");
+			struct_member_typeinfo_global_idx = Il_Insert_Global(Data.il_program, struct_member_typeinfo_global);
+
+			Il_Global type_info_table_global;
+			type_info_table_global.type = Data.void_Ty;
+			type_info_table_global.name = String_Make("__TypeInfo_Table__");
+			global_type_info_table_idx = Il_Insert_Global(Data.il_program, type_info_table_global);
+
+			GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
+			ASSERT(c_str_type);
+
+			GS_Struct te_struct;
+
+			Type_Name struct_type_name;
+			struct_type_name.name = String_Make("TypeInfoEntry");
+			struct_type_name.flags = TN_Struct_Type;
+			struct_type_name.size = 64;
+			struct_type_name.alignment = 0;
+
+			auto te_type_name_id = TypeSystem_Insert_TypeName_Struct(Data.type_system, struct_type_name, te_struct);
+			te_Ty = TypeSystem_Get_Basic_Type(Data.type_system, te_type_name_id);
+
+			Data.typename_to_entity_id[te_type_name_id] = Entity_Null;
+
+#define TE_MEM_COUNT 8
+
+			for (size_t i = 0; i < TE_MEM_COUNT; i++)
+			{
+				Array_Add(te_struct.members, Data.u64_Ty);
+				Array_Add(te_struct.offsets, (u64)-1);
+			}
+
+			GS_Struct_Data_Layout te_data_layout = TypeSystem_Struct_Compute_Align_Size_Offsets(Data.type_system, te_struct.members);
+
+			for (size_t i = 0; i < te_struct.offsets.count; i++)
+			{
+				te_struct.offsets[i] = te_data_layout.offsets[i];
+			}
+
+			Data.type_system.type_name_storage[te_type_name_id].size = te_data_layout.size;
+			Data.type_system.type_name_storage[te_type_name_id].alignment = te_data_layout.alignment;
+			Data.type_system.struct_storage[Data.type_system.type_name_storage[te_type_name_id].struct_id] = te_struct;
+		}
 
 		if (Do_Tl_Definition_Passes()) {
 			return;
@@ -205,6 +253,12 @@ namespace Glass
 
 		if (Do_CodeGen())
 			return;
+
+		if (print_il)
+		{
+			std::ofstream il_file(".bin/program.il");
+			il_file << printed_il_stream.str();
+		}
 
 		Data.type_system.Array_Ty = Data.Array_Ty;
 		Data.type_system.Any_Ty = Data.Any_Ty;
@@ -222,9 +276,13 @@ namespace Glass
 		double lex_time_f = Data.lex_time_micro_seconds;
 		lex_time_f /= 1000000.0;
 
+		double search_time_f = Data.entity_search_time;
+		search_time_f /= 1000000000.0;
+
 		GS_CORE_INFO("frontend took: {} s", front_end_time_f - (parse_time_f + lex_time_f));
 		GS_CORE_INFO("lexing took: {} s", parse_time_f);
 		GS_CORE_INFO("parsing took: {} s", lex_time_f);
+		GS_CORE_INFO("enitity search took: {} s", search_time_f);
 
 		Generate_Output();
 	}
@@ -242,7 +300,15 @@ namespace Glass
 			lc_spec.output_path = String_Make(".bin/llvm.obj");
 
 			LLVM_Converter llvm_converter = LLVM_Converter_Make(lc_spec, &Data.il_program);
+			auto begin = std::chrono::high_resolution_clock::now();
 			LLVMC_Run(llvm_converter);
+			auto end = std::chrono::high_resolution_clock::now();
+
+			auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+			double llvm_time_f = microseconds;
+			llvm_time_f /= 1000000.0;
+
+			GS_CORE_INFO("llvm took: {}", llvm_time_f);
 		}
 		else
 		{
@@ -1080,6 +1146,8 @@ namespace Glass
 
 					entity.flags &= ~EF_InComplete;
 
+					Data.typename_to_entity_id[entity.struct_entity.type_name_id] = i;
+
 					for (size_t i = 0; i < entity.children.count; i++)
 					{
 						Entity& struct_member_entity = Data.entity_storage[entity.children[i]];
@@ -1125,6 +1193,13 @@ namespace Glass
 						Data.Any_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
 						ASSERT(Data.Any_Ty);
 					}
+
+					if (String_Equal(String_Make("TypeInfo"), entity.semantic_name)) {
+						Data.TypeInfo_tn = entity.struct_entity.type_name_id;
+						Data.TypeInfo_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.TypeInfo_tn);
+						Data.TypeInfo_Ptr_Ty = TypeSystem_Get_Pointer_Type(Data.type_system, Data.TypeInfo_Ty, 1);
+						ASSERT(Data.Any_Ty);
+					}
 				}
 				else if (entity.entity_type == Entity_Type::Enum_Entity) {
 
@@ -1139,6 +1214,8 @@ namespace Glass
 					entity.enum_entity.type_name_id = TypeSystem_Insert_TypeName(Data.type_system, enum_type_name);
 					entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
 					entity.flags &= ~EF_InComplete;
+
+					Data.typename_to_entity_id[entity.enum_entity.type_name_id] = i;
 
 					Const_Union next_enum_value = { 0 };
 
@@ -1191,11 +1268,10 @@ namespace Glass
 						ASSERT(as_arg->Type);
 
 						GS_Type* argument_type = Evaluate_Type(as_arg->Type, entity.parent);
-						ASSERT(argument_type);
+						if (!argument_type) break;
 
 						entity.func.parameters[i].param_type = argument_type;
 						Array_Add(param_types, argument_type);
-
 					}
 
 					GS_Type* signature = TypeSystem_Get_Proc_Type(Data.type_system, return_type, param_types);
@@ -1273,6 +1349,210 @@ namespace Glass
 				}
 			}
 		}
+
+		if (Generate_TypeInfoTable()) {
+			return true;
+		}
+
+		return false;
+	}
+
+	bool Front_End::Generate_TypeInfoTable()
+	{
+		GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
+		ASSERT(c_str_type);
+
+		Array<GS_Type> type_storage = Data.type_system.type_storage;
+
+		u64 entry_count = Data.type_system.type_storage.count;
+
+		auto table_array_ty = TypeSystem_Get_Array_Type(Data.type_system, te_Ty, entry_count);
+
+		enum TypeInfo_Entry_Kind
+		{
+			TEK_BASIC = 1,
+			TEK_NUMERIC = 2,
+			TEK_STRUCT = 3,
+			TEK_STRUCT_MEMBER = 4,
+		};
+
+		enum TypeInfo_Flags {
+			TEF_BASE_TYPE = BIT(0),
+			TEF_SIGNED = BIT(1),
+			TEF_FLOAT = BIT(2),
+		};
+
+		auto Type_Idx = [&](GS_Type* t) {
+			return TypeSystem_Get_Type_Index(Data.type_system, t);
+		};
+
+		auto Type_Size = [&](GS_Type* t) {
+			return TypeSystem_Get_Type_Size(Data.type_system, t);
+		};
+
+		auto Type_Align = [&](GS_Type* t) {
+			return TypeSystem_Get_Type_Alignment(Data.type_system, t);
+		};
+
+		auto Type_Flags = [&](GS_Type* t) {
+			return TypeSystem_Get_Type_Flags(Data.type_system, t);
+		};
+
+		u64 members_array_size = 0;
+
+		Array<Il_Node> table_initializer;
+		Array<Il_IDX> table_array_values;
+
+		Array<Il_Node> members_array_initializer;
+		Array<Il_IDX> members_array_values;
+
+		for (u64 i = 0; i < entry_count; i++)
+		{
+			Array<Il_IDX> te_member_values;
+
+			GS_Type* entry_type = &type_storage[i];
+
+			u64 type_info_kind = -1;
+			String type_info_name = TypeSystem_Print_Type(Data.type_system, entry_type);
+			u64	type_info_flags = 0;
+			u64	type_info_size = Type_Size(entry_type);
+			u64	type_info_alignment = Type_Align(entry_type);
+
+			auto type_flags = Type_Flags(entry_type);
+
+			if (type_flags & TN_Base_Type) {
+				type_info_flags &= TEF_BASE_TYPE;
+			}
+
+			if (type_flags & TN_Float_Type) {
+				type_info_flags &= TEF_FLOAT;
+			}
+
+			if (type_flags & ~TN_Unsigned_Type) {
+				type_info_flags &= TEF_SIGNED;
+			}
+
+			if (entry_type->kind == Type_Basic) {
+				if (type_flags & TN_Struct_Type) {
+					type_info_kind = TEK_STRUCT;
+				}
+				else if (type_flags & TN_Numeric_Type) {
+					type_info_kind = TEK_NUMERIC;
+				}
+				else {
+					type_info_kind = TEK_BASIC;
+				}
+			}
+
+			//Kind
+			Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+			Array_Add(table_initializer, Il_Make_Constant((void*)type_info_kind, Type_Idx(Data.i64_Ty)));
+
+			//STRING name
+			Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+			Array_Add(table_initializer, Il_Make_Constant((void*)type_info_name.count, Type_Idx(Data.i64_Ty)));
+
+			Array_Add(table_initializer, Il_Make_String(type_info_name, Type_Idx(c_str_type)));
+			Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+			Array_Add(table_initializer, Il_Make_Cast(Il_Cast_Ptr2Int, Type_Idx(Data.u64_Ty), Type_Idx(c_str_type), (Il_IDX)table_initializer.count - 1));
+
+			//u64	FLAGS
+			Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+			Array_Add(table_initializer, Il_Make_Constant((void*)type_info_flags, Type_Idx(Data.i64_Ty)));
+
+			if (type_info_kind == TEK_BASIC || type_info_kind == TEK_STRUCT || type_info_kind == TEK_NUMERIC)
+			{
+				u32 size_alignemnt[2] = { 0 };
+
+				size_alignemnt[0] = type_info_size;
+				size_alignemnt[1] = type_info_alignment;
+				//u64	SIZE/Alignment
+				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+				Array_Add(table_initializer, Il_Make_Constant((void*)*(u64*)&size_alignemnt, Type_Idx(Data.i64_Ty)));
+			}
+
+			if (type_info_kind == TEK_STRUCT) {
+
+				auto& type_name = Data.type_system.type_name_storage[entry_type->basic.type_name_id];
+				GS_Struct& struct_type = Data.type_system.struct_storage[type_name.struct_id];
+
+				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+				Array_Add(table_initializer, Il_Make_Constant((void*)struct_type.members.count, Type_Idx(Data.i64_Ty)));
+
+				Array_Add(table_initializer, Il_Make_Global_Address(struct_member_typeinfo_global_idx, Type_Idx(te_Ty)));
+				Array_Add(table_initializer, Il_Make_Constant((void*)members_array_size, Type_Idx(Data.i64_Ty)));
+				Array_Add(table_initializer, Il_Make_AEP(Type_Idx(te_Ty), (Il_IDX)table_initializer.count - 2, (Il_IDX)table_initializer.count - 1));
+				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+				Array_Add(table_initializer, Il_Make_Cast(Il_Cast_Ptr2Int, Type_Idx(Data.u64_Ty), Type_Idx(c_str_type), (Il_IDX)table_initializer.count - 1));
+
+				ASSERT(entry_type->kind == Type_Basic);
+				Entity_ID struct_entity_id = Data.typename_to_entity_id.at(entry_type->basic.type_name_id);
+
+				if (struct_entity_id != Entity_Null) {
+
+					Entity& struct_entity = Data.entity_storage[struct_entity_id];
+
+					for (size_t j = 0; j < struct_entity.children.count; j++)
+					{
+						Entity_ID member_entity_id = struct_entity.children[j];
+						Entity& member_entity = Data.entity_storage[member_entity_id];
+
+						if (member_entity.entity_type == Entity_Type::Struct_Member_Entity) {
+
+							Array<Il_IDX> member_te_member_values;
+
+							//Kind
+							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Constant((void*)TEK_STRUCT_MEMBER, Type_Idx(Data.i64_Ty)));
+
+							//STRING name
+							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Constant((void*)member_entity.semantic_name.count, Type_Idx(Data.i64_Ty)));
+
+							Array_Add(members_array_initializer, Il_Make_String(member_entity.semantic_name, Type_Idx(c_str_type)));
+							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Cast(Il_Cast_Ptr2Int, Type_Idx(Data.u64_Ty), Type_Idx(c_str_type), (Il_IDX)members_array_initializer.count - 1));
+
+							//u64	Type
+							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Constant((void*)Type_Idx(member_entity.semantic_type), Type_Idx(Data.i64_Ty)));
+
+							//int	Offset
+							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Constant((void*)struct_type.offsets[j], Type_Idx(Data.i64_Ty)));
+
+							Array_Add(members_array_values, (Il_IDX)members_array_initializer.count);
+							Array_Add(members_array_initializer, Il_Make_Struct_Init(Type_Idx(te_Ty), member_te_member_values));
+							members_array_size++;
+						}
+					}
+				}
+			}
+
+			for (size_t i = 0; i < (TE_MEM_COUNT - te_member_values.count) + 1; i++)
+			{
+				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+				Array_Add(table_initializer, Il_Make_Constant((void*)0, Type_Idx(Data.i64_Ty)));
+			}
+
+			Array_Add(table_array_values, (Il_IDX)table_initializer.count);
+			Array_Add(table_initializer, Il_Make_Struct_Init(Type_Idx(te_Ty), te_member_values));
+		}
+
+		Array_Add(table_initializer, Il_Make_Array_Init(Type_Idx(table_array_ty), table_array_values));
+
+		Il_Global& table_global = Data.il_program.globals[global_type_info_table_idx];
+		table_global.initializer_storage = table_initializer;
+		table_global.initializer = table_initializer.count - 1;
+		table_global.type = table_array_ty;
+
+		auto members_array_ty = TypeSystem_Get_Array_Type(Data.type_system, te_Ty, members_array_size);
+		Array_Add(members_array_initializer, Il_Make_Array_Init(Type_Idx(members_array_ty), members_array_values));
+
+		Il_Global& members_array_global = Data.il_program.globals[struct_member_typeinfo_global_idx];
+		members_array_global.type = members_array_ty;
+		members_array_global.initializer_storage = members_array_initializer;
+		members_array_global.initializer = members_array_initializer.count - 1;
 
 		return false;
 	}
@@ -1374,7 +1654,7 @@ namespace Glass
 		if (return_type_size == 0) {
 			Il_Insert_Ret(proc, Data.void_Ty, -1);
 		}
-		else if (return_type_size < 8) {
+		else if (return_type_size <= 8) {
 			Il_Insert_Ret(proc, function_return_type, Il_Insert_Load(proc, function_return_type, function_entity.func.return_data_ptr_node_idx));
 		}
 		else {
@@ -1382,7 +1662,11 @@ namespace Glass
 		}
 
 		std::string printed_proc = Il_Print_Proc(proc);
-		GS_CORE_TRACE("generated: {}", printed_proc);
+
+		if (print_il)
+			printed_il_stream << "\n" << printed_proc << "\n";
+
+		//GS_CORE_TRACE("generated: {}", printed_proc);
 
 		CodeGen_Result result;
 		result.ok = true;
@@ -1403,6 +1687,7 @@ namespace Glass
 		case NodeType::MemberAccess:
 		case NodeType::Reference:
 		case NodeType::DeReference:
+		case NodeType::ArrayAccess:
 			return Expression_CodeGen((Expression*)statement, scope_id, proc);
 			break;
 		case NodeType::Return:
@@ -1459,7 +1744,10 @@ namespace Glass
 				Il_Insert_Store(proc, func_return_type, return_data_ptr_node_idx, value_node_idx);
 				Array_Add(return_branches, Il_Insert_Br(proc, 0));
 			}
-			else {
+			else if (func_return_type_size == 0) {
+				Array_Add(return_branches, Il_Insert_Br(proc, -1));
+			}
+			else if (func_return_type_size <= 8) {
 				Il_Insert_Store(proc, func_return_type, func_entity.func.return_data_ptr_node_idx, value_node_idx);
 				Array_Add(return_branches, Il_Insert_Br(proc, -1));
 			}
@@ -1555,7 +1843,7 @@ namespace Glass
 
 			IfNode* as_if = (IfNode*)statement;
 
-			CodeGen_Result condition_result = Expression_CodeGen(as_if->Condition, scope_id, proc, Data.bool_Ty);
+			CodeGen_Result condition_result = Expression_CodeGen(as_if->Condition, scope_id, proc, Data.bool_Ty, false, true);
 			if (!condition_result) return {};
 
 			if (condition_result.expression_type != Data.bool_Ty) {
@@ -1580,12 +1868,14 @@ namespace Glass
 			CodeGen_Result body_result = Statement_CodeGen(as_if->Scope, scope_id, proc);
 			if (!body_result) return {};
 
+			Il_IDX after_body_insert_point = proc.insertion_point;
+
 			if (as_if->Else) {
 				else_block_idx = Il_Insert_Block(proc, String_Make("else"));
 				if (!Statement_CodeGen(as_if->Else->statement, scope_id, proc)) return {};
 			}
 
-			Il_IDX cont_block_idx = Il_Insert_Block(proc, String_Make("cont"));
+			Il_IDX cont_block_idx = Il_Insert_Block(proc, String_Make("after_if"));
 
 			Il_Set_Insert_Point(proc, saved_insert_point);
 
@@ -1596,7 +1886,7 @@ namespace Glass
 				Il_Insert_CBR(proc, Data.bool_Ty, condition_result.code_node_id, body_block_idx, cont_block_idx);
 			}
 
-			Il_Set_Insert_Point(proc, body_block_idx);
+			Il_Set_Insert_Point(proc, after_body_insert_point);
 			Il_Insert_Br(proc, cont_block_idx);
 
 			Il_Set_Insert_Point(proc, cont_block_idx);
@@ -1614,7 +1904,7 @@ namespace Glass
 
 			Il_IDX cond_block_idx = Il_Insert_Block(proc, String_Make("cond"));
 
-			CodeGen_Result condition_result = Expression_CodeGen(as_while->Condition, scope_id, proc, nullptr);
+			CodeGen_Result condition_result = Expression_CodeGen(as_while->Condition, scope_id, proc, nullptr, false, true);
 			if (!condition_result) return {};
 
 			if (condition_result.expression_type != Data.bool_Ty) {
@@ -1657,6 +1947,62 @@ namespace Glass
 			return result;
 		}
 		break;
+		case NodeType::For:
+		{
+			ForNode* as_for = (ForNode*)statement;
+
+			Il_IDX saved_insert_point = proc.insertion_point;
+
+			Il_IDX cond_block_idx = Il_Insert_Block(proc, String_Make("condition"));
+			Il_IDX body_block_idx = Il_Insert_Block(proc, String_Make("body"));
+			Il_IDX loop_bottom_block_idx = Il_Insert_Block(proc, String_Make("dummmy"));
+
+			Iterator_Result condition_result = Iterator_CodeGen(as_for->Condition, scope_id, proc, saved_insert_point, cond_block_idx, loop_bottom_block_idx);
+			if (!condition_result) return {};
+
+			Il_Set_Insert_Point(proc, body_block_idx);
+
+			Entity& file_scope_entity = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)];
+
+			Entity scope_entity = Create_Function_Scope_Entity(String_Make("@scope"), Loc_From_Token(as_for->Scope->GetLocation()), file_scope_entity.file_scope.file_id);
+			scope_entity.syntax_node = as_for->Scope;
+			Entity_ID inserted_scope_entity_id = Insert_Entity(scope_entity, scope_id);
+
+			Entity it_variable = Create_Variable_Entity(String_Make("it"), Loc_From_Token(as_for->Condition->GetLocation()), file_scope_entity.file_scope.file_id);
+			Entity it_index_variable = Create_Variable_Entity(String_Make("it_index"), Loc_From_Token(as_for->Condition->GetLocation()), file_scope_entity.file_scope.file_id);
+
+			it_variable.var.location = condition_result.it_location_node;
+			it_variable.semantic_type = condition_result.it_type;
+
+			it_index_variable.var.location = condition_result.it_index_location_node;
+			it_index_variable.semantic_type = condition_result.it_type;
+
+			Insert_Entity(it_variable, inserted_scope_entity_id);
+			Insert_Entity(it_index_variable, inserted_scope_entity_id);
+
+			CodeGen_Result body_result = Statement_CodeGen(as_for->Scope, inserted_scope_entity_id, proc);
+			if (!body_result) return {};
+
+			Il_Block& dummy = proc.blocks[loop_bottom_block_idx];
+			loop_bottom_block_idx = Il_Insert_Block(proc, String_Make("loop_bottom"));
+			Il_Block& after_loop = proc.blocks[loop_bottom_block_idx];
+
+			after_loop.instructions = dummy.instructions;
+			dummy.instructions.count = 0;
+
+			Il_Insert_Br(proc, cond_block_idx);
+
+			Il_IDX cont_block_idx = Il_Insert_Block(proc, String_Make("after_loop"));
+
+			Il_Set_Insert_Point(proc, cond_block_idx);
+			Il_Insert_CBR(proc, Data.bool_Ty, condition_result.condition_node, body_block_idx, cont_block_idx);
+
+			Il_Set_Insert_Point(proc, cont_block_idx);
+
+			CodeGen_Result result;
+			result.ok = true;
+			return result;
+		}
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1665,7 +2011,7 @@ namespace Glass
 		return {};
 	}
 
-	CodeGen_Result Front_End::Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type /*= nullptr*/, bool by_reference /*= false*/)
+	CodeGen_Result Front_End::Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type /*= nullptr*/, bool by_reference /*= false*/, bool  is_condition/*= false*/)
 	{
 		NodeType node_type = expression->GetType();
 
@@ -1920,10 +2266,11 @@ namespace Glass
 
 			bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
 			bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
+			bool bit_wise = as_bin_expr->OPerator == Operator::BitOr || as_bin_expr->OPerator == Operator::BitAnd;
 
-			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, inferred_type, assignment);
+			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment, is_condition);
 			if (!left_result) return {};
-			CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type);
+			CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type, false, is_condition);
 			if (!right_result) return {};
 
 			if (assignment) {
@@ -1961,13 +2308,13 @@ namespace Glass
 			auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
 
 			if (!logical_compare && !equality_compare) {
-				if (!(type_flags & TN_Numeric_Type) && !assignment) {
+				if (!(type_flags & TN_Numeric_Type) && !(type_flags & TN_Enum_Type) && !assignment) {
 					Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
 					return {};
 				}
 			}
 			else {
-				if (bin_expr_result_type != Data.bool_Ty && !equality_compare) {
+				if (bin_expr_result_type != Data.bool_Ty && !equality_compare && !bit_wise) {
 					Push_Error_Loc(scope_id, as_bin_expr, "types are not bool");
 					return {};
 				}
@@ -2075,6 +2422,12 @@ namespace Glass
 				}
 				else if (!assignment) {
 					code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
+
+					if (inferred_type == Data.bool_Ty) {
+						Const_Union zero = {};
+						code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, bin_expr_result_type, code_node_id, Il_Insert_Constant(proc, zero, bin_expr_result_type));
+						bin_expr_result_type = Data.bool_Ty;
+					}
 				}
 			}
 			else {
@@ -2097,42 +2450,98 @@ namespace Glass
 			result.ok = true;
 			return result;
 		}
+		case NodeType::NegateExpression:
+		{
+			NegateExpr* as_negate_expr = (NegateExpr*)expression;
+
+			CodeGen_Result expr_result = Expression_CodeGen(as_negate_expr->What, scope_id, proc, inferred_type, false);
+
+			if (!expr_result)
+				return {};
+
+			auto expr_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, expr_result.expression_type);
+
+			if (!(expr_type_flags & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, as_negate_expr->What, "type is not numeric");
+				return {};
+			}
+
+			Il_IDX zero = Il_Insert_Constant(proc, {}, expr_result.expression_type);
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.expression_type = expr_result.expression_type;
+			result.code_node_id = Il_Insert_Math_Op(proc, expr_result.expression_type, Il_Sub, zero, expr_result.code_node_id);
+
+			return result;
+		}
 		break;
 		case NodeType::Call:
 		{
 			FunctionCall* as_call = (FunctionCall*)expression;
 
+			if (as_call->callee->GetType() == NodeType::Identifier) {
+
+				Identifier* callee_as_ident = (Identifier*)as_call->callee;
+
+				if (callee_as_ident->Symbol.Symbol == "type_info") {
+
+					if (as_call->Arguments.size() != 1) {
+						Push_Error_Loc(scope_id, as_call, "'type_info(Type)' takes one argument");
+						return {};
+					}
+
+					auto arg_node = as_call->Arguments[0];
+
+					CodeGen_Result arg_result = Expression_CodeGen(arg_node, scope_id, proc, Data.Type_Ty);
+
+					if (!arg_result)
+						return {};
+
+					if (arg_result.expression_type != Data.Type_Ty) {
+						Push_Error_Loc(scope_id, arg_node, "'type_info()' expected argument to be of type: 'Type'");
+						return {};
+					}
+
+					auto element_ptr_node_idx = Il_Insert_AEP(proc, te_Ty, Il_Insert_Global_Address(proc, global_type_info_table_idx), arg_result.code_node_id);
+
+					CodeGen_Result result;
+					result.expression_type = Data.TypeInfo_Ptr_Ty;
+					result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Ptr, Data.TypeInfo_Ptr_Ty, TypeSystem_Get_Pointer_Type(Data.type_system, te_Ty, 1), element_ptr_node_idx);
+					result.ok = true;
+
+					return result;
+				}
+			}
+
 			Entity* func_callee_entity = nullptr;
 			GS_Type* callee_signature = nullptr;
 
-			if (as_call->callee->GetType() == NodeType::Identifier)
+			Eval_Result eval_result = Expression_Evaluate(as_call->callee, scope_id, nullptr, false);
+
+			if (!eval_result) return {};
+
+			if (eval_result.entity_reference != Entity_Null)
 			{
-				Eval_Result eval_result = Expression_Evaluate(as_call->callee, scope_id, nullptr, false);
+				Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
+				String callee_name = callee_entity.semantic_name;
+				std::string callee_name_std = std::string(callee_name.data);
 
-				if (!eval_result) return {};
+				if (callee_entity.entity_type == Entity_Type::Function) {
 
-				if (eval_result.entity_reference != Entity_Null)
-				{
-					Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
-					String callee_name = callee_entity.semantic_name;
-					std::string callee_name_std = std::string(callee_name.data);
-
-					if (callee_entity.entity_type == Entity_Type::Function) {
-
-						if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
-							Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
-							return {};
-						}
-
-						if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
-							Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
-							return {};
-						}
-
-						callee_signature = callee_entity.func.signature;
-
-						func_callee_entity = &callee_entity;
+					if (callee_entity.func.parameters.count > as_call->Arguments.size()) {
+						Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too few arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
+						return {};
 					}
+
+					if (callee_entity.func.parameters.count < as_call->Arguments.size() && !callee_entity.func.c_variadic) {
+						Push_Error_Loc(scope_id, as_call, FMT("call to '{}' too many arguments (needed: {}, given: {})", callee_name_std, callee_entity.func.parameters.count, as_call->Arguments.size()));
+						return {};
+					}
+
+					callee_signature = callee_entity.func.signature;
+
+					func_callee_entity = &callee_entity;
 				}
 			}
 
@@ -2237,21 +2646,19 @@ namespace Glass
 		{
 			MemberAccess* as_member_access = (MemberAccess*)expression;
 
-			if (as_member_access->Object->GetType() == NodeType::Identifier) {
+			Eval_Result eval_result = Expression_Evaluate(as_member_access->Object, scope_id, nullptr, false);
 
-				Identifier* obj_as_ident = (Identifier*)as_member_access->Object;
-				String name = String_Make(obj_as_ident->Symbol.Symbol);
+			if (!eval_result) {
+				return {};
+			}
 
-				Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
+			if (eval_result.entity_reference != Entity_Null)
+			{
+				Entity_ID referenced_entity_id = eval_result.entity_reference;
 
-				if (identified_entity_id == Entity_Null) {
-					Push_Error_Loc(scope_id, obj_as_ident, FMT("undefined name: {}", obj_as_ident->Symbol.Symbol));
-					return {};
-				}
+				Entity& referenced_entity = Data.entity_storage[referenced_entity_id];
 
-				Entity& identified_entity = Data.entity_storage[identified_entity_id];
-
-				switch (identified_entity.entity_type)
+				switch (referenced_entity.entity_type)
 				{
 				case Entity_Type::Enum_Entity:
 				case Entity_Type::Constant:
@@ -2280,8 +2687,22 @@ namespace Glass
 			auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
 
 			if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
-				Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
-				return {};
+
+				if (object_result.expression_type->kind == Type_Dyn_Array)
+				{
+				}
+				else if (object_result.expression_type->kind == Type_Pointer && object_result.expression_type->pointer.indirection == 1) {
+					object_result.code_node_id = Il_Insert_Load(proc, object_result.expression_type, object_result.code_node_id);
+					object_result.expression_type = object_result.expression_type->pointer.pointee;
+				}
+				else {
+					Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+					return {};
+				}
+			}
+
+			if (object_result.expression_type->kind & Type_Dyn_Array) {
+				object_result.expression_type = Data.Array_Ty;
 			}
 
 			Entity_ID struct_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].name);
@@ -2355,16 +2776,40 @@ namespace Glass
 			result.ok = true;
 			result.expression_type = cast_to_type;
 
+			auto castee_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, castee_type);
+			auto to_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, cast_to_type);
+
+			bool valid_cast = false;
+
 			if (cast_to_type->kind == castee_type->kind) {
-				if (cast_to_type->kind == Type_Pointer) {
+				if (cast_to_type->kind == Type_Pointer)
+				{
 					result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Ptr, cast_to_type, castee_type, expr_result.code_node_id);
+					valid_cast = true;
 				}
-				else {
-					Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
-					return {};
+				else if (cast_to_type->kind == Type_Basic) {
+					if (to_type_flags & TN_Numeric_Type && castee_type_flags & TN_Numeric_Type)
+					{
+						if (!(castee_type_flags & TN_Float_Type) && to_type_flags & TN_Float_Type) {
+							result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Int2Float, cast_to_type, castee_type, expr_result.code_node_id);
+							valid_cast = true;
+						}
+
+						if (!(to_type_flags & TN_Float_Type) && castee_type_flags & TN_Float_Type) {
+							result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Float2Int, cast_to_type, castee_type, expr_result.code_node_id);
+							valid_cast = true;
+						}
+					}
 				}
 			}
-			else {
+			else if (cast_to_type->kind == Type_Pointer) {
+				if (castee_type_flags & TN_Numeric_Type)
+				{
+					result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Int2Ptr, cast_to_type, castee_type, expr_result.code_node_id);
+					valid_cast = true;
+				}
+			}
+			if (!valid_cast) {
 				Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
 				return {};
 			}
@@ -2379,7 +2824,7 @@ namespace Glass
 			if (!object_result)
 				return {};
 
-			if (object_result.expression_type->kind != Type_Array && object_result.expression_type->kind != Type_Pointer) {
+			if (object_result.expression_type->kind != Type_Array && object_result.expression_type->kind != Type_Pointer && object_result.expression_type->kind != Type_Dyn_Array) {
 				Push_Error_Loc(scope_id, as_array_access->Object, "type doesn't support subscript operator []");
 				return {};
 			}
@@ -2397,9 +2842,21 @@ namespace Glass
 
 			if (object_result.expression_type->kind == Type_Array)
 				array_element_type = object_result.expression_type->array.element_type;
-
-			if (object_result.expression_type->kind == Type_Pointer)
+			else if (object_result.expression_type->kind == Type_Pointer) {
 				array_element_type = object_result.expression_type->pointer.pointee;
+				object_result.code_node_id = Il_Insert_Load(proc, object_result.expression_type, object_result.code_node_id);
+			}
+			else if (object_result.expression_type->kind == Type_Dyn_Array) {
+
+				array_element_type = object_result.expression_type->dyn_array.element_type;
+
+				Il_IDX array_data_member_node_idx = Il_Insert_SEP(proc, Data.Array_Ty, 1, object_result.code_node_id);
+				Il_IDX loaded_data_member_node_idx = Il_Insert_Load(proc, Data.void_ptr_Ty, array_data_member_node_idx);
+				object_result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Ptr, TypeSystem_Get_Pointer_Type(Data.type_system, array_element_type, 1), Data.void_ptr_Ty, loaded_data_member_node_idx);
+			}
+			else {
+				GS_ASSERT_UNIMPL();
+			}
 
 			CodeGen_Result result = {};
 
@@ -2464,10 +2921,101 @@ namespace Glass
 
 			return result;
 		}
+		case NodeType::TE_Array:
+		case NodeType::TE_Func:
+		case NodeType::TE_Pointer:
+		{
+			Eval_Result eval_result = Expression_Evaluate(expression, scope_id, nullptr);
+			if (!eval_result)
+				return {};
+
+			Const_Union constant_value = {};
+			constant_value.s8 = TypeSystem_Get_Type_Index(Data.type_system, eval_result.result.type);
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.expression_type = Data.Type_Ty;
+			result.code_node_id = Il_Insert_Constant(proc, constant_value, Data.Type_Ty);
+			return result;
+		}
 		break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
+		}
+
+		return {};
+	}
+
+	Iterator_Result Front_End::Iterator_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, Il_IDX before_condition_block, Il_IDX condition_block, Il_IDX after_body_block)
+	{
+
+		NodeType node_type = expression->GetType();
+
+		switch (node_type)
+		{
+		case NodeType::Range:
+		{
+			RangeNode* as_range = (RangeNode*)expression;
+
+			Il_Set_Insert_Point(proc, before_condition_block);
+
+			CodeGen_Result begin_result = Expression_CodeGen(as_range->Begin, scope_id, proc, nullptr);
+			if (!begin_result)
+				return {};
+
+			CodeGen_Result end_result = Expression_CodeGen(as_range->End, scope_id, proc, nullptr);
+			if (!end_result)
+				return {};
+
+			if (begin_result.expression_type != end_result.expression_type) {
+				Push_Error_Loc(scope_id, expression, FMT("range iterator type mismatch: '{}', '{}'", std::string(TypeSystem_Print_Type(Data.type_system, begin_result.expression_type).data), std::string(TypeSystem_Print_Type(Data.type_system, end_result.expression_type).data)));
+				return {};
+			}
+
+			GS_Type* range_type = begin_result.expression_type;
+			auto range_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, range_type);
+
+			if (!(range_type_flags & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, expression, FMT("range iterator type is not numeric: '{}'", TypeSystem_Print_Type(Data.type_system, range_type).data));
+				return {};
+			}
+
+			Il_IDX it_alloca = Il_Insert_Alloca(proc, range_type);
+			Il_IDX it_index_alloca = Il_Insert_Alloca(proc, range_type);
+
+			Il_Insert_Store(proc, range_type, it_alloca, begin_result.code_node_id);
+			Il_Insert_Store(proc, range_type, it_index_alloca, Il_Insert_Constant(proc, (void*)0, range_type));
+
+			Il_Set_Insert_Point(proc, condition_block);
+
+			Il_IDX it_load = Il_Insert_Load(proc, range_type, it_alloca);
+			Il_IDX cmp_node_idx = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_Lesser, range_type, it_load, end_result.code_node_id);
+
+			Il_Set_Insert_Point(proc, after_body_block);
+
+			it_load = Il_Insert_Load(proc, range_type, it_alloca);
+			Il_Insert_Store(proc, range_type, it_alloca, Il_Insert_Math_Op(proc, range_type, Il_Add, it_load, Il_Insert_Constant(proc, (void*)1, range_type)));
+
+			Il_IDX it_index_load = Il_Insert_Load(proc, range_type, it_index_alloca);
+			Il_Insert_Store(proc, range_type, it_index_alloca, Il_Insert_Math_Op(proc, range_type, Il_Add, it_index_load, Il_Insert_Constant(proc, (void*)1, range_type)));
+
+			Iterator_Result result;
+			result.ok = true;
+			result.condition_node = cmp_node_idx;
+			result.it_type = range_type;
+			result.it_index_location_node = it_index_alloca;
+			result.it_location_node = it_alloca;
+
+			return result;
+		}
+		break;
+		default:
+		{
+			Push_Error_Loc(scope_id, expression, "expected iterator");
+			return {};
+		}
+		break;
 		}
 
 		return {};
@@ -2516,6 +3064,17 @@ namespace Glass
 						literal_type = inferred_type;
 					}
 				}
+				else {
+					if (as_lit->type == NumericLiteral::Type::Float) {
+						literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.float_tn);
+					}
+					else if (as_lit->type == NumericLiteral::Type::Int) {
+						literal_type = TypeSystem_Get_Basic_Type(Data.type_system, Data.int_tn);
+					}
+					else {
+						GS_ASSERT_UNIMPL();
+					}
+				}
 			}
 			else {
 				if (as_lit->type == NumericLiteral::Type::Float) {
@@ -2536,6 +3095,29 @@ namespace Glass
 			result.ok = true;
 			result.result = literal_value;
 			result.expression_type = literal_type;
+			return result;
+		}
+		break;
+		case NodeType::NegateExpression:
+		{
+			NegateExpr* as_negate_expr = (NegateExpr*)expression;
+
+			Eval_Result expr_result = Expression_Evaluate(as_negate_expr->What, scope_id, inferred_type, const_eval);
+
+			if (!expr_result)
+				return {};
+
+			auto expr_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, expr_result.expression_type);
+
+			if (!(expr_type_flags & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, as_negate_expr->What, "type is not numeric");
+				return {};
+			}
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = expr_result.expression_type;
+			result.result.s8 = expr_result.result.s8;
 			return result;
 		}
 		break;
@@ -2620,6 +3202,22 @@ namespace Glass
 		case NodeType::TE_TypeName:
 		{
 			Identifier* as_ident = (Identifier*)expression;
+
+			if (as_ident->Symbol.Symbol == "null") {
+
+				GS_Type* null_type = inferred_type;
+
+				if (!null_type) {
+					null_type = TypeSystem_Get_Pointer_Type(Data.type_system, Data.void_Ty, 1);
+				}
+
+				Eval_Result result = {};
+				result.ok = true;
+				result.expression_type = null_type;
+				result.result = {};
+				return result;
+			}
+
 			String name = String_Make(as_ident->Symbol.Symbol);
 			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
 
@@ -2650,6 +3248,7 @@ namespace Glass
 		break;
 		case NodeType::TE_Pointer:
 		case NodeType::TE_Func:
+		case NodeType::TE_Array:
 		{
 			GS_Type* evaluated_type = Evaluate_Type(expression, scope_id);
 			if (!evaluated_type)
@@ -2666,7 +3265,7 @@ namespace Glass
 		{
 			MemberAccess* as_member_access = (MemberAccess*)expression;
 
-			Eval_Result object_result = Expression_Evaluate(as_member_access->Object, scope_id, nullptr);
+			Eval_Result object_result = Expression_Evaluate(as_member_access->Object, scope_id, nullptr, const_eval);
 
 			if (!object_result) {
 				return {};
@@ -2764,8 +3363,14 @@ namespace Glass
 					auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
 
 					if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
-						Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
-						return {};
+
+						if (object_result.expression_type->kind == Type_Pointer && object_result.expression_type->pointer.indirection == 1) {
+							object_result.expression_type = object_result.expression_type->pointer.pointee;
+						}
+						else {
+							Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+							return {};
+						}
 					}
 
 					Entity_ID struct_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, Data.type_system.type_name_storage[object_result.expression_type->basic.type_name_id].name);
@@ -2799,13 +3404,134 @@ namespace Glass
 
 					Eval_Result result;
 					result.ok = true;
-					result.expression_type = TypeSystem_Increase_Ind(Data.type_system, member_entity->semantic_type);
+					result.expression_type = member_entity->semantic_type;
 					result.result.ptr = &(&object_result.result.us1)[offset];
 					return result;
 				}
 			}
 		}
 		break;
+		case NodeType::DeReference:
+		{
+			ASSERT(const_eval == false);
+
+			DeRefNode* as_de_ref = (DeRefNode*)expression;
+
+			Eval_Result expr_result = Expression_Evaluate(as_de_ref->What, scope_id, nullptr, const_eval);
+			if (!expr_result)
+				return {};
+
+			if (expr_result.expression_type->kind != Type_Pointer) {
+				Push_Error_Loc(scope_id, as_de_ref->What, FMT("trying to dereference a non pointer type!"));
+				return {};
+			}
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = TypeSystem_Reduce_Indirection(Data.type_system, expr_result.expression_type);
+			return result;
+		}
+		break;
+		case NodeType::ArrayAccess:
+		{
+			ASSERT(const_eval == false);
+
+			ArrayAccess* as_array_access = (ArrayAccess*)expression;
+
+			Eval_Result object_result = Expression_Evaluate(as_array_access->Object, scope_id, nullptr, const_eval);
+			if (!object_result)
+				return {};
+
+			if (object_result.expression_type)
+				if (object_result.expression_type->kind != Type_Array && object_result.expression_type->kind != Type_Pointer && object_result.expression_type->kind != Type_Dyn_Array) {
+					Push_Error_Loc(scope_id, as_array_access->Object, "type doesn't support subscript operator []");
+					return {};
+				}
+
+			Eval_Result index_result = Expression_Evaluate(as_array_access->Index, scope_id, nullptr, const_eval);
+			if (!index_result)
+				return {};
+
+			if (!(TypeSystem_Get_Type_Flags(Data.type_system, index_result.expression_type) & TN_Numeric_Type)) {
+				Push_Error_Loc(scope_id, as_array_access->Index, "[] index type is not numeric");
+				return {};
+			}
+
+			GS_Type* array_element_type = nullptr;
+
+			if (object_result.expression_type->kind == Type_Array)
+				array_element_type = object_result.expression_type->array.element_type;
+
+			if (object_result.expression_type->kind == Type_Pointer)
+				array_element_type = object_result.expression_type->pointer.pointee;
+
+			if (object_result.expression_type->kind == Type_Dyn_Array)
+				array_element_type = object_result.expression_type->dyn_array.element_type;
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = array_element_type;
+			return result;
+		}
+		break;
+		case NodeType::Cast:
+		{
+			CastNode* as_cast_node = (CastNode*)expression;
+
+			GS_Type* cast_to_type = Evaluate_Type(as_cast_node->Type, scope_id);
+
+			if (!cast_to_type) {
+				Push_Error_Loc(scope_id, as_cast_node->Type, FMT("cast() unknown type"));
+				return {};
+			}
+
+			Eval_Result expr_result = Expression_Evaluate(as_cast_node->Expr, scope_id, cast_to_type, const_eval);
+			if (!expr_result) return {};
+
+			GS_Type* castee_type = expr_result.expression_type;
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = cast_to_type;
+			result.result = {};
+
+			auto castee_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, castee_type);
+			auto to_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, cast_to_type);
+
+			if (cast_to_type->kind == castee_type->kind) {
+				if (cast_to_type->kind == Type_Pointer) {
+					result.result.ptr = expr_result.result.ptr;
+				}
+				else {
+					Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
+					return {};
+				}
+			}
+			else if (cast_to_type->kind == Type_Pointer) {
+				if (castee_type->kind == Type_Basic && castee_type_flags & TN_Numeric_Type)
+				{
+					if (!(castee_type_flags & TN_Float_Type)) {
+						if (castee_type_flags & TN_Unsigned_Type)
+							result.result.ptr = (void*)expr_result.result.us8;
+						else
+							result.result.ptr = (void*)expr_result.result.s8;
+					}
+					else {
+						result.result.ptr = (void*)(size_t)expr_result.result.f64;
+					}
+				}
+				else {
+					Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
+					return {};
+				}
+			}
+			else {
+				Push_Error_Loc(scope_id, as_cast_node->Type, FMT("invalid cast"));
+				return {};
+			}
+
+			return result;
+		}
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -2858,7 +3584,7 @@ namespace Glass
 			if (!pointee_result)
 				return nullptr;
 
-			GS_Type* generated_type = TypeSystem_Get_Pointer_Type(Data.type_system, pointee_result, as_pointer->Indirection);
+			GS_Type* generated_type = TypeSystem_Get_Pointer_Type(Data.type_system, pointee_result, 1);
 			return generated_type;
 		}
 								 break;
@@ -2958,6 +3684,11 @@ namespace Glass
 		case NodeType::TE_TypeName:
 		{
 			Identifier* as_ident = (Identifier*)expr;
+
+			if (as_ident->Symbol.Symbol == "null") {
+				return { true };
+			}
+
 			String name = String_Make(as_ident->Symbol.Symbol);
 			Entity_ID identified_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, name);
 
@@ -3000,6 +3731,23 @@ namespace Glass
 		case NodeType::StringLiteral:
 			return { true };
 			break;
+		case NodeType::NegateExpression:
+		{
+			auto as_negate = (NegateExpr*)expr;
+			return Do_Expression_Dependecy_Pass(scope_id, as_negate->What, dependencies, ignore_indirect);
+		}
+		break;
+		case NodeType::Cast:
+		{
+			auto as_cast = (CastNode*)expr;
+
+			auto expr_result = Do_Expression_Dependecy_Pass(scope_id, as_cast->Expr, dependencies, ignore_indirect);
+			if (!expr_result)
+				return {};
+
+			return Do_Expression_Dependecy_Pass(scope_id, as_cast->Type, dependencies, ignore_indirect);
+		}
+		break;
 		case NodeType::MemberAccess: {
 
 			MemberAccess* as_member_access = (MemberAccess*)expr;
@@ -3160,7 +3908,6 @@ namespace Glass
 
 			return { true };
 		}
-		break;
 		break;
 		default:
 			GS_ASSERT_UNIMPL();
@@ -3462,6 +4209,19 @@ namespace Glass
 		return func_entity;
 	}
 
+	Entity Front_End::Create_Function_Scope_Entity(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity func_scope_entity = { 0 };
+
+		func_scope_entity.entity_type = Entity_Type::Function_Scope;
+		func_scope_entity.semantic_name = String_Copy(name);
+		func_scope_entity.source_location = source_location;
+		func_scope_entity.definition_file = file_id;
+		func_scope_entity.semantic_type = nullptr;
+
+		return func_scope_entity;
+	}
+
 	Entity Front_End::Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id)
 	{
 		Entity var_entity = { 0 };
@@ -3548,10 +4308,22 @@ namespace Glass
 
 	Entity_ID Front_End_Data::Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID scope_id, String name)
 	{
+		//#define MESURE_SEARCH_TIME
+
+#ifdef MESURE_SEARCH_TIME
+		auto search_start = std::chrono::high_resolution_clock::now();
+#endif
+
 		Entity_ID visited_load = Get_File_Scope_Parent(data, scope_id);
 		ASSERT(data.entity_storage[visited_load].entity_type == Entity_Type::File_Scope);
 
-		return Get_Entity_ID_By_Name(data, scope_id, name, visited_load, Entity_Null);
+		auto search_result = Get_Entity_ID_By_Name(data, scope_id, name, visited_load, Entity_Null);
+
+#ifdef MESURE_SEARCH_TIME
+		auto search_end = std::chrono::high_resolution_clock::now();
+		data.entity_search_time += std::chrono::duration_cast<std::chrono::nanoseconds>(search_end - search_start).count();
+#endif
+		return search_result;
 	}
 
 	Entity_ID Front_End_Data::Get_Entity_ID_By_Name(Front_End_Data& data, Entity_ID scope_id, String name, Entity_ID visited_load, Entity_ID visited_parent)

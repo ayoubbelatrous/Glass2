@@ -37,6 +37,7 @@ namespace Glass
 		Enum_Member_Entity,
 
 		Function,
+		Function_Scope,
 
 		Variable,
 
@@ -192,6 +193,7 @@ namespace Glass
 		Array<Front_End_File> Files;
 		std::unordered_map<std::string, File_ID> Path_To_File;
 		std::unordered_map<File_ID, Entity_ID> File_ID_To_Scope;
+		std::unordered_map<Type_Name_ID, Entity_ID> typename_to_entity_id;
 
 		Array<Front_End_Message> Messages;
 
@@ -247,12 +249,17 @@ namespace Glass
 		GS_Type* Array_Ty = nullptr;
 		GS_Type* Any_Ty = nullptr;
 
+		Type_Name_ID TypeInfo_tn = -1;
+		GS_Type* TypeInfo_Ty = nullptr;
+		GS_Type* TypeInfo_Ptr_Ty = nullptr;
+
 		Il_Program il_program;
 
 		Execution_Engine exec_engine;
 
 		u64 parse_time_micro_seconds = 0;
 		u64 lex_time_micro_seconds = 0;
+		u64 entity_search_time = 0;
 
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
@@ -284,6 +291,20 @@ namespace Glass
 		}
 	};
 
+	struct Iterator_Result {
+
+		bool ok;
+
+		GS_Type* it_type = nullptr;
+
+		Il_IDX it_index_location_node = -1;
+		Il_IDX it_location_node = -1;
+		Il_IDX condition_node = -1;
+
+		operator bool() {
+			return ok;
+		}
+	};
 
 	struct Eval_Result {
 		bool ok = false;
@@ -321,12 +342,14 @@ namespace Glass
 		bool Do_Tl_Resolution_Passes();
 		bool Do_CodeGen();
 
-		bool Resolve_Constant();
+		bool Generate_TypeInfoTable();
 
 		bool Foreign_Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id);
 		CodeGen_Result Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id);
 		CodeGen_Result Statement_CodeGen(Statement* statement, Entity_ID scope_id, Il_Proc& proc);
-		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type = nullptr, bool by_reference = false);
+		CodeGen_Result Expression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type = nullptr, bool by_reference = false, bool is_condition = false);
+
+		Iterator_Result Iterator_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, Il_IDX before_condition_block, Il_IDX condition_block, Il_IDX after_body_block);
 
 		Eval_Result Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type, bool const_eval = true);
 
@@ -363,6 +386,7 @@ namespace Glass
 		Entity Create_Enum_Member_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Entity Create_Function_Entity(String name, Source_Loc source_location, File_ID file_id);
+		Entity Create_Function_Scope_Entity(String name, Source_Loc source_location, File_ID file_id);
 		Entity Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Entity Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id);
@@ -376,6 +400,12 @@ namespace Glass
 		bool terminator_encountered = false;
 
 		Array<Il_IDX> return_branches;
-		Il_IDX return_storage_node_id;
+		Il_IDX return_storage_node_id = -1;
+		Il_IDX global_type_info_table_idx = -1;
+		Il_IDX struct_member_typeinfo_global_idx = -1;
+		GS_Type* te_Ty = nullptr;
+
+		bool print_il = true;
+		std::stringstream printed_il_stream;
 	};
 }

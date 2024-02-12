@@ -45,8 +45,6 @@ namespace Glass
 				Il_IDX i = (Il_IDX)block.instructions[j];
 				Il_Node node = proc.instruction_storage[i];
 
-				auto type_flags = TypeSystem_Get_Type_Flags(*proc.program->type_system, &proc.program->type_system->type_storage[node.type_idx]);
-
 				if (node.node_type != Il_Param) {
 					stream << "$" << i << " = ";
 				}
@@ -73,13 +71,19 @@ namespace Glass
 					break;
 
 				case Il_Const:
+				{
+
+
+					auto type_flags = TypeSystem_Get_Type_Flags(*proc.program->type_system, &proc.program->type_system->type_storage[node.type_idx]);
+
 					if (type_flags & TN_Float_Type) {
 						stream << "constant " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " " << node.constant.as.f64 << "\n";
 					}
 					else {
 						stream << "constant " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " " << node.constant.as.us8 << "\n";
 					}
-					break;
+				}
+				break;
 				case Il_Add:
 					stream << "add " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;

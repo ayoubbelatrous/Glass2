@@ -181,6 +181,8 @@ namespace Glass
 
 				regt[idx] = type;
 
+				// 				if (idx == 19) __debugbreak();
+
 				if (terminator_encountered)
 				{
 					break;
@@ -205,10 +207,16 @@ namespace Glass
 
 					llvm::Value* alloca = LLVMC_CreateAlloca(lc, llvm_Ty);
 
+					auto members_value_nodes_ptr = node.si.members_value_nodes;
+
+					if (node.si.member_count > SI_SMALL_COUNT) {
+						members_value_nodes_ptr = node.si.members_value_nodes_ptr;
+					}
+
 					for (size_t i = 0; i < node.si.member_count; i++)
 					{
 						auto member = lc.llvm_builder->CreateStructGEP(llvm_Ty, alloca, i);
-						lc.llvm_builder->CreateStore(regv[node.si.members_value_nodes[i]], member);
+						lc.llvm_builder->CreateStore(regv[members_value_nodes_ptr[i]], member);
 					}
 
 					regv[idx] = lc.llvm_builder->CreateLoad(llvm_Ty, alloca);
@@ -221,17 +229,27 @@ namespace Glass
 				break;
 				case Il_Store:
 				{
+					ASSERT(regv[node.store.ptr_node_idx]);
+					ASSERT(regv[node.store.value_node_idx]);
 					regv[idx] = lc.llvm_builder->CreateStore(regv[node.store.value_node_idx], regv[node.store.ptr_node_idx]);
 				}
 				break;
 				case Il_StructElementPtr:
 				{
 					regv[idx] = lc.llvm_builder->CreateStructGEP(to_llvm(lc, type), regv[node.element_ptr.ptr_node_idx], node.element_ptr.element_idx);
+
+					ASSERT(type->kind == Type_Basic);
+
+					auto type_system = lc.prog->type_system;
+					GS_Struct& strct = type_system->struct_storage[type_system->type_name_storage[type->basic.type_name_id].struct_id];
+
+					regt[idx] = TypeSystem_Get_Pointer_Type(*lc.prog->type_system, strct.members[node.element_ptr.element_idx], 1);
 				}
 				break;
 				case Il_ArrayElementPtr:
 				{
 					regv[idx] = lc.llvm_builder->CreateGEP(to_llvm(lc, type), regv[node.aep.ptr_node_idx], regv[node.aep.index_node_idx]);
+					regt[idx] = TypeSystem_Get_Pointer_Type(*lc.prog->type_system, type, 1);
 				}
 				break;
 				case Il_Call:
@@ -322,33 +340,56 @@ namespace Glass
 							regv[idx] = lc.llvm_builder->CreateSDiv(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
 				}
 				break;
+				case Il_Bit_And:
+					regv[idx] = lc.llvm_builder->CreateAnd(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
+					break;
+				case Il_Bit_Or:
+					regv[idx] = lc.llvm_builder->CreateOr(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
+					break;
 				case Il_Value_Cmp:
 				{
-					llvm::CmpInst::Predicate cmp_inst;
-
 					bool un_signed_type = type_flags & TN_Unsigned_Type;
 
-					if (node.cmp_op.compare_type == Il_Cmp_Equal)
-						cmp_inst = llvm::CmpInst::ICMP_EQ;
-					else if (node.cmp_op.compare_type == Il_Cmp_NotEqual)
-						cmp_inst = llvm::CmpInst::ICMP_NE;
-					else if (node.cmp_op.compare_type == Il_Cmp_Greater)
-						if (un_signed_type)
-							cmp_inst = llvm::CmpInst::ICMP_UGT;
-						else
-							cmp_inst = llvm::CmpInst::ICMP_SGT;
-					else if (node.cmp_op.compare_type == Il_Cmp_Lesser)
-						if (un_signed_type)
-							cmp_inst = llvm::CmpInst::ICMP_ULT;
-						else
-							cmp_inst = llvm::CmpInst::ICMP_SLT;
+					llvm::Value* result = nullptr;
+
+					auto lhs = regv[node.cmp_op.left_node_idx];
+					auto rhs = regv[node.cmp_op.right_node_idx];
+
+					if (node.cmp_op.compare_type == Il_Cmp_Or || node.cmp_op.compare_type == Il_Cmp_And) {
+						lhs = lc.llvm_builder->CreateICmpUGT(lhs, llvm::ConstantInt::get(lhs->getType(), 0));
+						rhs = lc.llvm_builder->CreateICmpUGT(rhs, llvm::ConstantInt::get(rhs->getType(), 0));
+
+						if (node.cmp_op.compare_type == Il_Cmp_Or)
+							result = lc.llvm_builder->CreateOr(lhs, rhs);
+						if (node.cmp_op.compare_type == Il_Cmp_And)
+							result = lc.llvm_builder->CreateAnd(lhs, rhs);
+					}
 					else {
-						GS_ASSERT_UNIMPL();
+
+						llvm::CmpInst::Predicate cmp_inst;
+
+						if (node.cmp_op.compare_type == Il_Cmp_Equal)
+							cmp_inst = llvm::CmpInst::ICMP_EQ;
+						else if (node.cmp_op.compare_type == Il_Cmp_NotEqual)
+							cmp_inst = llvm::CmpInst::ICMP_NE;
+						else if (node.cmp_op.compare_type == Il_Cmp_Greater)
+							if (un_signed_type)
+								cmp_inst = llvm::CmpInst::ICMP_UGT;
+							else
+								cmp_inst = llvm::CmpInst::ICMP_SGT;
+						else if (node.cmp_op.compare_type == Il_Cmp_Lesser)
+							if (un_signed_type)
+								cmp_inst = llvm::CmpInst::ICMP_ULT;
+							else
+								cmp_inst = llvm::CmpInst::ICMP_SLT;
+						else {
+							GS_ASSERT_UNIMPL();
+						}
+
+						result = lc.llvm_builder->CreateCmp(cmp_inst, lhs, rhs);
 					}
 
-					auto compare = lc.llvm_builder->CreateCmp(cmp_inst, regv[node.cmp_op.left_node_idx], regv[node.cmp_op.right_node_idx]);
-
-					regv[idx] = lc.llvm_builder->CreateZExt(compare, lc.llvm_i8);
+					regv[idx] = lc.llvm_builder->CreateZExt(result, lc.llvm_i8);
 				}
 				break;
 				case Il_Cond_Branch:
@@ -370,8 +411,14 @@ namespace Glass
 						regv[idx] = llvm::ConstantFP::get(to_llvm(lc, type), node.constant.as.f64);
 					}
 					else {
-						if (node.constant.as.ptr == 0 && type == lc.prog->type_system->void_ptr_Ty) {
-							regv[idx] = llvm::ConstantPointerNull::get((llvm::PointerType*)to_llvm(lc, type));
+						if (type_flags & TN_Pointer_Type) {
+							if (node.constant.as.ptr == 0)
+							{
+								regv[idx] = llvm::ConstantPointerNull::get((llvm::PointerType*)to_llvm(lc, type));
+							}
+							else {
+								regv[idx] = lc.llvm_builder->CreateIntToPtr(llvm::ConstantInt::get(lc.llvm_i64, node.constant.as.us8), lc.llvm_ptr);
+							}
 						}
 						else {
 							regv[idx] = llvm::ConstantInt::get(to_llvm(lc, type), node.constant.as.us8);
@@ -402,12 +449,38 @@ namespace Glass
 				case Il_Proc_Address:
 					regv[idx] = lc.proc_to_llvm[node.proc_address.proc_idx];
 					break;
+				case Il_Global_Address:
+					regv[idx] = lc.global_to_llvm[node.global_address.global_idx];
+					break;
 				case Il_Cast:
 					if (node.cast.cast_type == Il_Cast_Ptr) {
 						regv[idx] = regv[node.cast.castee_node_idx];
 					}
 					else {
-						GS_ASSERT_UNIMPL();
+						auto cast_from_type = &lc.prog->type_system->type_storage[node.cast.from_type_idx];
+						auto cast_from_type_llvm = to_llvm(lc, cast_from_type);
+
+						auto cast_to_type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, cast_from_type);
+
+						auto llvm_Ty = to_llvm(lc, type);
+
+						llvm::Instruction::CastOps cast_ops;
+
+						if (node.cast.cast_type == Il_Cast_Int2Float) {
+							if (cast_to_type_flags & TN_Unsigned_Type)
+							{
+								regv[idx] = lc.llvm_builder->CreateUIToFP(regv[node.cast.castee_node_idx], llvm_Ty);
+								cast_ops = llvm::Instruction::CastOps::UIToFP;
+							}
+							else
+							{
+								regv[idx] = lc.llvm_builder->CreateSIToFP(regv[node.cast.castee_node_idx], llvm_Ty);
+								cast_ops = llvm::Instruction::CastOps::SIToFP;
+							}
+						}
+						else {
+							GS_ASSERT_UNIMPL();
+						}
 					}
 					break;
 				default:
@@ -423,6 +496,116 @@ namespace Glass
 
 	}
 
+	llvm::Value* LLVMC_Initializer_Codegen(LLVM_Converter& lc, Array<Il_Node> nodes, Il_IDX node_idx)
+	{
+		Il_Node node = nodes[node_idx];
+
+		GS_Type* type = &lc.prog->type_system->type_storage[node.type_idx];
+
+		auto& type_storage = lc.prog->type_system->type_storage;
+
+		auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, type);
+
+		switch (node.node_type)
+		{
+		case Il_Const:
+			if (type_flags & TN_Float_Type) {
+				return llvm::ConstantFP::get(to_llvm(lc, type), node.constant.as.f64);
+			}
+			if (type_flags & TN_Struct_Type) {
+				GS_ASSERT_UNIMPL();
+			}
+			else {
+				if (node.constant.as.ptr == 0 && type_flags & TN_Pointer_Type) {
+					return llvm::ConstantPointerNull::get((llvm::PointerType*)to_llvm(lc, type));
+				}
+				else {
+					return llvm::ConstantInt::get(to_llvm(lc, type), node.constant.as.us8);
+				}
+			}
+			break;
+		case Il_Global_Address:
+			return lc.global_to_llvm[node.global_address.global_idx];
+			break;
+		case Il_ArrayElementPtr:
+		{
+			auto ptr = (llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, node.aep.ptr_node_idx);
+			auto index = (llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, node.aep.index_node_idx);
+			return llvm::ConstantExpr::getGetElementPtr(to_llvm(lc, type), ptr, index);
+		}
+		break;
+		case Il_Struct_Initializer:
+		{
+			auto llvm_Ty = to_llvm(lc, type);
+
+			auto members_value_nodes_ptr = node.si.members_value_nodes;
+
+			if (node.si.member_count > SI_SMALL_COUNT) {
+				members_value_nodes_ptr = node.si.members_value_nodes_ptr;
+			}
+
+			Array<llvm::Constant*> struct_body;
+
+			for (size_t i = 0; i < node.si.member_count; i++)
+			{
+				Array_Add(struct_body, (llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, members_value_nodes_ptr[i]));
+			}
+
+			return llvm::ConstantStruct::get((llvm::StructType*)llvm_Ty, llvm::ArrayRef{ struct_body.data,struct_body.count });
+		}
+		break;
+		case Il_Array_Initializer:
+		{
+			Array<llvm::Constant*> array_body;
+
+			Il_Node_Array_Init ai = node.ai;
+
+			for (u64 i = 0; i < ai.element_count; i++)
+			{
+				Array_Add(array_body, (llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, ai.element_values[i]));
+			}
+
+			auto llvm_array_type = to_llvm(lc, type);
+
+			return llvm::ConstantArray::get((llvm::ArrayType*)llvm_array_type, llvm::ArrayRef{ array_body.data,array_body.count });
+		}
+		break;
+		case Il_String:
+		{
+			ASSERT(node.string.str.data[node.string.str.count] == 0);
+			return lc.llvm_builder->CreateGlobalStringPtr(llvm::StringRef(node.string.str.data, node.string.str.count + 1), "", 0, lc.llvm_module);
+		}
+		break;
+		case Il_Cast:
+		{
+			auto llvm_type = to_llvm(lc, type);
+
+			switch (node.cast.cast_type)
+			{
+			case Il_Cast_Ptr:
+			{
+				return (llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, node.cast.castee_node_idx);
+			}
+			break;
+			case Il_Cast_Ptr2Int:
+			{
+				return llvm::ConstantExpr::getPtrToInt((llvm::Constant*)LLVMC_Initializer_Codegen(lc, nodes, node.cast.castee_node_idx), llvm_type);
+			}
+			break;
+			default:
+				GS_ASSERT_UNIMPL();
+				break;
+			}
+		}
+		break;
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+
+		return nullptr;
+	}
+
 	void LLVMC_Codegen(LLVM_Converter& lc) {
 
 		for (size_t i = 0; i < lc.prog->procedures.count; i++)
@@ -434,6 +617,44 @@ namespace Glass
 			function->setCallingConv(llvm::CallingConv::C);
 
 			Array_Add(lc.proc_to_llvm, function);
+		}
+
+		for (size_t i = 0; i < lc.prog->globals.count; i++)
+		{
+			Il_Global& global = lc.prog->globals[i];
+
+			llvm::GlobalVariable* global_variable = nullptr;
+
+			auto type_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, global.type);
+			auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, global.type);
+
+			llvm::Type* llvm_type = to_llvm(lc, global.type);
+
+			if (global.initializer == -1) {
+
+				llvm::Value* initializer = nullptr;
+
+				if (type_flags & TN_Struct_Type) {
+					initializer = llvm::ConstantAggregateZero::get(llvm_type);
+				}
+				else if (type_flags & TN_Pointer_Type || global.type->kind == Type_Proc) {
+					initializer = llvm::ConstantPointerNull::get((llvm::PointerType*)llvm_type);
+				}
+				else if (type_flags & TN_Float_Type) {
+					initializer = llvm::ConstantFP::get(llvm_type, 0);
+				}
+				else {
+					initializer = llvm::ConstantInt::get(llvm_type, 0);
+				}
+
+				global_variable = new llvm::GlobalVariable(*lc.llvm_module, llvm_type, false, llvm::GlobalVariable::ExternalLinkage, (llvm::Constant*)initializer, global.name.data);
+			}
+			else {
+
+				global_variable = new llvm::GlobalVariable(*lc.llvm_module, llvm_type, false, llvm::GlobalVariable::ExternalLinkage, (llvm::Constant*)LLVMC_Initializer_Codegen(lc, global.initializer_storage, global.initializer), global.name.data);
+			}
+
+			lc.global_to_llvm[i] = global_variable;
 		}
 
 		for (size_t i = 0; i < lc.prog->procedures.count; i++)
@@ -467,7 +688,7 @@ namespace Glass
 
 		llvm::TargetOptions opt;
 		auto target_machine = target->createTargetMachine(
-			target_triple, CPU, features, opt, llvm::Reloc::PIC_);
+			target_triple, CPU, features, opt, llvm::Reloc::PIC_, {}, llvm::CodeGenOpt::None);
 
 		auto file_name = lc.spec.output_path.data;
 		std::error_code EC;
@@ -496,6 +717,9 @@ namespace Glass
 	{
 		lc.llvm_ctx = new llvm::LLVMContext();
 		lc.llvm_module = new llvm::Module("Glass", *lc.llvm_ctx);
+
+		lc.global_to_llvm = Array_Reserved<llvm::GlobalVariable*>(lc.prog->globals.count);
+		lc.global_to_llvm.count = lc.prog->globals.count;
 
 		const char* data_layout_string = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
 		llvm::DataLayout data_layout(data_layout_string);
@@ -540,8 +764,10 @@ namespace Glass
 
 		LLVMC_Codegen(lc);
 
-		llvm::verifyModule(*lc.llvm_module, &llvm::outs());
+		if (lc.spec.validate)
+			llvm::verifyModule(*lc.llvm_module, &llvm::outs());
 
+		if (lc.spec.validate)
 		{
 			std::error_code ELC;
 			llvm::raw_fd_ostream outputFile(".bin/llvm.ll", ELC, llvm::sys::fs::OF_None);

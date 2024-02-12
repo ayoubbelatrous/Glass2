@@ -45,6 +45,7 @@ namespace Glass
 		Il_ZI,
 
 		Il_Struct_Initializer,
+		Il_Array_Initializer,
 
 		Il_Value_Cmp,
 		Il_Value_FCmp,
@@ -74,6 +75,10 @@ namespace Glass
 	enum Il_Cast_Type : u8
 	{
 		Il_Cast_Ptr,
+		Il_Cast_Int2Ptr,
+		Il_Cast_Ptr2Int,
+		Il_Cast_Int2Float,
+		Il_Cast_Float2Int,
 	};
 
 	struct Il_Node_Param
@@ -223,6 +228,12 @@ namespace Glass
 		Il_IDX global_idx;
 	};
 
+	struct Il_Node_Array_Init
+	{
+		u32 element_count;
+		Il_IDX* element_values;
+	};
+
 	struct Il_Node
 	{
 		Type_IDX type_idx;
@@ -246,6 +257,7 @@ namespace Glass
 			Il_Node_Branch				br;
 			Il_Node_Cast				cast;
 			Il_Node_Struct_Initializer  si;
+			Il_Node_Array_Init			ai;
 			Il_Node_Global_Address		global_address;
 			Il_Node_Proc_Address		proc_address;
 		};
@@ -328,12 +340,30 @@ namespace Glass
 
 		Il_IDX insertion_point = proc.insertion_point;
 
+		bool at_entry = false;
+
 		if (block_idx != -1) {
 			insertion_point = block_idx;
+			at_entry = true;
 		}
 
 		Array_Add(proc.instruction_storage, node);
-		Array_Add(proc.blocks[insertion_point].instructions, node_idx);
+
+		if (at_entry) {
+			Array<Il_IDX> new_array;
+			Array_Add(new_array, node_idx);
+
+			//TODO: cleanup
+			for (size_t i = 0; i < proc.blocks[insertion_point].instructions.count; i++)
+			{
+				Array_Add(new_array, proc.blocks[insertion_point].instructions[i]);
+			}
+
+			proc.blocks[insertion_point].instructions = new_array;
+		}
+		else {
+			Array_Add(proc.blocks[insertion_point].instructions, node_idx);
+		}
 
 		return node_idx;
 	}
@@ -448,6 +478,23 @@ namespace Glass
 		si_node.si.member_count = (u16)member_values.count;
 
 		return si_node;
+	}
+
+	inline Il_Node Il_Make_Array_Init(Type_IDX struct_type_index, Array<Il_IDX> element_values) {
+
+		Il_Node ai_node = { 0 };
+		ai_node.node_type = Il_Array_Initializer;
+		ai_node.type_idx = struct_type_index;
+		ai_node.ai.element_count = element_values.count;
+
+		ai_node.ai.element_values = (Il_IDX*)malloc(element_values.count * sizeof(Il_IDX));
+
+		for (size_t i = 0; i < element_values.count; i++)
+		{
+			ai_node.ai.element_values[i] = element_values[i];
+		}
+
+		return ai_node;
 	}
 
 	inline Il_Node Il_Make_Struct_Element_Ptr(Type_IDX type_idx, u16 element_idx, Il_IDX ptr_node_idx) {
@@ -681,6 +728,15 @@ namespace Glass
 
 	inline Il_IDX Il_Insert_Constant(Il_Proc& proc, Const_Union constant, GS_Type* type) {
 		Il_Node const_node = Il_Make_Constant(constant, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
+		return Il_Proc_Insert(proc, const_node);
+	}
+
+	inline Il_IDX Il_Insert_Constant(Il_Proc& proc, void* constant, GS_Type* type) {
+
+		Const_Union constant_value = {};
+		constant_value.ptr = constant;
+
+		Il_Node const_node = Il_Make_Constant(constant_value, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
 		return Il_Proc_Insert(proc, const_node);
 	}
 

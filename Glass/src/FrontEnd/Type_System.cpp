@@ -59,8 +59,8 @@ namespace Glass
 
 		while (pointee->kind == Type_Pointer)
 		{
-			pointee = pointee->pointer.pointee;
 			indirection += pointee->pointer.indirection;
+			pointee = pointee->pointer.pointee;
 		}
 
 		ASSERT(pointee->kind != Type_Pointer);
@@ -206,6 +206,9 @@ namespace Glass
 		else if (type->kind == Type_Array) {
 			return TypeSystem_Get_Type_Alignment(ts, type->array.element_type);
 		}
+		else if (type->kind == Type_Proc) {
+			return 8;
+		}
 		else {
 			ASSERT(nullptr);
 			return 0;
@@ -293,21 +296,21 @@ namespace Glass
 			stream << ts.type_name_storage[type->basic.type_name_id].name.data;
 			break;
 		case Type_Pointer:
-			stream << TypeSystem_Print_Type(ts, type->pointer.pointee).data;
 			for (size_t i = 0; i < type->pointer.indirection; i++)
 			{
 				stream << '*';
 			}
+			stream << TypeSystem_Print_Type(ts, type->pointer.pointee).data;
 			break;
 		case Type_Dyn_Array:
-			stream << TypeSystem_Print_Type(ts, type->dyn_array.element_type).data;
 			stream << "[..]";
+			stream << TypeSystem_Print_Type(ts, type->dyn_array.element_type).data;
 			break;
 		case Type_Array:
-			stream << TypeSystem_Print_Type(ts, type->array.element_type).data;
 			stream << '[';
 			stream << type->array.size;
 			stream << ']';
+			stream << TypeSystem_Print_Type(ts, type->array.element_type).data;
 			break;
 		case Type_Proc:
 

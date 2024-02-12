@@ -8,6 +8,7 @@ namespace Glass
 	struct LLVM_Converter_Spec
 	{
 		String output_path;
+		bool validate = true;
 	};
 
 	struct LLVM_Converter
@@ -20,6 +21,7 @@ namespace Glass
 		llvm::LLVMContext* llvm_ctx;
 
 		Array<llvm::Function*> proc_to_llvm;
+		Array<llvm::GlobalVariable*> global_to_llvm;
 
 		std::unordered_map<GS_Type*, llvm::Type*> type_to_llvm;
 		llvm::Type* llvm_ptr = nullptr;

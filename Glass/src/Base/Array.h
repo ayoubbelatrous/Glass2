@@ -58,7 +58,7 @@ namespace Glass
 
 		E& operator[](std::size_t index) {
 			if (index >= count) {
-				ASSERT("Array Out of bounds access");
+				ASSERT(nullptr, "Array Out of bounds access");
 				return data[count - 1];
 			}
 			return data[index];
@@ -66,7 +66,7 @@ namespace Glass
 
 		const E& operator[](std::size_t index) const {
 			if (index >= count) {
-				ASSERT("Array Out of bounds access");
+				ASSERT(nullptr, "Array Out of bounds access");
 				return data[count - 1];
 			}
 			return data[index];
