@@ -282,7 +282,7 @@ namespace Glass
 		GS_CORE_INFO("frontend took: {} s", front_end_time_f - (parse_time_f + lex_time_f));
 		GS_CORE_INFO("lexing took: {} s", parse_time_f);
 		GS_CORE_INFO("parsing took: {} s", lex_time_f);
-		GS_CORE_INFO("enitity search took: {} s", search_time_f);
+		GS_CORE_INFO("enitity search took: {} s, total loops: {}", search_time_f, Data.entity_search_loop_count);
 
 		Generate_Output();
 	}
@@ -4046,11 +4046,16 @@ namespace Glass
 
 		if (parent_id != Entity_Null) {
 			Entity& parent = Data.entity_storage[parent_id];
+
+			parent.children_lookup[std::string_view(entity.semantic_name.data, entity.semantic_name.count)] = entity_identifier;
+
 			Array_Add(parent.children, entity_identifier);
 			entity.parent = parent_id;
 		}
 
 		Array_Add(Data.entity_storage, entity);
+
+		Array_Add(Data.name_to_entities[std::string_view(entity.semantic_name.data, entity.semantic_name.count)], entity_identifier);
 
 		return entity_identifier;
 	}
@@ -4332,16 +4337,30 @@ namespace Glass
 
 		Entity& scope_entity = data.entity_storage[scope_id];
 
-		for (size_t i = 0; i < scope_entity.children.count; i++)
+		auto it = scope_entity.children_lookup.find({ name.data,name.count });
+
+		if (it != scope_entity.children_lookup.end()) {
+			return it->second;
+		}
+
+		if (visited_parent == data.global_scope_entity) return Entity_Null;
+
+		Entity& global_scope = data.entity_storage[data.global_scope_entity];
+
+		for (size_t i = 0; i < global_scope.children.count; i++)
 		{
-			Entity_ID scope_child_id = scope_entity.children[i];
+#ifdef MESURE_SEARCH_TIME
+			data.entity_search_loop_count += 1;
+#endif
+
+			Entity_ID scope_child_id = global_scope.children[i];
 			ASSERT(scope_child_id != Entity_Null);
 
 			Entity& child_entity = data.entity_storage[scope_child_id];
 
-			if (strcmp(child_entity.semantic_name.data, name.data) == 0) {
-				return scope_child_id;
-			}
+			//if (strcmp(child_entity.semantic_name.data, name.data) == 0) {
+			//	return scope_child_id;
+			//}
 
 			if (child_entity.entity_type == Entity_Type::File_Load) {
 
@@ -4349,7 +4368,7 @@ namespace Glass
 
 				if (visited_load != file_load_file_scope) {
 
-					Entity_ID found_in_load = Get_Entity_ID_By_Name(data, file_load_file_scope, name, visited_load, visited_parent);
+					Entity_ID found_in_load = Get_Entity_ID_By_Name(data, file_load_file_scope, name, visited_load, data.global_scope_entity);
 
 					if (found_in_load != Entity_Null)
 					{

@@ -150,6 +150,8 @@ namespace Glass
 		GS_Type* semantic_type = nullptr;
 		Const_Union constant_value;
 
+		std::unordered_map<std::string_view, Entity_ID> children_lookup;
+
 		union
 		{
 			Entity_File_Scope			file_scope;
@@ -194,6 +196,8 @@ namespace Glass
 		std::unordered_map<std::string, File_ID> Path_To_File;
 		std::unordered_map<File_ID, Entity_ID> File_ID_To_Scope;
 		std::unordered_map<Type_Name_ID, Entity_ID> typename_to_entity_id;
+
+		std::unordered_map<std::string_view, Array<Entity_ID>> name_to_entities;
 
 		Array<Front_End_Message> Messages;
 
@@ -260,6 +264,7 @@ namespace Glass
 		u64 parse_time_micro_seconds = 0;
 		u64 lex_time_micro_seconds = 0;
 		u64 entity_search_time = 0;
+		u64 entity_search_loop_count = 0;
 
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
