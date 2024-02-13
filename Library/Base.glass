@@ -1,127 +1,78 @@
+
 struct Any {
 	Type 	type				;
-	void* 	data				;
+	*void 	data				;
 };
 
 struct string {
-	u8* 	data				;
 	u64 	count				;
+	*u8 	data				;
 };
 
 struct Array {
 	u64 	count				;
-	void* 	data				;
+	*void 	data				;
 };
+
+enum TypeInfo_Kind {
+	BASIC 		:: 1;
+	NUMERIC  	:: 2;
+	STRUCT 		:: 3;
+}
 
 enum #flags TypeInfo_Flags {
-	BASE_TYPE					;
-	NUMERIC_TYPE				;
-	UNSIGNED_TYPE				;
-	FLOATING_TYPE				;
-	STRUCT						;
-	STRUCT_MEMBER				;
-	ENUM						;
-	FUNCTION					;
-	POINTER						;
-};
+	BASE_TYPE 			:: 0x1;
+	SIGNED_TYPE 	 	:: 0x2;
+	FLOAT_TYPE 			:: 0x4;
+}
 
 struct TypeInfo {
-	u8* name					;
-	TypeInfo_Flags flags		;
-	u64 size					;
-};
+	TypeInfo_Kind 	kind;
+	string 		  	name;
+	TypeInfo_Flags 	flags;
+}
 
-struct TypeInfo_Enum_Member {
-	u8* name					;
-	u64 value					;
-	u64 pad0;
-	u64 pad1;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-	u64 pad5;
-};
+struct TypeInfo_Basic {
+	TypeInfo_Kind 	kind;
+	string 		  	name;
+	TypeInfo_Flags 	flags;
+	int 			size;
+	int 			alignment;
+}
 
-struct TypeInfo_Enum {
-	u8* name						;
-	TypeInfo_Flags flags			;
-	u64 size						;
-	TypeInfo_Enum_Member[..] members;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+struct TypeInfo_Numeric {
+	TypeInfo_Kind 	kind;
+	string 		  	name;
+	TypeInfo_Flags 	flags;
+	int 			size;
+	int 			alignment;
+	int 			size_in_bits;
+}
 
 struct TypeInfo_Pointer {
-	u8* name					;
-	TypeInfo_Flags flags		;
-	Type type				    ;
-	u64 indirection				;
-	u64 pad1;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+	TypeInfo_Kind 	kind;
+	string 		  	name;
+	TypeInfo_Flags 	flags;
+	Type 			pointee;
+	int 			indirection;
+}
 
-struct TypeInfo_Dyn_Array {
-	u8* name					;
-	TypeInfo_Flags flags		;
-	Type type				    ;
-	u64 pad0;
-	u64 pad1;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
-
-struct TypeInfo_Function {
-	u8* name					;
-	TypeInfo_Flags flags		;
-	Type return_type			;
-	Type[..] parameters			;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
-
-struct TypeInfo_Member {
-	u8* name					;
-	Type type					;
-	u64 offset					;
-	u64 pad0;
-	u64 pad1;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+struct TypeInfo_Member
+{
+	TypeInfo_Kind 			kind;
+	string 		  			name;
+	Type 					type;
+	int 					offset;
+	[28] u8 				__padding;
+}
 
 struct TypeInfo_Struct {
-	u8* name					;
-	TypeInfo_Flags flags		;
-	u64 size					;
-	TypeInfo_Member[..] members ;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+	TypeInfo_Kind 			kind;
+	string 		  			name;
+	TypeInfo_Flags 			flags;
 
-struct TypeInfo_Func_Param {
-	u8* name					;
-	Type type 					;
-	bool variadic				;
-	u64 pad0;
-	u64 pad1;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+	int 				 	size;
+	int 				 	alignment;
 
-struct GlobalDef_Function {
-	u8* name							;
-	u8* mangled_name				 	;
-	Type signature					 	;
-	TypeInfo_Func_Param[..] parameters	;
-	u64 pad2;
-	u64 pad3;
-	u64 pad4;
-};
+	[..] TypeInfo_Member 	members;
+}

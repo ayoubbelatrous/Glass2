@@ -265,6 +265,7 @@ namespace Glass
 		u64 lex_time_micro_seconds = 0;
 		u64 entity_search_time = 0;
 		u64 entity_search_loop_count = 0;
+		u64 emit_il_time = 0;
 
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
@@ -301,6 +302,7 @@ namespace Glass
 		bool ok;
 
 		GS_Type* it_type = nullptr;
+		GS_Type* it_index_type = nullptr;
 
 		Il_IDX it_index_location_node = -1;
 		Il_IDX it_location_node = -1;
@@ -329,6 +331,33 @@ namespace Glass
 		operator bool() {
 			return ok;
 		}
+	};
+
+	class Timer
+	{
+	public:
+		Timer()
+		{
+			Reset();
+		}
+
+		void Timer::Reset()
+		{
+			m_Start = std::chrono::high_resolution_clock::now();
+		}
+
+		float Timer::Elapsed()
+		{
+			return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - m_Start).count() * 0.001f * 0.001f * 0.001f;
+		}
+
+		float Timer::ElapsedMillis()
+		{
+			return Elapsed() * 1000.0f;
+		}
+
+	private:
+		std::chrono::time_point<std::chrono::high_resolution_clock> m_Start;
 	};
 
 	class Front_End
@@ -395,6 +424,8 @@ namespace Glass
 		Entity Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Entity Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id);
+
+		std::string Print_Type(GS_Type* type);
 
 		Front_End_Data Data;
 		ApplicationOptions Options;

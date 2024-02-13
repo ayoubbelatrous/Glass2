@@ -5,6 +5,9 @@
 
 namespace Glass
 {
+
+	void* Array_Allocator(u64 size);
+
 	template<typename E>
 	struct Array;
 
@@ -82,7 +85,7 @@ namespace Glass
 
 		Array<E> arr = {};
 		arr.capacity = capacity;
-		arr.data = (E*)malloc(sizeof(E) * capacity);
+		arr.data = (E*)Array_Allocator(sizeof(E) * capacity);
 		return arr;
 	}
 
@@ -102,7 +105,7 @@ namespace Glass
 		Array<E> arr = {};
 		arr.count = vec.size();
 		arr.capacity = vec.capacity();
-		arr.data = (E*)malloc(sizeof(E) * arr.capacity);
+		arr.data = (E*)Array_Allocator(sizeof(E) * arr.capacity);
 
 		memcpy((void*)arr.data, (void*)vec.data(), arr.count * sizeof(E));
 
@@ -115,7 +118,7 @@ namespace Glass
 		Array<E> arr = {};
 		arr.count = other.count;
 		arr.capacity = other.capacity;
-		arr.data = (E*)malloc(sizeof(E) * arr.capacity);
+		arr.data = (E*)Array_Allocator(sizeof(E) * arr.capacity);
 
 		memcpy((void*)arr.data, (void*)other.data, arr.count * sizeof(E));
 
@@ -132,16 +135,16 @@ namespace Glass
 
 		if (arr.capacity == 0) {
 			arr.capacity++;
-			arr.data = (E*)malloc(arr.capacity * sizeof(E));
+			arr.data = (E*)Array_Allocator(arr.capacity * sizeof(E));
 		}
 
 		if (arr.count == arr.capacity) {
 			arr.capacity *= 2;
 
 			E* old_data = arr.data;
-			arr.data = (E*)malloc(arr.capacity * sizeof(E));
+			arr.data = (E*)Array_Allocator(arr.capacity * sizeof(E));
 			memcpy(arr.data, old_data, arr.count * sizeof(E));
-			free(old_data);
+			//free(old_data);
 		}
 
 		void* dst = (void*)&arr.data[arr.count];

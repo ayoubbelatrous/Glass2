@@ -327,7 +327,7 @@ namespace Glass
 	}
 
 	inline void Il_Program_Init(Il_Program& prog, Type_System* type_system) {
-		prog.procedures = Array_Reserved<Il_Proc>(1024 * 10);
+		prog.procedures = Array_Reserved<Il_Proc>(1024);
 		prog.type_system = type_system;
 	}
 

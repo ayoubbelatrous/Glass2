@@ -35,7 +35,7 @@ namespace Glass
 
 		// to avoid pointers to these pools get invalidated by insertions
 		Data.Files = Array_Reserved<Front_End_File>(1024);
-		Data.entity_storage = Array_Reserved<Entity>(1024 * 10 * 10); // about 10 megs
+		Data.entity_storage = Array_Reserved<Entity>(1024); // about 10 megs
 
 		Entity global_scope_entity;
 		global_scope_entity.semantic_name = String_Make("@global_scope");
@@ -240,19 +240,28 @@ namespace Glass
 			Data.type_system.struct_storage[Data.type_system.type_name_storage[te_type_name_id].struct_id] = te_struct;
 		}
 
+		Timer timer;
 		if (Do_Tl_Definition_Passes()) {
 			return;
 		}
+		GS_CORE_INFO("declaration pass took: {} s", timer.Elapsed());
+
+		timer.Reset();
 		if (Do_Tl_Dependency_Passes()) {
 			return;
 		}
+		GS_CORE_INFO("global dependecy pass took: {} s", timer.Elapsed());
 
+		timer.Reset();
 		if (Do_Tl_Resolution_Passes()) {
 			return;
 		}
+		GS_CORE_INFO("dependecy resolve pass took: {} s", timer.Elapsed());
 
+		timer.Reset();
 		if (Do_CodeGen())
 			return;
+		GS_CORE_INFO("emit il time: {} s", timer.Elapsed());
 
 		if (print_il)
 		{
@@ -276,13 +285,18 @@ namespace Glass
 		double lex_time_f = Data.lex_time_micro_seconds;
 		lex_time_f /= 1000000.0;
 
+		double emit_il_time_f = Data.emit_il_time;
+		emit_il_time_f /= 1000000.0;
+
 		double search_time_f = Data.entity_search_time;
 		search_time_f /= 1000000000.0;
 
 		GS_CORE_INFO("frontend took: {} s", front_end_time_f - (parse_time_f + lex_time_f));
-		GS_CORE_INFO("lexing took: {} s", parse_time_f);
-		GS_CORE_INFO("parsing took: {} s", lex_time_f);
+		GS_CORE_INFO("frontend total took: {} s", front_end_time_f);
 		GS_CORE_INFO("enitity search took: {} s, total loops: {}", search_time_f, Data.entity_search_loop_count);
+		GS_CORE_INFO("lexing took: {} s", parse_time_f);
+		GS_CORE_INFO("lines processed: {}", g_LinesProcessed);
+		GS_CORE_INFO("parsing took: {} s", lex_time_f);
 
 		Generate_Output();
 	}
@@ -1975,7 +1989,7 @@ namespace Glass
 			it_variable.semantic_type = condition_result.it_type;
 
 			it_index_variable.var.location = condition_result.it_index_location_node;
-			it_index_variable.semantic_type = condition_result.it_type;
+			it_index_variable.semantic_type = condition_result.it_index_type;
 
 			Insert_Entity(it_variable, inserted_scope_entity_id);
 			Insert_Entity(it_index_variable, inserted_scope_entity_id);
@@ -2939,6 +2953,30 @@ namespace Glass
 			return result;
 		}
 		break;
+		case NodeType::SizeOf:
+		{
+			SizeOfNode* as_sizeof = (SizeOfNode*)expression;
+
+			Eval_Result eval_result = Expression_Evaluate(as_sizeof->Expr, scope_id, nullptr, false);
+			if (!eval_result)
+				return {};
+
+			u64 type_size = 0;
+
+			if (eval_result.expression_type == Data.Type_Ty) {
+				type_size = TypeSystem_Get_Type_Size(Data.type_system, eval_result.result.type);
+			}
+			else {
+				type_size = TypeSystem_Get_Type_Size(Data.type_system, eval_result.expression_type);
+			}
+
+			CodeGen_Result result;
+			result.ok = true;
+			result.expression_type = Data.u64_Ty;
+			result.code_node_id = Il_Insert_Constant(proc, (void*)type_size, Data.Type_Ty);
+			return result;
+		}
+		break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -2969,7 +3007,7 @@ namespace Glass
 				return {};
 
 			if (begin_result.expression_type != end_result.expression_type) {
-				Push_Error_Loc(scope_id, expression, FMT("range iterator type mismatch: '{}', '{}'", std::string(TypeSystem_Print_Type(Data.type_system, begin_result.expression_type).data), std::string(TypeSystem_Print_Type(Data.type_system, end_result.expression_type).data)));
+				Push_Error_Loc(scope_id, expression, FMT("range iterator type mismatch: '{}', '{}'", Print_Type(begin_result.expression_type), Print_Type(end_result.expression_type)));
 				return {};
 			}
 
@@ -2977,7 +3015,7 @@ namespace Glass
 			auto range_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, range_type);
 
 			if (!(range_type_flags & TN_Numeric_Type)) {
-				Push_Error_Loc(scope_id, expression, FMT("range iterator type is not numeric: '{}'", TypeSystem_Print_Type(Data.type_system, range_type).data));
+				Push_Error_Loc(scope_id, expression, FMT("range iterator type is not numeric: '{}'", Print_Type(range_type)));
 				return {};
 			}
 
@@ -3004,6 +3042,7 @@ namespace Glass
 			result.ok = true;
 			result.condition_node = cmp_node_idx;
 			result.it_type = range_type;
+			result.it_index_type = range_type;
 			result.it_index_location_node = it_index_alloca;
 			result.it_location_node = it_alloca;
 
@@ -3012,7 +3051,78 @@ namespace Glass
 		break;
 		default:
 		{
-			Push_Error_Loc(scope_id, expression, "expected iterator");
+			auto expr_result = Expression_CodeGen(expression, scope_id, proc, nullptr, true);
+
+			if (!expr_result)
+				return {};
+
+			if (expr_result.expression_type->kind != Type_Dyn_Array && expr_result.expression_type->kind != Type_Array && expr_result.expression_type != Data.string_Ty) {
+				Push_Error_Loc(scope_id, expression, FMT("type is not iterable: '{}'", Print_Type(expr_result.expression_type)));
+				return {};
+			}
+
+			GS_Type* it_type = nullptr;
+
+			if (expr_result.expression_type->kind == Type_Array) {
+				it_type = expr_result.expression_type->array.element_type;
+			}
+			else if (expr_result.expression_type->kind == Type_Dyn_Array) {
+				it_type = expr_result.expression_type->dyn_array.element_type;
+			}
+			else if (expr_result.expression_type == Data.string_Ty) {
+				it_type = Data.u8_Ty;
+			}
+
+			GS_Type* it_index_type = Data.u64_Ty;
+
+			Il_Set_Insert_Point(proc, before_condition_block);
+
+			Il_IDX it_alloca = Il_Insert_Alloca(proc, it_type);
+			Il_IDX it_index_alloca = Il_Insert_Alloca(proc, it_index_type);
+			Il_Insert_Store(proc, it_index_type, it_index_alloca, Il_Insert_Constant(proc, (void*)0, it_index_type));
+
+			Il_Set_Insert_Point(proc, condition_block);
+
+			Il_IDX end = -1;
+			if (expr_result.expression_type->kind == Type_Array)
+				end = Il_Insert_Constant(proc, (void*)expr_result.expression_type->array.size, it_index_type);
+			else
+			{
+				end = Il_Insert_Load(proc, it_index_type, Il_Insert_SEP(proc, Data.Array_Ty, 0, expr_result.code_node_id));
+			}
+
+			Il_IDX it_index_load = Il_Insert_Load(proc, it_index_type, it_index_alloca);
+
+			Il_IDX array_ptr;
+
+			if (expr_result.expression_type->kind == Type_Array)
+				array_ptr = expr_result.code_node_id;
+			else
+			{
+				GS_Type* it_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, it_type, 1);
+				array_ptr = Il_Insert_Load(proc, it_type_pointer, Il_Insert_SEP(proc, Data.Array_Ty, 1, expr_result.code_node_id));
+			}
+
+			Il_IDX array_element_ptr = Il_Insert_AEP(proc, it_type, array_ptr, it_index_load);
+			Il_Insert_Store(proc, it_type, it_alloca, Il_Insert_Load(proc, it_type, array_element_ptr));
+
+			Il_IDX cmp_node_idx = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_Lesser, it_index_type, it_index_load, end);
+
+			Il_Set_Insert_Point(proc, after_body_block);
+
+			it_index_load = Il_Insert_Load(proc, it_index_type, it_index_alloca);
+			Il_Insert_Store(proc, it_index_type, it_index_alloca, Il_Insert_Math_Op(proc, it_index_type, Il_Add, it_index_load, Il_Insert_Constant(proc, (void*)1, it_index_type)));
+
+			Iterator_Result result;
+			result.ok = true;
+			result.condition_node = cmp_node_idx;
+			result.it_type = it_type;
+			result.it_index_type = it_index_type;
+			result.it_index_location_node = it_index_alloca;
+			result.it_location_node = it_alloca;
+
+			return result;
+
 			return {};
 		}
 		break;
@@ -4055,7 +4165,7 @@ namespace Glass
 
 		Array_Add(Data.entity_storage, entity);
 
-		Array_Add(Data.name_to_entities[std::string_view(entity.semantic_name.data, entity.semantic_name.count)], entity_identifier);
+		//Array_Add(Data.name_to_entities[std::string_view(entity.semantic_name.data, entity.semantic_name.count)], entity_identifier);
 
 		return entity_identifier;
 	}
@@ -4251,6 +4361,11 @@ namespace Glass
 		lib_entity.semantic_type = nullptr;
 
 		return lib_entity;
+	}
+
+	std::string Front_End::Print_Type(GS_Type* type)
+	{
+		return std::string(TypeSystem_Print_Type(Data.type_system, type).data);
 	}
 
 	Entity_ID Front_End_Data::Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id)
