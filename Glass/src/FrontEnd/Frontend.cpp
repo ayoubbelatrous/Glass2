@@ -10,6 +10,64 @@
 
 namespace Glass
 {
+	String Operator_To_String(Operator op)
+	{
+		switch (op)
+		{
+		case Operator::Add:
+			return String_Make("+");
+		case Operator::Subtract:
+			return String_Make("-");
+		case Operator::Multiply:
+			return String_Make("*");
+		case Operator::Modulo:
+			return String_Make("%");
+		case Operator::Divide:
+			return String_Make("/");
+		case Operator::Assign:
+			return String_Make("=");
+		case Operator::AddAssign:
+			return String_Make("+=");
+		case Operator::SubAssign:
+			return String_Make("-=");
+		case Operator::MulAssign:
+			return String_Make("*=");
+		case Operator::DivAssign:
+			return String_Make("/=");
+		case Operator::BitOrAssign:
+			return String_Make("|=");
+		case Operator::BitAndAssign:
+			return String_Make("&=");
+		case Operator::Not:
+			return String_Make("!");
+		case Operator::Equal:
+			return String_Make("==");
+		case Operator::NotEqual:
+			return String_Make("!=");
+		case Operator::GreaterThan:
+			return String_Make(">");
+		case Operator::LesserThan:
+			return String_Make("<");
+		case Operator::GreaterThanEq:
+			return String_Make(">=");
+		case Operator::LesserThanEq:
+			return String_Make("<=");
+		case Operator::BitAnd:
+			return String_Make("&");
+		case Operator::BitOr:
+			return String_Make("|");
+		case Operator::And:
+			return String_Make("and");
+		case Operator::Or:
+			return String_Make("or");
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+
+		return String_Make("unknown operator");
+	}
+
 	std::string normalizePath(const std::string& messyPath) {
 		std::filesystem::path path(messyPath);
 		std::filesystem::path canonicalPath = std::filesystem::weakly_canonical(path);
@@ -54,7 +112,7 @@ namespace Glass
 			tn.flags = TN_Base_Type;
 
 			if (numeric) {
-				tn.flags = TN_Numeric_Type;
+				tn.flags |= TN_Numeric_Type;
 			}
 
 			if (!is_signed) {
@@ -754,6 +812,20 @@ namespace Glass
 				AddLibraryNode* as_add_library_node = (AddLibraryNode*)statement;
 				Data.Added_Libraries_Paths.emplace(as_add_library_node->FileName->Symbol.Symbol);
 			}
+			else if (statement->GetType() == NodeType::Operator)
+			{
+				OperatorNode* as_operator = (OperatorNode*)statement;
+
+				String operator_name = Operator_To_String(as_operator->OPerator);
+
+				Entity overload_entity = Create_Operator_Overload(operator_name, Loc_From_Token(as_operator->GetLocation()), file_entity.file_scope.file_id);
+
+				overload_entity.operator_overload._operator = as_operator->OPerator;
+				overload_entity.flags = EF_InComplete;
+				overload_entity.syntax_node = as_operator;
+
+				Insert_Entity(overload_entity, file_entity_id);
+			}
 			return false;
 			});
 	}
@@ -1039,6 +1111,23 @@ namespace Glass
 								return true;
 							}
 						}
+					}
+					else if (tl_entity.entity_type == Entity_Type::Operator_Overload)
+					{
+						OperatorNode* as_operator = (OperatorNode*)tl_entity.syntax_node;
+						ASSERT(as_operator->statement->GetType() == NodeType::Identifier);
+
+						Identifier* as_ident = (Identifier*)as_operator->statement;
+
+						if (!Do_Expression_Dependecy_Pass(file_entity_id, as_ident, tl_entity.dependencies, tl_file_scope_entity_id))
+							return true;
+
+						String function_name = String_Make(as_ident->Symbol.Symbol);
+
+						Entity_ID function_entity = Front_End_Data::Get_Entity_ID_By_Name(Data, file_entity_id, function_name);
+						tl_entity.operator_overload.function_entity_id = function_entity;
+
+						tl_entity.flags = EF_InComplete;
 					}
 				}
 			}
@@ -1327,6 +1416,44 @@ namespace Glass
 						Il_IDX inserted_proc_idx = Il_Insert_Proc(Data.il_program, String_Copy(entity.semantic_name), proc_signature);
 						entity.func.proc_idx = inserted_proc_idx;
 					}
+
+					entity.flags &= ~EF_InComplete;
+				}
+				else if (entity.entity_type == Entity_Type::Operator_Overload)
+				{
+					OperatorNode* as_operator = (OperatorNode*)entity.syntax_node;
+					Identifier* as_ident = (Identifier*)as_operator->statement;
+
+					String function_name = String_Make(as_ident->Symbol.Symbol);
+
+					Entity& function_entity = Data.entity_storage[entity.operator_overload.function_entity_id];
+
+					entity.operator_overload.query_signature = TypeSystem_Get_Proc_Type(Data.type_system, Data.void_Ty, *(Array<GS_Type*>*) & function_entity.func.signature->proc.params);
+
+					GS_Type* query_signature = entity.operator_overload.query_signature;
+
+					String operator_as_string = Operator_To_String(entity.operator_overload._operator);
+					String operator_name = String_Make(FMT("{}{}", operator_as_string.data, query_signature->type_hash));
+
+					Entity_ID current_scope = Front_End_Data::Get_File_Scope_Parent(Data, i);
+
+					Entity_ID previous_definition_id = Front_End_Data::Get_Entity_ID_By_Name(Data, current_scope, operator_name);
+
+					while (previous_definition_id != Entity_Null) {
+
+						Entity& previous_definition = Data.entity_storage[previous_definition_id];
+						ASSERT(previous_definition.entity_type == Entity_Type::Operator_Overload);
+
+						if (previous_definition.operator_overload.query_signature == query_signature) {
+							Push_Error_Loc(current_scope, as_operator->statement, FMT("operator '{}' is already defined with the same signature!", operator_as_string.data));
+							return true;
+						}
+
+						previous_definition_id = Front_End_Data::Get_Entity_ID_By_Name(Data, current_scope, operator_name);
+					}
+
+					entity.semantic_name = operator_name;
+					Data.entity_storage[current_scope].children_lookup[operator_name.data] = i;
 
 					entity.flags &= ~EF_InComplete;
 				}
@@ -2204,6 +2331,14 @@ namespace Glass
 
 				result.code_node_id = Il_Insert_Struct_Init(proc, Data.string_Ty, Array_View((Il_IDX*)struct_members, 2));
 				result.expression_type = Data.string_Ty;
+
+				if (by_reference) {
+					Il_IDX lvalue_alloca = Il_Insert_Alloca(proc, Data.string_Ty);
+					Il_Insert_Store(proc, Data.string_Ty, lvalue_alloca, result.code_node_id);
+					result.code_node_id = lvalue_alloca;
+
+					result.lvalue = true;
+				}
 			}
 
 			result.ok = true;
@@ -2270,199 +2405,7 @@ namespace Glass
 		}
 		case NodeType::BinaryExpression:
 		{
-			BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
-
-			bool op_assignment =
-				as_bin_expr->OPerator == Operator::AddAssign || as_bin_expr->OPerator == Operator::SubAssign ||
-				as_bin_expr->OPerator == Operator::MulAssign || as_bin_expr->OPerator == Operator::DivAssign;
-
-			bool assignment = as_bin_expr->OPerator == Operator::Assign || op_assignment;
-
-			bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
-			bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
-			bool bit_wise = as_bin_expr->OPerator == Operator::BitOr || as_bin_expr->OPerator == Operator::BitAnd;
-
-			CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment, is_condition);
-			if (!left_result) return {};
-			CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type, false, is_condition);
-			if (!right_result) return {};
-
-			if (assignment) {
-				if (left_result.constant) {
-					Push_Error_Loc(scope_id, as_bin_expr->Left, "trying to modify a constant");
-					return {};
-				}
-
-				if (!left_result.lvalue) {
-					Push_Error_Loc(scope_id, as_bin_expr->Left, "not an lvalue");
-					return {};
-				}
-			}
-
-			if (left_result.expression_type != right_result.expression_type) {
-				Push_Error_Loc(scope_id, as_bin_expr, "type mismatch");
-				return {};
-			}
-
-			if (!left_result.expression_type) {
-				Push_Error_Loc(scope_id, as_bin_expr->Left, "<un typed> value does not support math operations");
-				return {};
-			}
-
-			if (!right_result.expression_type) {
-				Push_Error_Loc(scope_id, as_bin_expr->Right, "<un typed> value does not support math operations");
-				return {};
-			}
-
-			auto left_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, left_result.expression_type);
-			auto right_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, right_result.expression_type);
-
-			GS_Type* bin_expr_result_type = left_result.expression_type;
-
-			auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
-
-			if (!logical_compare && !equality_compare) {
-				if (!(type_flags & TN_Numeric_Type) && !(type_flags & TN_Enum_Type) && !assignment) {
-					Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
-					return {};
-				}
-			}
-			else {
-				if (bin_expr_result_type != Data.bool_Ty && !equality_compare && !bit_wise) {
-					Push_Error_Loc(scope_id, as_bin_expr, "types are not bool");
-					return {};
-				}
-			}
-
-			Const_Union result_value = { 0 };
-
-			Il_IDX code_node_id = -1;
-
-			Il_Node_Type math_op_type = (Il_Node_Type)-1;
-			Il_Cmp_Type cmp_type = (Il_Cmp_Type)-1;
-			bool compare = false;
-
-			switch (as_bin_expr->OPerator)
-			{
-			case Operator::Add:
-				math_op_type = Il_Add;
-				break;
-			case Operator::Subtract:
-				math_op_type = Il_Sub;
-				break;
-			case Operator::Multiply:
-				math_op_type = Il_Mul;
-				break;
-			case Operator::Divide:
-				math_op_type = Il_Div;
-				break;
-			case Operator::BitAnd:
-				math_op_type = Il_Bit_And;
-				break;
-			case Operator::BitOr:
-				math_op_type = Il_Bit_Or;
-				break;
-			case Operator::GreaterThan:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_Greater;
-				compare = true;
-				break;
-			case Operator::LesserThan:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_Lesser;
-				compare = true;
-				break;
-			case Operator::GreaterThanEq:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_GreaterEqual;
-				compare = true;
-				break;
-			case Operator::LesserThanEq:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_LesserEqual;
-				compare = true;
-				break;
-			case Operator::Equal:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_Equal;
-				compare = true;
-				break;
-			case Operator::NotEqual:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_NotEqual;
-				compare = true;
-				break;
-			case Operator::And:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_And;
-				compare = true;
-				break;
-			case Operator::Or:
-				math_op_type = Il_Value_Cmp;
-				cmp_type = Il_Cmp_Or;
-				compare = true;
-				break;
-
-			case Operator::Assign:
-			{
-			}
-			break;
-			case Operator::AddAssign:
-				math_op_type = Il_Add;
-				break;
-			case Operator::SubAssign:
-				math_op_type = Il_Sub;
-				break;
-			case Operator::MulAssign:
-				math_op_type = Il_Mul;
-				break;
-			case Operator::DivAssign:
-				math_op_type = Il_Div;
-				break;
-			default:
-				ASSERT(nullptr, "unknown operator");
-				break;
-			}
-
-			if (!compare) {
-
-				if (op_assignment) {
-
-					CodeGen_Result byvalue_left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr);
-					ASSERT(byvalue_left_result);
-					ASSERT(byvalue_left_result.expression_type == bin_expr_result_type);
-
-					right_result.code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, byvalue_left_result.code_node_id, right_result.code_node_id);
-				}
-				else if (!assignment) {
-					code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
-
-					if (inferred_type == Data.bool_Ty) {
-						Const_Union zero = {};
-						code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, bin_expr_result_type, code_node_id, Il_Insert_Constant(proc, zero, bin_expr_result_type));
-						bin_expr_result_type = Data.bool_Ty;
-					}
-				}
-			}
-			else {
-				code_node_id = Il_Insert_Compare(proc, math_op_type, cmp_type, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
-				bin_expr_result_type = Data.bool_Ty;
-			}
-
-			if (assignment) {
-				code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
-
-				if (left_result.immutable) {
-					Push_Error_Loc(scope_id, as_bin_expr->Left, "value is immutable");
-					return {};
-				}
-			}
-
-			CodeGen_Result result;
-			result.expression_type = bin_expr_result_type;
-			result.code_node_id = code_node_id;
-			result.ok = true;
-			return result;
+			return BinaryExpression_CodeGen(expression, scope_id, proc, inferred_type, by_reference, is_condition);
 		}
 		case NodeType::NegateExpression:
 		{
@@ -2698,24 +2641,32 @@ namespace Glass
 			if (!object_result)
 				return {};
 
+			bool supports_members = false;
+
 			auto object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type);
 
-			if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type)) {
+			if (object_result.expression_type->kind == Type_Pointer && object_result.expression_type->pointer.indirection == 1) {
 
-				if (object_result.expression_type->kind == Type_Dyn_Array)
-				{
-				}
-				else if (object_result.expression_type->kind == Type_Pointer && object_result.expression_type->pointer.indirection == 1) {
-					object_result.code_node_id = Il_Insert_Load(proc, object_result.expression_type, object_result.code_node_id);
-					object_result.expression_type = object_result.expression_type->pointer.pointee;
-				}
-				else {
-					Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
-					return {};
-				}
+				object_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, object_result.expression_type->pointer.pointee);
+
+				object_result.code_node_id = Il_Insert_Load(proc, object_result.expression_type, object_result.code_node_id);
+				object_result.expression_type = object_result.expression_type->pointer.pointee;
+				supports_members = true;
 			}
 
-			if (object_result.expression_type->kind & Type_Dyn_Array) {
+			if (!(object_type_flags & TN_Struct_Type) && !(object_type_flags & TN_Enum_Type) && object_result.expression_type->kind != Type_Dyn_Array) {
+				supports_members = false;
+			}
+			else {
+				supports_members = true;
+			}
+
+			if (!supports_members) {
+				Push_Error_Loc(scope_id, as_member_access->Object, "type does not support members");
+				return {};
+			}
+
+			if (object_result.expression_type->kind == Type_Dyn_Array) {
 				object_result.expression_type = Data.Array_Ty;
 			}
 
@@ -4363,6 +4314,311 @@ namespace Glass
 		return lib_entity;
 	}
 
+	Entity Front_End::Create_Operator_Overload(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity operator_entity = { 0 };
+
+		operator_entity.entity_type = Entity_Type::Operator_Overload;
+		operator_entity.semantic_name = name;
+		operator_entity.source_location = source_location;
+		operator_entity.definition_file = file_id;
+		operator_entity.semantic_type = nullptr;
+
+		return operator_entity;
+	}
+
+	CodeGen_Result Front_End::BinaryExpression_TryOverload(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, CodeGen_Result left_result, CodeGen_Result right_result)
+	{
+		BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
+
+		auto left_type_size = TypeSystem_Get_Type_Size(Data.type_system, left_result.expression_type);
+		auto right_type_size = TypeSystem_Get_Type_Size(Data.type_system, left_result.expression_type);
+
+		if (left_type_size > 8) {
+			left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, inferred_type, true);
+		}
+
+		if (right_type_size > 8) {
+			right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, inferred_type, true);
+		}
+
+		GS_Type* query_param_types_data[2] = {};
+		Array<GS_Type*> query_param_types;
+		query_param_types.data = query_param_types_data;
+		query_param_types.count = 2;
+		query_param_types.capacity = 2;
+
+		query_param_types[0] = left_result.expression_type;
+		query_param_types[1] = right_result.expression_type;
+
+		GS_Type* query_signature = TypeSystem_Get_Proc_Type(Data.type_system, Data.void_Ty, query_param_types);
+
+		String operator_as_string = Operator_To_String(as_bin_expr->OPerator);
+		String operator_name = String_Make(FMT("{}{}", operator_as_string.data, query_signature->type_hash));
+
+		Entity_ID operator_entity_id = Front_End_Data::Get_Entity_ID_By_Name(Data, scope_id, operator_name);
+
+		if (operator_entity_id == Entity_Null) {
+			Push_Error_Loc(scope_id, as_bin_expr, FMT("no operator '{}' overload found for types '{}', '{}'", operator_as_string.data, Print_Type(left_result.expression_type), Print_Type(right_result.expression_type)));
+			return {};
+		}
+
+		Entity& operator_entity = Data.entity_storage[operator_entity_id];
+
+		Entity& operator_function = Data.entity_storage[operator_entity.operator_overload.function_entity_id];
+
+		auto return_type_size = TypeSystem_Get_Type_Size(Data.type_system, operator_function.func.signature->proc.return_type);
+
+		Il_Argument arguments_data[3] = {};
+		Array<Il_Argument> arguments;
+		arguments.data = arguments_data;
+		arguments.capacity = 3;
+
+		CodeGen_Result result;
+
+		GS_Type* callee_signature_data[3] = {};
+		Array<GS_Type*> callee_signature_params;
+		callee_signature_params.data = callee_signature_data;
+		callee_signature_params.capacity = 3;
+
+		GS_Type* callee_signature_return_type = operator_function.func.signature->proc.return_type;
+
+		if (return_type_size > 8) {
+			result.code_node_id = Il_Insert_Alloca(proc, operator_function.func.signature->proc.return_type);
+			Array_Add(callee_signature_params, TypeSystem_Get_Pointer_Type(Data.type_system, operator_function.func.signature->proc.return_type, 1));
+			Array_Add(arguments, Il_Argument{ result.code_node_id, (Type_IDX)TypeSystem_Get_Type_Index(Data.type_system, operator_function.func.signature->proc.return_type) });
+			callee_signature_return_type = Data.void_Ty;
+		}
+
+		Array_Add(arguments, { left_result.code_node_id });
+		Array_Add(arguments, { right_result.code_node_id });
+
+		Array_Add(callee_signature_params, { left_result.expression_type });
+		Array_Add(callee_signature_params, { right_result.expression_type });
+
+		GS_Type* call_signature = TypeSystem_Get_Proc_Type(Data.type_system, callee_signature_return_type, callee_signature_params);
+
+		result.ok = true;
+		result.expression_type = operator_function.func.signature->proc.return_type;
+
+		Il_IDX call_node_idx = Il_Insert_Call(proc, call_signature, arguments, operator_function.func.proc_idx);
+
+		if (return_type_size <= 8) {
+			result.code_node_id = call_node_idx;
+		}
+		else {
+			if (!by_reference)
+				result.code_node_id = Il_Insert_Load(proc, result.expression_type, result.code_node_id);
+		}
+
+		return result;
+	}
+
+	CodeGen_Result Front_End::BinaryExpression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, bool is_condition)
+	{
+		BinaryExpression* as_bin_expr = (BinaryExpression*)expression;
+
+		bool op_assignment =
+			as_bin_expr->OPerator == Operator::AddAssign || as_bin_expr->OPerator == Operator::SubAssign ||
+			as_bin_expr->OPerator == Operator::MulAssign || as_bin_expr->OPerator == Operator::DivAssign;
+
+		bool assignment = as_bin_expr->OPerator == Operator::Assign || op_assignment;
+
+		bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
+		bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
+		bool bit_wise = as_bin_expr->OPerator == Operator::BitOr || as_bin_expr->OPerator == Operator::BitAnd;
+
+		CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment, is_condition);
+		if (!left_result) return {};
+		CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type, false, is_condition);
+		if (!right_result) return {};
+
+		auto left_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, left_result.expression_type);
+		auto right_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, right_result.expression_type);
+
+		if (!assignment) {
+			bool left_overloadable = !(left_type_flags & TN_Base_Type) && !(left_type_flags & TN_Pointer_Type) && !(left_type_flags & TN_Enum_Type);
+			bool right_overloadable = !(right_type_flags & TN_Base_Type) && !(right_type_flags & TN_Pointer_Type) && !(left_type_flags & TN_Enum_Type);
+			if (left_overloadable || right_overloadable) {
+				return BinaryExpression_TryOverload(expression, scope_id, proc, inferred_type, by_reference, left_result, right_result);
+			}
+		}
+
+		if (assignment) {
+			if (left_result.constant) {
+				Push_Error_Loc(scope_id, as_bin_expr->Left, "trying to modify a constant");
+				return {};
+			}
+
+			if (!left_result.lvalue) {
+				Push_Error_Loc(scope_id, as_bin_expr->Left, "not an lvalue");
+				return {};
+			}
+		}
+
+		if (left_result.expression_type != right_result.expression_type) {
+			Push_Error_Loc(scope_id, as_bin_expr, "type mismatch");
+			return {};
+		}
+
+		if (!left_result.expression_type) {
+			Push_Error_Loc(scope_id, as_bin_expr->Left, "<un typed> value does not support math operations");
+			return {};
+		}
+
+		if (!right_result.expression_type) {
+			Push_Error_Loc(scope_id, as_bin_expr->Right, "<un typed> value does not support math operations");
+			return {};
+		}
+
+		GS_Type* bin_expr_result_type = left_result.expression_type;
+
+		auto type_flags = TypeSystem_Get_Type_Flags(Data.type_system, bin_expr_result_type);
+
+		if (!logical_compare && !equality_compare) {
+			if (!(type_flags & TN_Numeric_Type) && !(type_flags & TN_Enum_Type) && !assignment) {
+				Push_Error_Loc(scope_id, as_bin_expr, "types are not numeric and no overload was found");
+				return {};
+			}
+		}
+		else {
+			if (bin_expr_result_type != Data.bool_Ty && !equality_compare && !bit_wise) {
+				Push_Error_Loc(scope_id, as_bin_expr, "types are not bool");
+				return {};
+			}
+		}
+
+		Const_Union result_value = { 0 };
+
+		Il_IDX code_node_id = -1;
+
+		Il_Node_Type math_op_type = (Il_Node_Type)-1;
+		Il_Cmp_Type cmp_type = (Il_Cmp_Type)-1;
+		bool compare = false;
+
+		switch (as_bin_expr->OPerator)
+		{
+		case Operator::Add:
+			math_op_type = Il_Add;
+			break;
+		case Operator::Subtract:
+			math_op_type = Il_Sub;
+			break;
+		case Operator::Multiply:
+			math_op_type = Il_Mul;
+			break;
+		case Operator::Divide:
+			math_op_type = Il_Div;
+			break;
+		case Operator::BitAnd:
+			math_op_type = Il_Bit_And;
+			break;
+		case Operator::BitOr:
+			math_op_type = Il_Bit_Or;
+			break;
+		case Operator::GreaterThan:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_Greater;
+			compare = true;
+			break;
+		case Operator::LesserThan:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_Lesser;
+			compare = true;
+			break;
+		case Operator::GreaterThanEq:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_GreaterEqual;
+			compare = true;
+			break;
+		case Operator::LesserThanEq:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_LesserEqual;
+			compare = true;
+			break;
+		case Operator::Equal:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_Equal;
+			compare = true;
+			break;
+		case Operator::NotEqual:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_NotEqual;
+			compare = true;
+			break;
+		case Operator::And:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_And;
+			compare = true;
+			break;
+		case Operator::Or:
+			math_op_type = Il_Value_Cmp;
+			cmp_type = Il_Cmp_Or;
+			compare = true;
+			break;
+
+		case Operator::Assign:
+		{
+		}
+		break;
+		case Operator::AddAssign:
+			math_op_type = Il_Add;
+			break;
+		case Operator::SubAssign:
+			math_op_type = Il_Sub;
+			break;
+		case Operator::MulAssign:
+			math_op_type = Il_Mul;
+			break;
+		case Operator::DivAssign:
+			math_op_type = Il_Div;
+			break;
+		default:
+			ASSERT(nullptr, "unknown operator");
+			break;
+		}
+
+		if (!compare) {
+
+			if (op_assignment) {
+
+				CodeGen_Result byvalue_left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr);
+				ASSERT(byvalue_left_result);
+				ASSERT(byvalue_left_result.expression_type == bin_expr_result_type);
+
+				right_result.code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, byvalue_left_result.code_node_id, right_result.code_node_id);
+			}
+			else if (!assignment) {
+				code_node_id = Il_Insert_Math_Op(proc, bin_expr_result_type, math_op_type, left_result.code_node_id, right_result.code_node_id);
+
+				if (inferred_type == Data.bool_Ty) {
+					Const_Union zero = {};
+					code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, bin_expr_result_type, code_node_id, Il_Insert_Constant(proc, zero, bin_expr_result_type));
+					bin_expr_result_type = Data.bool_Ty;
+				}
+			}
+		}
+		else {
+			code_node_id = Il_Insert_Compare(proc, math_op_type, cmp_type, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
+			bin_expr_result_type = Data.bool_Ty;
+		}
+
+		if (assignment) {
+			code_node_id = Il_Insert_Store(proc, bin_expr_result_type, left_result.code_node_id, right_result.code_node_id);
+
+			if (left_result.immutable) {
+				Push_Error_Loc(scope_id, as_bin_expr->Left, "value is immutable");
+				return {};
+			}
+		}
+
+		CodeGen_Result result;
+		result.expression_type = bin_expr_result_type;
+		result.code_node_id = code_node_id;
+		result.ok = true;
+		return result;
+	}
+
 	std::string Front_End::Print_Type(GS_Type* type)
 	{
 		return std::string(TypeSystem_Print_Type(Data.type_system, type).data);
@@ -4508,4 +4764,10 @@ namespace Glass
 
 		return Entity_Null;
 	}
+
+	CodeGen_Result::operator bool()
+	{
+		return ok;
+	}
+
 }

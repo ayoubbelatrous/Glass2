@@ -41,6 +41,8 @@ namespace Glass
 
 		Variable,
 
+		Operator_Overload,
+
 		Library
 	};
 
@@ -131,6 +133,13 @@ namespace Glass
 		Il_IDX library_node_idx;
 	};
 
+	struct Entity_Operator_Overload
+	{
+		GS_Type* query_signature;
+		Entity_ID function_entity_id;
+		Operator _operator;
+	};
+
 	struct Entity
 	{
 		String semantic_name;
@@ -165,6 +174,7 @@ namespace Glass
 			Entity_Function				func;
 			Entity_Variable				var;
 			Entity_Library				library;
+			Entity_Operator_Overload	operator_overload;
 		};
 	};
 
@@ -283,18 +293,7 @@ namespace Glass
 		bool immutable = false;
 		bool ok = false;
 
-		operator bool() {
-			// 
-			// 			if (code_node_id == -1 && ok) {
-			// 				ASSERT(nullptr);
-			// 			}
-			// 
-			// 			if (code_node_id != -1 && !ok) {
-			// 				ASSERT(nullptr);
-			// 			}
-
-			return ok;
-		}
+		operator bool();
 	};
 
 	struct Iterator_Result {
@@ -424,6 +423,11 @@ namespace Glass
 		Entity Create_Variable_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Entity Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id);
+
+		Entity Create_Operator_Overload(String name, Source_Loc source_location, File_ID file_id);
+
+		CodeGen_Result BinaryExpression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, bool is_condition);
+		CodeGen_Result BinaryExpression_TryOverload(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, CodeGen_Result left_result, CodeGen_Result right_result);
 
 		std::string Print_Type(GS_Type* type);
 
