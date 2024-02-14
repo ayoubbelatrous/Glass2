@@ -647,6 +647,7 @@ namespace Glass
 
 		Token Name;
 		std::vector<VariableNode*> m_Members;
+		ArgumentList* argument_list = nullptr;
 
 		virtual NodeType GetType() const override
 		{

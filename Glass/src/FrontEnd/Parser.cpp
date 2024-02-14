@@ -114,6 +114,7 @@ namespace Glass
 				expr->GetType() == NodeType::TE_Pointer ||
 				expr->GetType() == NodeType::TE_Array ||
 				expr->GetType() == NodeType::ArrayAccess ||
+				expr->GetType() == NodeType::Call ||
 				expr->GetType() == NodeType::TE_Func) {
 				if (At().Type == TokenType::Symbol) {
 					return ParseVarDecl(expr);
@@ -471,8 +472,12 @@ namespace Glass
 		StructNode Node;
 		Node.Name = Consume();
 
+		if (At().Type == TokenType::OpenParen) {
+			Node.argument_list = ((ArgumentList*)ParseArgumentList());
+		}
+
 		if (ExpectedToken(TokenType::OpenCurly)) {
-			Abort("Expected a '{' after struct name, Instead Got: ");
+			Abort("Expected a '{', Instead Got: ");
 		}
 
 		Consume();

@@ -155,4 +155,7 @@ namespace Glass
 
 		return (E*)dst;
 	}
+
+#define For(arr, expr) for (u64 it_index = 0; it_index < arr.count; it_index++) {auto& it = arr[it_index];\
+expr}
 }

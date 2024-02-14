@@ -299,7 +299,7 @@ namespace Glass
 		}
 
 		Timer timer;
-		if (Do_Tl_Definition_Passes()) {
+		if (Do_Tl_Dcl_Passes()) {
 			return;
 		}
 		GS_CORE_INFO("declaration pass took: {} s", timer.Elapsed());
@@ -351,6 +351,7 @@ namespace Glass
 
 		GS_CORE_INFO("frontend took: {} s", front_end_time_f - (parse_time_f + lex_time_f));
 		GS_CORE_INFO("frontend total took: {} s", front_end_time_f);
+		GS_CORE_INFO("resolution pass iteration count: {}", Data.resolution_pass_iteration_count);
 		GS_CORE_INFO("enitity search took: {} s, total loops: {}", search_time_f, Data.entity_search_loop_count);
 		GS_CORE_INFO("lexing took: {} s", parse_time_f);
 		GS_CORE_INFO("lines processed: {}", g_LinesProcessed);
@@ -550,7 +551,7 @@ namespace Glass
 		return Create_File_Load_Entity(loaded_file_id, file_entity.file_scope.file_id);
 	}
 
-	bool Front_End::Do_Tl_Definition_Passes()
+	bool Front_End::Do_Tl_Dcl_Passes()
 	{
 		return Iterate_Tl_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* statement) -> bool {
 
@@ -639,7 +640,12 @@ namespace Glass
 				struct_entity.flags |= EF_Constant | EF_InComplete;
 				struct_entity.syntax_node = as_struct_node;
 
+				struct_entity.struct_entity.poly_morphic = as_struct_node->argument_list != nullptr;
+
 				Entity_ID inserted_struct_entity_id = Insert_Entity(struct_entity, file_entity_id);
+
+				if (struct_entity.struct_entity.poly_morphic)
+					return false;
 
 				Entity& inserted_struct_entity = Data.entity_storage[inserted_struct_entity_id];
 
@@ -770,12 +776,17 @@ namespace Glass
 
 				Entity& inserted_entity = Data.entity_storage[inserted_function_entity_id];
 
+				bool is_poly_morphic = false;
+
 				for (size_t i = 0; i < as_func_node->argumentList->Arguments.size(); i++)
 				{
 					ArgumentNode* as_arg = (ArgumentNode*)as_func_node->argumentList->Arguments[i];
 
 					Function_Parameter parameter = {};
 					parameter.name = String_Make(as_arg->Symbol.Symbol);
+
+					if (as_arg->PolyMorphic)
+						is_poly_morphic = true;
 
 					for (size_t i = 0; i < inserted_entity.func.parameters.count; i++)
 					{
@@ -787,6 +798,8 @@ namespace Glass
 
 					Array_Add(inserted_entity.func.parameters, parameter);
 				}
+
+				inserted_entity.func.poly_morphic = is_poly_morphic;
 			}
 			else if (statement->GetType() == NodeType::Library) {
 
@@ -917,39 +930,54 @@ namespace Glass
 					}
 					else if (tl_entity.entity_type == Entity_Type::Struct_Entity) {
 
-						for (size_t i = 0; i < tl_entity.children.count; i++)
+						StructNode* as_struct_node = (StructNode*)tl_entity.syntax_node;
+
+						if (tl_entity.struct_entity.poly_morphic)
 						{
-							Entity& struct_member_entity = Data.entity_storage[tl_entity.children[i]];
-							VariableNode* as_variable_node = (VariableNode*)struct_member_entity.syntax_node;
+							for (size_t i = 0; i < as_struct_node->argument_list->Arguments.size(); i++)
+							{
+								ArgumentNode* as_arg = (ArgumentNode*)as_struct_node->argument_list->Arguments[i];
 
-							ASSERT(as_variable_node->Type);
+								if (!Do_Expression_Dependecy_Pass(file_entity_id, as_arg->Type, tl_entity.dependencies, tl_file_scope_entity_id))
+									return true;
+							}
+						}
+						else {
 
-							if (!Do_Expression_Dependecy_Pass(file_entity_id, as_variable_node->Type, tl_entity.dependencies, tl_file_scope_entity_id))
-								return true;
+							for (size_t i = 0; i < tl_entity.children.count; i++)
+							{
+								Entity& struct_member_entity = Data.entity_storage[tl_entity.children[i]];
+								VariableNode* as_variable_node = (VariableNode*)struct_member_entity.syntax_node;
 
-							Array<Entity_ID> chain;
-							if (Check_Circular_Dependencies(tl_file_scope_entity_id, tl_entity.dependencies, chain)) {
+								ASSERT(as_variable_node->Type);
 
-								std::string printed_chain;
+								if (!Do_Expression_Dependecy_Pass(file_entity_id, as_variable_node->Type, tl_entity.dependencies, tl_file_scope_entity_id))
+									return true;
 
-								printed_chain = tl_entity.semantic_name.data;
+								Array<Entity_ID> chain;
+								if (Check_Circular_Dependencies(tl_file_scope_entity_id, tl_entity.dependencies, chain)) {
 
-								for (size_t i = 0; i < chain.count; i++)
-								{
+									std::string printed_chain;
+
+									printed_chain = tl_entity.semantic_name.data;
+
+									for (size_t i = 0; i < chain.count; i++)
+									{
+										printed_chain += " -> ";
+										printed_chain += Data.entity_storage[chain[i]].semantic_name.data;
+									}
+
 									printed_chain += " -> ";
-									printed_chain += Data.entity_storage[chain[i]].semantic_name.data;
+
+									printed_chain += tl_entity.semantic_name.data;
+
+									Entity& tail_entity = Data.entity_storage[chain[0]];
+
+									Push_Error_Loc(file_entity_id, as_variable_node->Type, FMT("struct member '{}' type has circular dependency: {}", as_variable_node->Symbol.Symbol, printed_chain));
+									Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
+
+									return true;
 								}
-
-								printed_chain += " -> ";
-
-								printed_chain += tl_entity.semantic_name.data;
-
-								Entity& tail_entity = Data.entity_storage[chain[0]];
-
-								Push_Error_Loc(file_entity_id, as_variable_node->Type, FMT("struct member '{}' type has circular dependency: {}", as_variable_node->Symbol.Symbol, printed_chain));
-								Push_Error_Loc(Data.File_ID_To_Scope.at(tail_entity.definition_file), tail_entity.syntax_node, FMT("the tail"));
-
-								return true;
 							}
 						}
 					}
@@ -996,6 +1024,9 @@ namespace Glass
 						}
 					}
 					else if (tl_entity.entity_type == Entity_Type::Function) {
+
+						if (tl_entity.func.poly_morphic)
+							continue;
 
 						FunctionNode* as_func_node = (FunctionNode*)tl_entity.syntax_node;
 
@@ -1141,9 +1172,11 @@ namespace Glass
 	{
 		bool all_evaluated = true;
 
-		for (size_t i = 0; i < Data.entity_storage.count; i++)
+		for (size_t entity_id = 0; entity_id < Data.entity_storage.count; entity_id++)
 		{
-			Entity& entity = Data.entity_storage[i];
+			Entity& entity = Data.entity_storage[entity_id];
+
+			Data.resolution_pass_iteration_count++;
 
 			if ((entity.flags & EF_InComplete)) {
 
@@ -1234,74 +1267,116 @@ namespace Glass
 				}
 				else if (entity.entity_type == Entity_Type::Struct_Entity)
 				{
-					VariableNode* as_struct_node = (VariableNode*)entity.syntax_node;
+					if (entity.struct_entity.poly_morphic) {
 
-					GS_Struct struct_type;
+						entity.flags &= ~EF_InComplete;
 
-					Type_Name struct_type_name;
-					struct_type_name.name = entity.semantic_name;
-					struct_type_name.flags = TN_Struct_Type;
-					struct_type_name.size = (u64)-1;
-					struct_type_name.alignment = 0;
+						StructNode* as_struct_node = (StructNode*)entity.syntax_node;
 
-					entity.struct_entity.type_name_id = TypeSystem_Insert_TypeName_Struct(Data.type_system, struct_type_name, struct_type);
-					entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+						//Create_Struct_Parameter_Entity();
 
-					entity.flags &= ~EF_InComplete;
+						Entity& file_scope_entity = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, entity_id)];
 
-					Data.typename_to_entity_id[entity.struct_entity.type_name_id] = i;
+						for (size_t i = 0; i < as_struct_node->argument_list->Arguments.size(); i++)
+						{
+							ArgumentNode* as_arg = (ArgumentNode*)as_struct_node->argument_list->Arguments[i];
+							ASSERT(as_arg->Type);
 
-					for (size_t i = 0; i < entity.children.count; i++)
-					{
-						Entity& struct_member_entity = Data.entity_storage[entity.children[i]];
+							GS_Type* argument_type = Evaluate_Type(as_arg->Type, entity.parent);
+							if (!argument_type) break;
 
-						VariableNode* as_variable_node = (VariableNode*)struct_member_entity.syntax_node;
+							String parameter_name = String_Make(as_arg->Symbol.Symbol);
 
-						struct_member_entity.semantic_type = Evaluate_Type(as_variable_node->Type, entity.parent);
-						ASSERT(struct_member_entity.semantic_type);
+							if (entity.children_lookup.find({ parameter_name.data,parameter_name.count }) != entity.children_lookup.end()) {
+								Push_Error_Loc(entity_id, as_arg, FMT("parameter name '{}' already taken", parameter_name.data));
+								return true;
+							}
 
-						if (struct_member_entity.semantic_type->kind == Type_Dyn_Array) {
-							Array_Add(struct_type.members, Data.Array_Ty);
+							Entity param_entity = Create_Struct_Parameter_Entity(parameter_name, Loc_From_Token(as_arg->Symbol), file_scope_entity.file_scope.file_id);
+
+							param_entity.struct_parameter.parameter_index = i;
+							param_entity.semantic_type = argument_type;
+
+							Struct_Parameter parameter;
+							parameter.entity_id = Insert_Entity(param_entity, entity_id);
+							parameter.type = argument_type;
+							parameter.name = parameter_name;
+
+							Array_Add(entity.struct_entity.parameters, parameter);
 						}
-						else {
-							Array_Add(struct_type.members, struct_member_entity.semantic_type);
+						int x = 30;
+					}
+					else {
+
+						GS_Struct struct_type;
+
+						Type_Name struct_type_name;
+						struct_type_name.name = entity.semantic_name;
+						struct_type_name.flags = TN_Struct_Type;
+						struct_type_name.size = (u64)-1;
+						struct_type_name.alignment = 0;
+
+						entity.struct_entity.type_name_id = TypeSystem_Insert_TypeName_Struct(Data.type_system, struct_type_name, struct_type);
+						entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+
+						entity.flags &= ~EF_InComplete;
+
+						Data.typename_to_entity_id[entity.struct_entity.type_name_id] = entity_id;
+
+						for (size_t i = 0; i < entity.children.count; i++)
+						{
+							Entity& struct_member_entity = Data.entity_storage[entity.children[i]];
+
+							VariableNode* as_variable_node = (VariableNode*)struct_member_entity.syntax_node;
+
+							struct_member_entity.semantic_type = Evaluate_Type(as_variable_node->Type, entity.parent);
+
+							if (!struct_member_entity.semantic_type)
+								return true;
+
+							if (struct_member_entity.semantic_type->kind == Type_Dyn_Array) {
+								Array_Add(struct_type.members, Data.Array_Ty);
+							}
+							else {
+								Array_Add(struct_type.members, struct_member_entity.semantic_type);
+							}
+
+							Array_Add(struct_type.offsets, (u64)-1);
 						}
 
-						Array_Add(struct_type.offsets, (u64)-1);
-					}
+						GS_Struct_Data_Layout struct_data_layout = TypeSystem_Struct_Compute_Align_Size_Offsets(Data.type_system, struct_type.members);
 
-					GS_Struct_Data_Layout struct_data_layout = TypeSystem_Struct_Compute_Align_Size_Offsets(Data.type_system, struct_type.members);
+						for (size_t i = 0; i < struct_type.offsets.count; i++)
+						{
+							struct_type.offsets[i] = struct_data_layout.offsets[i];
+						}
 
-					for (size_t i = 0; i < struct_type.offsets.count; i++)
-					{
-						struct_type.offsets[i] = struct_data_layout.offsets[i];
-					}
+						Data.type_system.type_name_storage[entity.struct_entity.type_name_id].size = struct_data_layout.size;
+						Data.type_system.type_name_storage[entity.struct_entity.type_name_id].alignment = struct_data_layout.alignment;
+						Data.type_system.struct_storage[Data.type_system.type_name_storage[entity.struct_entity.type_name_id].struct_id] = struct_type;
 
-					Data.type_system.type_name_storage[entity.struct_entity.type_name_id].size = struct_data_layout.size;
-					Data.type_system.type_name_storage[entity.struct_entity.type_name_id].alignment = struct_data_layout.alignment;
-					Data.type_system.struct_storage[Data.type_system.type_name_storage[entity.struct_entity.type_name_id].struct_id] = struct_type;
+						// TODO: move this from here somehow
+						if (String_Equal(String_Make("string"), entity.semantic_name)) {
+							Data.string_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+							ASSERT(Data.string_Ty);
+						}
 
-					// TODO: move this from here somehow
-					if (String_Equal(String_Make("string"), entity.semantic_name)) {
-						Data.string_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
-						ASSERT(Data.string_Ty);
-					}
+						if (String_Equal(String_Make("Array"), entity.semantic_name)) {
+							Data.Array_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+							ASSERT(Data.Array_Ty);
+						}
 
-					if (String_Equal(String_Make("Array"), entity.semantic_name)) {
-						Data.Array_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
-						ASSERT(Data.Array_Ty);
-					}
+						if (String_Equal(String_Make("Any"), entity.semantic_name)) {
+							Data.Any_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
+							ASSERT(Data.Any_Ty);
+						}
 
-					if (String_Equal(String_Make("Any"), entity.semantic_name)) {
-						Data.Any_Ty = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
-						ASSERT(Data.Any_Ty);
-					}
-
-					if (String_Equal(String_Make("TypeInfo"), entity.semantic_name)) {
-						Data.TypeInfo_tn = entity.struct_entity.type_name_id;
-						Data.TypeInfo_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.TypeInfo_tn);
-						Data.TypeInfo_Ptr_Ty = TypeSystem_Get_Pointer_Type(Data.type_system, Data.TypeInfo_Ty, 1);
-						ASSERT(Data.Any_Ty);
+						if (String_Equal(String_Make("TypeInfo"), entity.semantic_name)) {
+							Data.TypeInfo_tn = entity.struct_entity.type_name_id;
+							Data.TypeInfo_Ty = TypeSystem_Get_Basic_Type(Data.type_system, Data.TypeInfo_tn);
+							Data.TypeInfo_Ptr_Ty = TypeSystem_Get_Pointer_Type(Data.type_system, Data.TypeInfo_Ty, 1);
+							ASSERT(Data.Any_Ty);
+						}
 					}
 				}
 				else if (entity.entity_type == Entity_Type::Enum_Entity) {
@@ -1318,7 +1393,7 @@ namespace Glass
 					entity.constant_value.type = TypeSystem_Get_Basic_Type(Data.type_system, entity.struct_entity.type_name_id);
 					entity.flags &= ~EF_InComplete;
 
-					Data.typename_to_entity_id[entity.enum_entity.type_name_id] = i;
+					Data.typename_to_entity_id[entity.enum_entity.type_name_id] = entity_id;
 
 					Const_Union next_enum_value = { 0 };
 
@@ -1353,15 +1428,32 @@ namespace Glass
 
 					FunctionNode* as_func_node = (FunctionNode*)entity.syntax_node;
 
+					if (entity.func.poly_morphic)
+					{
+						for (size_t i = 0; i < as_func_node->argumentList->Arguments.size(); i++)
+						{
+							ArgumentNode* as_arg = (ArgumentNode*)as_func_node->argumentList->Arguments[i];
+							ASSERT(as_arg->Type);
+
+							entity.func.parameters[i].poly_morhpic = as_arg->PolyMorphic;
+							entity.func.parameters[i].syntax_node = as_arg;
+						}
+
+						entity.flags = EF_Constant;
+
+						continue;
+					}
+
 					GS_Type* return_type = nullptr;
 
 					if (as_func_node->ReturnType) {
 						return_type = Evaluate_Type(as_func_node->ReturnType, entity.parent);
-						ASSERT(return_type);
 					}
 					else {
 						return_type = Data.void_Ty;
 					}
+
+					ASSERT(return_type);
 
 					Array<GS_Type*> param_types;
 
@@ -1435,7 +1527,7 @@ namespace Glass
 					String operator_as_string = Operator_To_String(entity.operator_overload._operator);
 					String operator_name = String_Make(FMT("{}{}", operator_as_string.data, query_signature->type_hash));
 
-					Entity_ID current_scope = Front_End_Data::Get_File_Scope_Parent(Data, i);
+					Entity_ID current_scope = Front_End_Data::Get_File_Scope_Parent(Data, entity_id);
 
 					Entity_ID previous_definition_id = Front_End_Data::Get_Entity_ID_By_Name(Data, current_scope, operator_name);
 
@@ -1453,19 +1545,23 @@ namespace Glass
 					}
 
 					entity.semantic_name = operator_name;
-					Data.entity_storage[current_scope].children_lookup[operator_name.data] = i;
+					Data.entity_storage[current_scope].children_lookup[operator_name.data] = entity_id;
 
 					entity.flags &= ~EF_InComplete;
 				}
 			}
 
-			if (i + 1 == Data.entity_storage.count) {
+			if (entity.flags & EF_InComplete) {
+				all_evaluated = false;
+			}
+
+			if (entity_id + 1 == Data.entity_storage.count) {
 				if (all_evaluated) {
 
 				}
 				else {
 					all_evaluated = true;
-					i = 0;
+					entity_id = 0;
 				}
 			}
 		}
@@ -1480,12 +1576,12 @@ namespace Glass
 			Entity& entity = Data.entity_storage[i];
 
 			if (entity.entity_type == Entity_Type::Function) {
-				if (!entity.func.foreign) {
+				if (!entity.func.foreign && !entity.func.poly_morphic) {
 					if (!Function_CodeGen(entity, (Entity_ID)i, entity.parent)) {
 						return true;
 					}
 				}
-				else {
+				else if (entity.func.foreign) {
 					Foreign_Function_CodeGen(entity, (Entity_ID)i, entity.parent);
 				}
 			}
@@ -2098,6 +2194,8 @@ namespace Glass
 			Il_IDX body_block_idx = Il_Insert_Block(proc, String_Make("body"));
 			Il_IDX loop_bottom_block_idx = Il_Insert_Block(proc, String_Make("dummmy"));
 
+			Il_Set_Insert_Point(proc, saved_insert_point);
+
 			Iterator_Result condition_result = Iterator_CodeGen(as_for->Condition, scope_id, proc, saved_insert_point, cond_block_idx, loop_bottom_block_idx);
 			if (!condition_result) return {};
 
@@ -2213,6 +2311,14 @@ namespace Glass
 
 			}
 			else if (identified_entity.entity_type == Entity_Type::Struct_Entity) {
+
+				if (identified_entity.entity_type == Entity_Type::Struct_Entity) {
+					if (identified_entity.struct_entity.poly_morphic) {
+						Push_Error_Loc(scope_id, as_ident, FMT("polymorphic struct '{}' parameter list expected", as_ident->Symbol.Symbol));
+						return {};
+					}
+				}
+
 				Const_Union value;
 				value.us8 = TypeSystem_Get_Type_Index(Data.type_system, identified_entity.constant_value.type);
 				result.code_node_id = Il_Insert_Constant(proc, value, identified_entity.semantic_type);
@@ -2481,6 +2587,13 @@ namespace Glass
 			if (eval_result.entity_reference != Entity_Null)
 			{
 				Entity& callee_entity = Data.entity_storage[eval_result.entity_reference];
+
+				if (callee_entity.entity_type == Entity_Type::Function) {
+					if (callee_entity.func.poly_morphic) {
+						return Poly_Morphic_Call(as_call, eval_result.entity_reference, scope_id, by_reference);
+					}
+				}
+
 				String callee_name = callee_entity.semantic_name;
 				std::string callee_name_std = std::string(callee_name.data);
 
@@ -3034,9 +3147,16 @@ namespace Glass
 
 			Il_Set_Insert_Point(proc, condition_block);
 
+			auto string_ty_ptr = TypeSystem_Get_Pointer_Type(Data.type_system, Data.string_Ty, 1);
+			auto array_ty_ptr = TypeSystem_Get_Pointer_Type(Data.type_system, Data.Array_Ty, 1);
+
 			Il_IDX end = -1;
 			if (expr_result.expression_type->kind == Type_Array)
 				end = Il_Insert_Constant(proc, (void*)expr_result.expression_type->array.size, it_index_type);
+			else if (expr_result.expression_type == Data.string_Ty) {
+				Il_IDX sep = Il_Insert_SEP(proc, Data.Array_Ty, 0, Il_Insert_Cast(proc, Il_Cast_Ptr, array_ty_ptr, string_ty_ptr, expr_result.code_node_id));
+				end = Il_Insert_Load(proc, it_index_type, sep);
+			}
 			else
 			{
 				end = Il_Insert_Load(proc, it_index_type, Il_Insert_SEP(proc, Data.Array_Ty, 0, expr_result.code_node_id));
@@ -3046,11 +3166,16 @@ namespace Glass
 
 			Il_IDX array_ptr;
 
+			GS_Type* it_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, it_type, 1);
+
 			if (expr_result.expression_type->kind == Type_Array)
 				array_ptr = expr_result.code_node_id;
+			else if (expr_result.expression_type == Data.string_Ty)
+			{
+				array_ptr = Il_Insert_Load(proc, it_type_pointer, Il_Insert_Cast(proc, Il_Cast_Ptr, array_ty_ptr, string_ty_ptr, Il_Insert_SEP(proc, Data.Array_Ty, 1, expr_result.code_node_id)));
+			}
 			else
 			{
-				GS_Type* it_type_pointer = TypeSystem_Get_Pointer_Type(Data.type_system, it_type, 1);
 				array_ptr = Il_Insert_Load(proc, it_type_pointer, Il_Insert_SEP(proc, Data.Array_Ty, 1, expr_result.code_node_id));
 			}
 
@@ -3593,6 +3718,29 @@ namespace Glass
 
 			return result;
 		}
+		case NodeType::SizeOf:
+		{
+			SizeOfNode* as_sizeof = (SizeOfNode*)expression;
+
+			Eval_Result eval_result = Expression_Evaluate(as_sizeof->Expr, scope_id, nullptr, false);
+			if (!eval_result)
+				return {};
+
+			u64 type_size = 0;
+
+			if (eval_result.expression_type == Data.Type_Ty) {
+				type_size = TypeSystem_Get_Type_Size(Data.type_system, eval_result.result.type);
+			}
+			else {
+				type_size = TypeSystem_Get_Type_Size(Data.type_system, eval_result.expression_type);
+			}
+
+			Eval_Result result;
+			result.ok = true;
+			result.expression_type = Data.u64_Ty;
+			result.result.us8 = type_size;
+			return result;
+		}
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -3614,7 +3762,7 @@ namespace Glass
 
 			if (identified_entity_id == Entity_Null) {
 				Push_Error_Loc(scope_id, as_ident, FMT("undefined name!: '{}'", as_ident->Symbol.Symbol));
-				return nullptr;
+				return {};
 			}
 
 			Entity& identified_entity = Data.entity_storage[identified_entity_id];
@@ -3631,7 +3779,14 @@ namespace Glass
 
 			if (identified_entity.semantic_type != Data.Type_Ty) {
 				Push_Error_Loc(scope_id, as_ident, FMT("'{}' is not a type", as_ident->Symbol.Symbol));
-				return nullptr;
+				return {};
+			}
+
+			if (identified_entity.entity_type == Entity_Type::Struct_Entity) {
+				if (identified_entity.struct_entity.poly_morphic) {
+					Push_Error_Loc(scope_id, as_ident, FMT("polymorphic struct '{}' parameter list expected", as_ident->Symbol.Symbol));
+					return {};
+				}
 			}
 
 			return identified_entity.constant_value.type;
@@ -3723,11 +3878,85 @@ namespace Glass
 
 			return TypeSystem_Get_Proc_Type(Data.type_system, return_type, param_types_array);
 		}
+		case NodeType::Call:
+		{
+			FunctionCall* as_call = (FunctionCall*)expression;
+
+			Eval_Result type_name_result = Expression_Evaluate(as_call->callee, scope_id, nullptr);
+
+			if (!type_name_result)
+				return nullptr;
+
+			if (type_name_result.expression_type != Data.Type_Ty || type_name_result.entity_reference == Entity_Null) {
+				Push_Error_Loc(scope_id, as_call->callee, "expression is not a type");
+				return nullptr;
+			}
+
+			Entity& entity = Data.entity_storage[type_name_result.entity_reference];
+
+			bool valid = false;
+
+			if (entity.entity_type == Entity_Type::Struct_Entity) {
+				if (entity.struct_entity.poly_morphic)
+					valid = true;
+			}
+
+			if (!valid) {
+				Push_Error_Loc(scope_id, as_call->callee, "expected a polymorhpic struct");
+				return nullptr;
+			}
+
+			return nullptr;
+		}
+		break;
 		default:
 			ASSERT(nullptr);
 			return nullptr;
 			break;
 		}
+	}
+
+	CodeGen_Result Front_End::Poly_Morphic_Call(Expression* expression, Entity_ID entity_id, Entity_ID scope_id, bool by_reference)
+	{
+		FunctionCall* as_call = (FunctionCall*)expression;
+
+		Entity& entity = Data.entity_storage[entity_id];
+		ASSERT(entity.entity_type == Entity_Type::Function);
+
+		if (as_call->Arguments.size() < entity.func.parameters.count) {
+			Push_Error_Loc(scope_id, expression, FMT("call to polymorhpic function '{}' too few arguments (needed: {}, given: {})", entity.semantic_name.data, entity.func.parameters.count, as_call->Arguments.size()));
+			return {};
+		}
+
+		if (as_call->Arguments.size() > entity.func.parameters.count) {
+			Push_Error_Loc(scope_id, expression, FMT("call to polymorhpic function '{}' too many arguments (needed: {}, given: {})", entity.semantic_name.data, as_call->Arguments.size(), entity.func.parameters.count));
+			return {};
+		}
+
+		std::map<std::string_view, Const_Union> polymorphic_values;
+
+		for (size_t i = 0; i < entity.func.parameters.count; i++)
+		{
+			Function_Parameter& param = entity.func.parameters[i];
+
+			ArgumentNode* as_argument = (ArgumentNode*)param.syntax_node;
+
+			if (param.poly_morhpic) {
+
+				Eval_Result eval_result = Expression_Evaluate(as_call->Arguments[i], scope_id, nullptr);
+
+				if (!eval_result)
+					return {};
+
+				polymorphic_values.emplace(as_argument->Symbol.Symbol, eval_result.result);
+			}
+		}
+
+		auto file_id = Data.entity_storage[Front_End_Data::Get_File_Scope_Parent(Data, scope_id)].file_scope.file_id;
+
+		Entity instance = Create_Function_Entity(entity.semantic_name, entity.source_location, file_id);
+
+		return {};
 	}
 
 	Dep_Result Front_End::Do_Expression_Dependecy_Pass(Entity_ID scope_id, Expression* expr, Array<Entity_ID>& dependencies, Entity_ID ignore_indirect)
@@ -3971,8 +4200,26 @@ namespace Glass
 		}
 		break;
 		default:
-			GS_ASSERT_UNIMPL();
-			break;
+		{
+			SizeOfNode* as_sizeof = (SizeOfNode*)expr;
+
+			Array<Entity_ID> indirect_dependencies;
+
+			if (!Do_Expression_Dependecy_Pass(scope_id, as_sizeof->Expr, indirect_dependencies, ignore_indirect)) {
+				return {};
+			}
+
+			for (size_t i = 0; i < indirect_dependencies.count; i++)
+			{
+				if (indirect_dependencies[i] != ignore_indirect) {
+					Array_Add(dependencies, indirect_dependencies[i]);
+				}
+			}
+
+			return { true };
+		}
+		GS_ASSERT_UNIMPL();
+		break;
 		}
 
 		return {};
@@ -4325,6 +4572,19 @@ namespace Glass
 		operator_entity.semantic_type = nullptr;
 
 		return operator_entity;
+	}
+
+	Entity Front_End::Create_Struct_Parameter_Entity(String name, Source_Loc source_location, File_ID file_id)
+	{
+		Entity param_entity = { 0 };
+
+		param_entity.entity_type = Entity_Type::Struct_Parameter;
+		param_entity.semantic_name = name;
+		param_entity.source_location = source_location;
+		param_entity.definition_file = file_id;
+		param_entity.semantic_type = nullptr;
+
+		return param_entity;
 	}
 
 	CodeGen_Result Front_End::BinaryExpression_TryOverload(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, CodeGen_Result left_result, CodeGen_Result right_result)
@@ -4769,5 +5029,4 @@ namespace Glass
 	{
 		return ok;
 	}
-
 }

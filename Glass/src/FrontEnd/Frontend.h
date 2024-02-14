@@ -40,6 +40,7 @@ namespace Glass
 		Function_Scope,
 
 		Variable,
+		Struct_Parameter,
 
 		Operator_Overload,
 
@@ -83,9 +84,23 @@ namespace Glass
 		Type_Name_ID type_name_id;
 	};
 
+	struct Struct_Parameter
+	{
+		Entity_ID entity_id;
+		String name;
+		GS_Type* type;
+	};
+
 	struct Entity_Struct
 	{
 		Type_Name_ID type_name_id;
+		bool poly_morphic;
+		Array_UI<Struct_Parameter> parameters;
+	};
+
+	struct Entity_Struct_Parameter
+	{
+		u64 parameter_index;
 	};
 
 	struct Entity_Enum
@@ -103,6 +118,8 @@ namespace Glass
 	{
 		String name;
 		GS_Type* param_type;
+		bool poly_morhpic;
+		Statement* syntax_node;
 	};
 
 	struct Entity_Function
@@ -116,6 +133,8 @@ namespace Glass
 		Entity_ID library_entity_id;
 
 		Il_IDX return_data_ptr_node_idx;
+
+		bool poly_morphic;
 	};
 
 	struct Entity_Variable
@@ -175,6 +194,7 @@ namespace Glass
 			Entity_Variable				var;
 			Entity_Library				library;
 			Entity_Operator_Overload	operator_overload;
+			Entity_Struct_Parameter		struct_parameter;
 		};
 	};
 
@@ -276,6 +296,7 @@ namespace Glass
 		u64 entity_search_time = 0;
 		u64 entity_search_loop_count = 0;
 		u64 emit_il_time = 0;
+		u64 resolution_pass_iteration_count = 0;
 
 		static Entity_ID Get_Top_Most_Parent(Front_End_Data& data, Entity_ID entity_id);
 		static Entity_ID Get_File_Scope_Parent(Front_End_Data& data, Entity_ID entity_id);
@@ -370,7 +391,7 @@ namespace Glass
 		void Load_First();
 		void Do_Load_Pass(Entity_ID entity_id);
 
-		bool Do_Tl_Definition_Passes();
+		bool Do_Tl_Dcl_Passes();
 		bool Do_Tl_Dependency_Passes();
 		bool Do_Tl_Resolution_Passes();
 		bool Do_CodeGen();
@@ -387,6 +408,8 @@ namespace Glass
 		Eval_Result Expression_Evaluate(Expression* expression, Entity_ID scope_id, GS_Type* inferred_type, bool const_eval = true);
 
 		GS_Type* Evaluate_Type(Expression* expression, Entity_ID scope_id);
+
+		CodeGen_Result Poly_Morphic_Call(Expression* expression, Entity_ID enitity_id, Entity_ID scope_id, bool by_reference);
 
 		bool Iterate_Tl_All_Files(std::function<bool(File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* syntax)> f);
 		bool Iterate_All_Files(std::function<bool(File_ID file_id, Entity_ID file_entity_id, Entity& file_entity)> f);
@@ -425,6 +448,8 @@ namespace Glass
 		Entity Create_Library_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		Entity Create_Operator_Overload(String name, Source_Loc source_location, File_ID file_id);
+
+		Entity Create_Struct_Parameter_Entity(String name, Source_Loc source_location, File_ID file_id);
 
 		CodeGen_Result BinaryExpression_CodeGen(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, bool is_condition);
 		CodeGen_Result BinaryExpression_TryOverload(Expression* expression, Entity_ID scope_id, Il_Proc& proc, GS_Type* inferred_type, bool by_reference, CodeGen_Result left_result, CodeGen_Result right_result);

@@ -265,9 +265,15 @@ namespace Glass
 						}
 					}
 
+					Il_IDX* arguments_ptr = node.call.arguments;
+
+					if (node.call.argument_count > SMALL_ARG_COUNT) {
+						arguments_ptr = node.call.arguments_ptr;
+					}
+
 					for (size_t i = 0; i < node.call.argument_count; i++)
 					{
-						Il_IDX argument_node_idx = node.call.arguments[i];
+						Il_IDX argument_node_idx = arguments_ptr[i];
 						GS_Type* argument_type = regt[argument_node_idx];
 
 						auto argument_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, argument_type);
