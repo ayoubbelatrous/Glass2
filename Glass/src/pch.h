@@ -24,6 +24,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "Base/Instrumentation.h"
+
 #pragma warning(push, 0)
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"

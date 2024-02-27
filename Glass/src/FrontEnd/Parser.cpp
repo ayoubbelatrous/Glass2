@@ -1178,7 +1178,8 @@ namespace Glass
 
 			right = (Expression*)AST(Node);
 		}
-		else {
+
+		if (!right) {
 			right = (Expression*)ParsePrimaryExpr();
 		}
 
@@ -1421,11 +1422,11 @@ namespace Glass
 			return Application::AllocateAstNode(num_lit);
 		}
 		break;
-		// 		case TokenType::Multiply:
-		// 		{
-		// 			return ParseDeRefExpr();
-		// 		}
-		// 		break;
+		case TokenType::OpenAngular:
+		{
+			return ParseDeRefExpr();
+		}
+		break;
 		}
 
 		return nullptr;

@@ -197,8 +197,8 @@ namespace Glass
 				break;
 				case Il_Alloca:
 				{
-					regv[idx] = lc.llvm_builder->CreateAlloca(to_llvm(lc, type));
-					regt[idx] = TypeSystem_Get_Pointer_Type(*lc.prog->type_system, type, 1);
+					auto alloca_type = &lc.prog->type_system->type_storage[node.aloca.type_idx];
+					regv[idx] = lc.llvm_builder->CreateAlloca(to_llvm(lc, alloca_type));
 				}
 				break;
 				case Il_Struct_Initializer:
@@ -484,6 +484,10 @@ namespace Glass
 								cast_ops = llvm::Instruction::CastOps::SIToFP;
 							}
 						}
+						else if (node.cast.cast_type == Il_Cast_FloatExt) {
+							regv[idx] = lc.llvm_builder->CreateFPExt(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::FPExt;
+						}
 						else {
 							GS_ASSERT_UNIMPL();
 						}
@@ -693,6 +697,7 @@ namespace Glass
 		auto features = "";
 
 		llvm::TargetOptions opt;
+		opt.EnableFastISel = true;
 		auto target_machine = target->createTargetMachine(
 			target_triple, CPU, features, opt, llvm::Reloc::PIC_, {}, llvm::CodeGenOpt::None);
 

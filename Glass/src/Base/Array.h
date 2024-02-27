@@ -144,7 +144,6 @@ namespace Glass
 			E* old_data = arr.data;
 			arr.data = (E*)Array_Allocator(arr.capacity * sizeof(E));
 			memcpy(arr.data, old_data, arr.count * sizeof(E));
-			//free(old_data);
 		}
 
 		void* dst = (void*)&arr.data[arr.count];
@@ -152,6 +151,32 @@ namespace Glass
 		new (dst) E(element);
 
 		arr.count++;
+
+		return (E*)dst;
+	}
+
+	template<typename E>
+	E* Array_Insert_After(Array<E>& arr, size_t index, const E& element) {
+
+		if (index < 0 || index > arr.count) {
+			ASSERT(nullptr, "Array Out of bounds insert");
+			return nullptr;
+		}
+
+		if (arr.count == arr.capacity) {
+			arr.capacity *= 2;
+
+			E* old_data = arr.data;
+			arr.data = (E*)Array_Allocator(arr.capacity * sizeof(E));
+			memcpy(arr.data, old_data, arr.count * sizeof(E));
+		}
+
+		memcpy(arr.data + index + 1, arr.data + index, (arr.count - index) * sizeof(E));
+
+		arr.count++;
+
+		void* dst = (void*)&arr.data[index];
+		new (dst) E(element);
 
 		return (E*)dst;
 	}

@@ -17,7 +17,7 @@ namespace Glass {
 		}
 
 		~LinearAllocator() {
-			free(m_Data);
+			//free(m_Data);
 		}
 
 		template<typename T>
@@ -55,7 +55,7 @@ namespace Glass {
 		uint8_t* m_Data = nullptr;
 	};
 
-	LinearAllocator array_Allocator = LinearAllocator(1024 * 1024 * 100);
+	LinearAllocator array_Allocator = LinearAllocator(1024 * 1024 * 100 * 3);
 
 	void* Array_Allocator(u64 size)
 	{

@@ -224,6 +224,13 @@ namespace Glass
 		}
 	}
 
+	void Emit_MovAbs(Array<u8>& bytes, u8 reg, i64 imm64)
+	{
+		Emit_Rex(bytes, true, false, false, false);
+		Write_8(bytes, 0xb8 + reg);
+		Write_64(bytes, *(u64*)&imm64);
+	}
+
 	u32 Emit_Jmp(Array<u8>& bytes, u32 displacement)
 	{
 		Write_8(bytes, 0xe9);
@@ -729,6 +736,36 @@ namespace Glass
 		if (op1.type == Op_Reg_Disp4) Write_32(bytes, op1.reg_disp.disp);
 	}
 
+	void Emit_Div(Array<u8>& bytes, Inst_Op op1, u8 op_size)
+	{
+		ASSERT(op1.type != Op_Imm8 && op1.type != Op_Imm16 && op1.type != Op_Imm32, "invalid operand");
+
+		u8 mod = 0;
+		u8 reg = 0;
+		u8 rm = 0;
+
+		bool w = 0;
+		bool b = 0;
+
+		u8 op_code = 0xf6 + (op_size > 8);
+
+		if (op1.reg >= R8) { op1.reg -= R8; b = 1; };
+
+		mod = op1.type == Op_Reg ? Mod_Reg : Mod_Disp4;
+		reg = 0b110;
+		rm = op1.reg;
+
+		if (op_size == 16) Write_8(bytes, 0x66);
+		if (op_size == 64) w = 1;
+
+		if (w || b) Emit_Rex(bytes, w, 0, 0, b);
+
+		Write_8(bytes, op_code);
+		Emit_Mod_RM(bytes, mod, reg, rm);
+
+		if (op1.type == Op_Reg_Disp4) Write_32(bytes, op1.reg_disp.disp);
+	}
+
 	void Emit_CWD(Array<u8>& bytes)
 	{
 		Write_8(bytes, 0x66);
@@ -969,6 +1006,11 @@ namespace Glass
 
 		bool rsp_sib = false;
 
+		if (rm == RSP) {
+			rsp_sib = true;
+			rm = 0b100;
+		}
+
 		if (reg >= XMM0)
 			reg -= XMM0;
 
@@ -978,11 +1020,6 @@ namespace Glass
 		if (reg >= R8 && reg < XMM0) {
 			reg -= R8;
 			r = true;
-		}
-
-		if (rm == RSP) {
-			rsp_sib = true;
-			rm = 0b100;
 		}
 
 		if (rm >= R8 && rm < XMM0) {
@@ -1112,6 +1149,26 @@ namespace Glass
 		Instruction_SSE inst;
 		inst.has_direction = false;
 		inst.op_code = 0x5c;
+		inst.is_double = true;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_DivSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x5e;
+		inst.is_double = false;
+
+		Emit_SSE(bytes, inst, op1, op2);
+	}
+
+	void Emit_DivSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2)
+	{
+		Instruction_SSE inst;
+		inst.has_direction = false;
+		inst.op_code = 0x5e;
 		inst.is_double = true;
 
 		Emit_SSE(bytes, inst, op1, op2);

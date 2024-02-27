@@ -55,7 +55,7 @@ namespace Glass
 					break;
 				case Il_Alloca:
 					stream << "alloca " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data
+						TypeSystem_Print_Type_Index(*proc.program->type_system, node.aloca.type_idx).data
 						<< " \n";
 					break;
 				case Il_Store:

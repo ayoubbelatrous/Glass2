@@ -22,14 +22,16 @@ namespace Glass
 		Clang_Asm
 	};
 
+	enum class Backend_Option
+	{
+		LLVM_Backend,
+		Il_Backend,
+	};
+
 	struct ApplicationOptions {
 
 		std::vector<fs_path> Files;
 		std::string Output;
-		CompilerTargetArch TargetArchitecture = CompilerTargetArch::X86_64;
-		CompilerTarget CompilerTarget = CompilerTarget::C;
-
-		CodeGen_Assembler assembler = CodeGen_Assembler::Fasm;
 
 		bool GenerateDebugInfo = false;
 		bool Verbose = true;
@@ -40,8 +42,12 @@ namespace Glass
 
 		bool OutputDll = false;
 
+		bool Dissassemble = false;
+
 		std::vector<std::string> CIncludes;
 		std::vector<std::string> CLibs;
+
+		Backend_Option Backend = Backend_Option::LLVM_Backend;
 	};
 
 	enum class ExitCode : int
@@ -66,7 +72,7 @@ namespace Glass
 		}
 
 		~LinearAllocator() {
-			free(m_Data);
+			//free(m_Data);
 		}
 
 		template<typename T>

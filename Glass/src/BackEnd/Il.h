@@ -79,6 +79,7 @@ namespace Glass
 		Il_Cast_Ptr2Int,
 		Il_Cast_Int2Float,
 		Il_Cast_Float2Int,
+		Il_Cast_FloatExt,
 	};
 
 	struct Il_Node_Param
@@ -88,6 +89,7 @@ namespace Glass
 
 	struct Il_Node_Alloca
 	{
+		Type_IDX type_idx;
 	};
 
 	struct Il_Node_Load
@@ -106,6 +108,7 @@ namespace Glass
 	{
 		Il_IDX ptr_node_idx;
 		u16 element_idx;
+		i64 offset;
 	};
 
 	struct Il_Node_Bin_Op
@@ -320,6 +323,7 @@ namespace Glass
 	inline Il_Node Il_Make_Param(Il_IDX type_index, Il_IDX param_index) {
 
 		Il_Node param_node = { 0 };
+		param_node.type_idx = type_index;
 		param_node.node_type = Il_Param;
 		param_node.param.index = param_index;
 
@@ -528,11 +532,12 @@ namespace Glass
 		return const_node;
 	}
 
-	inline Il_Node Il_Make_Alloca(Type_IDX type_index) {
+	inline Il_Node Il_Make_Alloca(Type_IDX type_index, Type_IDX pointer_type_index) {
 
 		Il_Node const_node = { 0 };
 		const_node.node_type = Il_Alloca;
-		const_node.type_idx = type_index;
+		const_node.aloca.type_idx = type_index;
+		const_node.type_idx = pointer_type_index;
 
 		return const_node;
 	}
@@ -631,11 +636,12 @@ namespace Glass
 		return math_op_node;
 	}
 
-	inline Il_Node Il_Make_Call(Type_IDX return_type_index, Array<Il_Argument> arguments, Il_IDX proc_idx) {
+	inline Il_Node Il_Make_Call(Type_IDX return_type_index, Array<Il_Argument> arguments, Il_IDX proc_idx, Il_IDX signature_type_idx) {
 
 		Il_Node call_node = { 0 };
 		call_node.node_type = Il_Call;
 		call_node.type_idx = return_type_index;
+		call_node.call.signature = signature_type_idx;
 
 		if (arguments.count <= SMALL_ARG_COUNT) {
 			for (size_t i = 0; i < arguments.count; i++)
@@ -712,7 +718,8 @@ namespace Glass
 	}
 
 	inline Il_IDX Il_Insert_Alloca(Il_Proc& proc, GS_Type* type) {
-		Il_Node alloca_node = Il_Make_Alloca((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, type));
+		auto& ts = *proc.program->type_system;
+		Il_Node alloca_node = Il_Make_Alloca((Il_IDX)TypeSystem_Get_Type_Index(ts, type), (Il_IDX)TypeSystem_Get_Type_Index(ts, TypeSystem_Get_Pointer_Type(ts, type, 1)));
 		return Il_Proc_Insert(proc, alloca_node, 0);
 	}
 
@@ -751,7 +758,7 @@ namespace Glass
 	}
 
 	inline Il_IDX Il_Insert_Call(Il_Proc& proc, GS_Type* signature, Array<Il_Argument> arguments, Il_IDX callee_proc) {
-		Il_Node call_node = Il_Make_Call((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature->proc.return_type), arguments, callee_proc);
+		Il_Node call_node = Il_Make_Call((Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature->proc.return_type), arguments, callee_proc, (Il_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, signature));
 		return Il_Proc_Insert(proc, call_node);
 	}
 
@@ -799,6 +806,8 @@ namespace Glass
 
 	inline Il_IDX Il_Insert_SEP(Il_Proc& proc, GS_Type* struct_type, u64 member_index, Il_IDX struct_pointer_node_idx) {
 		Il_Node sep_node = Il_Make_Struct_Element_Ptr((Type_IDX)TypeSystem_Get_Type_Index(*proc.program->type_system, struct_type), member_index, struct_pointer_node_idx);
+		GS_Struct& _struct = proc.program->type_system->struct_storage[proc.program->type_system->type_name_storage[struct_type->basic.type_name_id].struct_id];
+		sep_node.element_ptr.offset = _struct.offsets[member_index];
 		return Il_Proc_Insert(proc, sep_node);
 	}
 

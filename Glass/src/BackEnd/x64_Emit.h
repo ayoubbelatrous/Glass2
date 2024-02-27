@@ -210,6 +210,8 @@ namespace Glass
 	u32 Emit_Call(Array<u8>& bytes, u32 displacement);
 	void Emit_Call(Array<u8>& bytes, Inst_Op op);
 
+	void Emit_MovAbs(Array<u8>& bytes, u8 reg, i64 imm64);
+
 	u32 Emit_Jmp(Array<u8>& bytes, u32 displacement);
 
 	u32 Emit_JE(Array<u8>& bytes, u32 displacement);
@@ -223,6 +225,7 @@ namespace Glass
 	void Emit_IMul(Array<u8>& bytes, Inst_Op op1, Inst_Op op2, u8 op_size);
 	void Emit_IMul3(Array<u8>& bytes, Inst_Op op1, Inst_Op op2, Inst_Op op3, u8 op_size);
 	void Emit_IDiv(Array<u8>& bytes, Inst_Op op1, u8 op_size);
+	void Emit_Div(Array<u8>& bytes, Inst_Op op1, u8 op_size);
 
 	void Emit_CWD(Array<u8>& bytes);
 	void Emit_CDQ(Array<u8>& bytes);
@@ -259,6 +262,8 @@ namespace Glass
 	void Emit_AddSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 	void Emit_SubSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 	void Emit_SubSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_DivSS(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
+	void Emit_DivSD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 
 	void Emit_CVTSS2SD(Array<u8>& bytes, Inst_Op op1, Inst_Op op2);
 }

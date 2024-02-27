@@ -119,18 +119,37 @@ namespace Glass
 					options.Run = true;
 					modal = false;
 				}
+
+				if (arg == "-il") {
+					options.Backend = Backend_Option::Il_Backend;
+					modal = false;
+				}
+
+				if (arg == "-llvm") {
+					options.Backend = Backend_Option::LLVM_Backend;
+					modal = false;
+				}
+
+				if (arg == "-S") {
+					options.Dissassemble = 1;
+					modal = false;
+				}
+
 				if (arg == "-dll") {
 					options.OutputDll = true;
 					modal = false;
 				}
+
 				if (arg == "-ir") {
 					options.DumpIR = true;
 					modal = false;
 				}
+
 				if (arg == "-no-link") {
 					options.NoLink = true;
 					modal = false;
 				}
+
 				if (arg == "-asm") {
 					modeAssemblerSelect = true;
 				}
@@ -155,16 +174,6 @@ namespace Glass
 						FatalAbort(ExitCode::InvalidCommandLineInput, "Expected A Valid Assembler Name After -asm options are: fasm, clang");
 					}
 					else {
-
-						if (arg == "fasm") {
-							options.assembler = Fasm;
-						}
-						else if (arg == "clang") {
-							options.assembler = Clang_Asm;
-						}
-						else {
-							FatalAbort(ExitCode::InvalidCommandLineInput, fmt::format("unknown assembler selected: {}", arg));
-						}
 
 						modeAssemblerSelect = false;
 					}

@@ -17,7 +17,7 @@ namespace Glass {
 		}
 
 		~LinearAllocator() {
-			free(m_Data);
+			//free(m_Data);
 		}
 
 		template<typename T>

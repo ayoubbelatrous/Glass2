@@ -88,6 +88,9 @@ namespace Glass
 
 	void Front_End::Compile()
 	{
+
+		GS_PROFILE_FUNCTION();
+
 		Il_Program_Init(Data.il_program, &Data.type_system);
 		TypeSystem_Init(Data.type_system);
 
@@ -255,12 +258,20 @@ namespace Glass
 			Il_Global struct_member_typeinfo_global;
 			struct_member_typeinfo_global.type = Data.void_Ty;
 			struct_member_typeinfo_global.name = String_Make("__TypeInfo_Members_Array__");
-			struct_member_typeinfo_global_idx = Il_Insert_Global(Data.il_program, struct_member_typeinfo_global);
+			struct_member_typeinfo_global.initializer = -1;
+
+			if (Options.Backend == Backend_Option::LLVM_Backend) {
+				struct_member_typeinfo_global_idx = Il_Insert_Global(Data.il_program, struct_member_typeinfo_global);
+			}
 
 			Il_Global type_info_table_global;
 			type_info_table_global.type = Data.void_Ty;
 			type_info_table_global.name = String_Make("__TypeInfo_Table__");
-			global_type_info_table_idx = Il_Insert_Global(Data.il_program, type_info_table_global);
+			type_info_table_global.initializer = -1;
+
+			if (Options.Backend == Backend_Option::LLVM_Backend) {
+				global_type_info_table_idx = Il_Insert_Global(Data.il_program, type_info_table_global);
+			}
 
 			GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
 			ASSERT(c_str_type);
@@ -311,20 +322,25 @@ namespace Glass
 		GS_CORE_INFO("global dependecy pass took: {} s", timer.Elapsed());
 
 		timer.Reset();
+
 		if (Do_Tl_Resolution_Passes()) {
 			return;
 		}
+
 		GS_CORE_INFO("dependecy resolve pass took: {} s", timer.Elapsed());
 
 		timer.Reset();
 		if (Do_CodeGen())
 			return;
+
 		GS_CORE_INFO("emit il time: {} s", timer.Elapsed());
 
 		if (print_il)
 		{
+			GS_PROFILE_SCOPE("print il");
 			std::ofstream il_file(".bin/program.il");
 			il_file << printed_il_stream.str();
+			il_file.close();
 		}
 
 		Data.type_system.Array_Ty = Data.Array_Ty;
@@ -365,10 +381,16 @@ namespace Glass
 		//auto result = EE_Exec_Program(Data.exec_engine, &Data.il_program, main_proc_idx);
 		//GS_CORE_INFO("main returned: {}", result.us8);
 
-		bool llvm = true;
+		GS_PROFILE_FUNCTION();
+
+		bool llvm = Options.Backend == Backend_Option::LLVM_Backend;
+
+		std::string linked_objects;
 
 		if (llvm)
 		{
+			GS_PROFILE_SCOPE("run llvm converter");
+
 			LLVM_Converter_Spec lc_spec;
 			lc_spec.output_path = String_Make(".bin/llvm.obj");
 
@@ -382,33 +404,43 @@ namespace Glass
 			llvm_time_f /= 1000000.0;
 
 			GS_CORE_INFO("llvm took: {}", llvm_time_f);
+
+			linked_objects = "./.bin/llvm.obj";
 		}
 		else
 		{
+			GS_PROFILE_SCOPE("run il mc generator");
+
 			MC_Gen_Spec mc_gen_spec;
-			mc_gen_spec.output_path = String_Make(".bin/mc.obj");
+			mc_gen_spec.output_path = String_Make(".bin/il.obj");
 
 			MC_Gen mc_generator = MC_Gen_Make(mc_gen_spec, &Data.il_program);
 			MC_Gen_Run(mc_generator);
+
+			linked_objects = "./.bin/il.obj";
+
 		}
 
-		bool disassemble = false;
+		bool disassemble = Options.Dissassemble;
 
 		if (disassemble)
 		{
-			system("objdump.exe --no-show-raw-insn -D -Mintel ./.bin/mc.obj > ./.bin/mc.s");
+			system("objdump.exe --no-show-raw-insn -D -Mintel ./.bin/il.obj > ./.bin/il.s");
 		}
 
 		//auto result = EE_Exec_Proc(Data.exec_engine, Data.il_program.procedures[main_proc_idx], {});
 
 		std::string output_exe_name = "a.exe";
+		Find_Result find_result;
 
-		Find_Result find_result = find_visual_studio_and_windows_sdk();
+		{
+			GS_PROFILE_SCOPE("find windows sdk");
+			find_result = find_visual_studio_and_windows_sdk();
+		}
 
 		fs_path msvc_linker_path = find_result.vs_exe_path;
 		msvc_linker_path.append("link.exe");
 
-		std::string linked_objects = "./.bin/llvm.obj";
 		std::string linker_options = "/nologo /ignore:4210 /NODEFAULTLIB /IMPLIB:C /DEBUG:FULL /SUBSYSTEM:CONSOLE /INCREMENTAL:NO";
 
 		std::string program_libraries;
@@ -434,9 +466,12 @@ namespace Glass
 
 		GS_CORE_INFO("running linker: {}", linker_command);
 
-		system(linker_command.c_str());
+		{
+			GS_PROFILE_SCOPE("run msvc-linker");
+			system(linker_command.c_str());
+		}
 
-		free_resources(&find_result);
+		//free_resources(&find_result);
 	}
 
 	bool Front_End::Load_Base()
@@ -522,6 +557,8 @@ namespace Glass
 
 	Entity Front_End::Do_Load(Entity_ID entity_id, LoadNode* load_node)
 	{
+		GS_PROFILE_FUNCTION();
+
 		Entity& file_entity = Data.entity_storage[entity_id];
 		ASSERT(file_entity.entity_type == Entity_Type::File_Scope);
 
@@ -553,6 +590,8 @@ namespace Glass
 
 	bool Front_End::Do_Tl_Dcl_Passes()
 	{
+		GS_PROFILE_FUNCTION();
+
 		return Iterate_Tl_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity, Statement* statement) -> bool {
 
 			if (statement->GetType() == NodeType::Variable) {
@@ -845,6 +884,8 @@ namespace Glass
 
 	bool Front_End::Do_Tl_Dependency_Passes()
 	{
+		GS_PROFILE_FUNCTION();
+
 		return Iterate_All_Files([this](File_ID file_id, Entity_ID file_entity_id, Entity& file_entity) -> bool {
 
 			for (size_t i = 0; i < file_entity.children.count; i++)
@@ -1171,6 +1212,8 @@ namespace Glass
 	bool Front_End::Do_Tl_Resolution_Passes()
 	{
 		bool all_evaluated = true;
+
+		GS_PROFILE_FUNCTION();
 
 		for (size_t entity_id = 0; entity_id < Data.entity_storage.count; entity_id++)
 		{
@@ -1571,6 +1614,8 @@ namespace Glass
 
 	bool Front_End::Do_CodeGen()
 	{
+		GS_PROFILE_FUNCTION();
+
 		for (size_t i = 0; i < Data.entity_storage.count; i++)
 		{
 			Entity& entity = Data.entity_storage[i];
@@ -1587,8 +1632,10 @@ namespace Glass
 			}
 		}
 
-		if (Generate_TypeInfoTable()) {
-			return true;
+		if (Options.Backend == Backend_Option::LLVM_Backend) {
+			if (Generate_TypeInfoTable()) {
+				return true;
+			}
 		}
 
 		return false;
@@ -1596,6 +1643,8 @@ namespace Glass
 
 	bool Front_End::Generate_TypeInfoTable()
 	{
+		GS_PROFILE_FUNCTION();
+
 		GS_Type* c_str_type = TypeSystem_Get_Pointer_Type(Data.type_system, TypeSystem_Get_Basic_Type(Data.type_system, Data.u8_tn), 1);
 		ASSERT(c_str_type);
 
@@ -1803,6 +1852,8 @@ namespace Glass
 
 	CodeGen_Result Front_End::Function_CodeGen(Entity& function_entity, Entity_ID func_entity_id, Entity_ID scope_id)
 	{
+		GS_PROFILE_FUNCTION();
+
 		FunctionNode* as_func_node = (FunctionNode*)function_entity.syntax_node;
 
 		function_returns = false;
@@ -2080,14 +2131,14 @@ namespace Glass
 
 			IfNode* as_if = (IfNode*)statement;
 
-			CodeGen_Result condition_result = Expression_CodeGen(as_if->Condition, scope_id, proc, Data.bool_Ty, false, true);
+			CodeGen_Result condition_result = Expression_CodeGen(as_if->Condition, scope_id, proc, nullptr, false, true);
 			if (!condition_result) return {};
 
 			if (condition_result.expression_type != Data.bool_Ty) {
 
 				auto expression_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, condition_result.expression_type);
 
-				if (expression_type_flags & TN_Numeric_Type || expression_type_flags & TN_Pointer_Type) {
+				if (expression_type_flags & TN_Numeric_Type || expression_type_flags & TN_Pointer_Type || expression_type_flags & TN_Enum_Type) {
 					Const_Union zero = {};
 					condition_result.code_node_id = Il_Insert_Compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, condition_result.expression_type, condition_result.code_node_id, Il_Insert_Constant(proc, zero, condition_result.expression_type));
 				}
@@ -2275,6 +2326,24 @@ namespace Glass
 				result.code_node_id = Il_Insert_Constant(proc, zero, null_type);
 				result.ok = true;
 				result.expression_type = null_type;
+
+				return result;
+			}
+
+			if (as_ident->Symbol.Symbol == "true" || as_ident->Symbol.Symbol == "false") {
+
+				CodeGen_Result result;
+
+				Const_Union constant = { 0 };
+
+				if (as_ident->Symbol.Symbol == "true")
+					constant.s1 = 1;
+				else
+					constant.s1 = 0;
+
+				result.code_node_id = Il_Insert_Constant(proc, constant, Data.bool_Ty);
+				result.ok = true;
+				result.expression_type = Data.bool_Ty;
 
 				return result;
 			}
@@ -2685,6 +2754,14 @@ namespace Glass
 					if (arg_result.expression_type != callee_signature->proc.params[i]) {
 						Push_Error_Loc(scope_id, arg_node, "call type mismatch in argument");
 						return {};
+					}
+				}
+
+				if (func_callee_entity) {
+					if (func_callee_entity->func.c_variadic) {
+						if (arg_result.expression_type == Data.float_Ty) {
+							arg_result.code_node_id = Il_Insert_Cast(proc, Il_Cast_FloatExt, Data.f64_Ty, Data.float_Ty, arg_result.code_node_id);
+						}
 					}
 				}
 
@@ -4687,8 +4764,9 @@ namespace Glass
 		bool equality_compare = as_bin_expr->OPerator == Operator::Equal || as_bin_expr->OPerator == Operator::NotEqual;
 		bool logical_compare = as_bin_expr->OPerator == Operator::Or || as_bin_expr->OPerator == Operator::And;
 		bool bit_wise = as_bin_expr->OPerator == Operator::BitOr || as_bin_expr->OPerator == Operator::BitAnd;
+		bool is_compare = as_bin_expr->OPerator == Operator::GreaterThan || as_bin_expr->OPerator == Operator::LesserThan;
 
-		CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, nullptr, assignment, is_condition);
+		CodeGen_Result left_result = Expression_CodeGen(as_bin_expr->Left, scope_id, proc, is_compare ? nullptr : inferred_type, assignment, is_condition);
 		if (!left_result) return {};
 		CodeGen_Result right_result = Expression_CodeGen(as_bin_expr->Right, scope_id, proc, left_result.expression_type, false, is_condition);
 		if (!right_result) return {};
@@ -4717,7 +4795,7 @@ namespace Glass
 		}
 
 		if (left_result.expression_type != right_result.expression_type) {
-			Push_Error_Loc(scope_id, as_bin_expr, "type mismatch");
+			Push_Error_Loc(scope_id, as_bin_expr, FMT("type mismatch: '{}', '{}'", Print_Type(left_result.expression_type), Print_Type(right_result.expression_type)));
 			return {};
 		}
 
@@ -5007,7 +5085,7 @@ namespace Glass
 					}
 				}
 			}
-		}
+	}
 
 		if (scope_entity.parent != Entity_Null) {
 
@@ -5023,7 +5101,7 @@ namespace Glass
 		}
 
 		return Entity_Null;
-	}
+}
 
 	CodeGen_Result::operator bool()
 	{

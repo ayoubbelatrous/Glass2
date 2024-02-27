@@ -6,6 +6,8 @@ int main(int argc, char** argv)
 {
 	Glass::Log::Init();
 
+	GS_PROFILE_BEGIN_SESSION("Compiler", "profile.log");
+
 	std::vector<std::string> commandLineArgs;
 
 	for (size_t i = 1; i < argc; i++)
@@ -17,4 +19,6 @@ int main(int argc, char** argv)
 
 	App.OnStart();
 	App.OnShutdown();
+
+	GS_PROFILE_END_SESSION();
 }
