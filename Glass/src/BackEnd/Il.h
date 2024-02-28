@@ -80,6 +80,10 @@ namespace Glass
 		Il_Cast_Int2Float,
 		Il_Cast_Float2Int,
 		Il_Cast_FloatExt,
+		Il_Cast_FloatTrunc,
+		Il_Cast_IntTrunc,
+		Il_Cast_IntSExt,
+		Il_Cast_IntZExt,
 	};
 
 	struct Il_Node_Param

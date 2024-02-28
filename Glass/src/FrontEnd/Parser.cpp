@@ -1162,7 +1162,7 @@ namespace Glass
 
 			Consume();
 
-			right = (Expression*)ParsePrimaryExpr();
+			right = ParseNotExpr();
 
 			if (!right) {
 				m_Location--;
@@ -1170,6 +1170,38 @@ namespace Glass
 			}
 
 			DeRefNode Node;
+			Node.What = right;
+
+			if (!Node.What) {
+				Abort("Expected Expression!, Before: ");
+			}
+
+			right = (Expression*)AST(Node);
+		}
+
+		if (!right) {
+			right = ParseNotExpr();
+		}
+
+		return right;
+	}
+
+	Expression* Parser::ParseNotExpr()
+	{
+		Expression* right = nullptr;
+
+		if (At().Type == TokenType::Bang) {
+
+			Consume();
+
+			right = ParseMemberExpr((Expression*)ParsePrimaryExpr());
+
+			if (!right) {
+				m_Location--;
+				return right;
+			}
+
+			NotExpr Node;
 			Node.What = right;
 
 			if (!Node.What) {
@@ -1229,7 +1261,7 @@ namespace Glass
 
 		while (At().Type == TokenType::OpenBracket) {
 
-			if (At(2).Type == TokenType::Period) {
+			if (At(2).Type == TokenType::Period && At(1).Type == TokenType::Period) {
 				return accessee;
 			}
 

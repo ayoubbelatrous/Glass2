@@ -488,6 +488,22 @@ namespace Glass
 							regv[idx] = lc.llvm_builder->CreateFPExt(regv[node.cast.castee_node_idx], llvm_Ty);
 							cast_ops = llvm::Instruction::CastOps::FPExt;
 						}
+						else if (node.cast.cast_type == Il_Cast_FloatTrunc) {
+							regv[idx] = lc.llvm_builder->CreateFPTrunc(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::FPTrunc;
+						}
+						else if (node.cast.cast_type == Il_Cast_IntSExt) {
+							regv[idx] = lc.llvm_builder->CreateSExt(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::SExt;
+						}
+						else if (node.cast.cast_type == Il_Cast_IntZExt) {
+							regv[idx] = lc.llvm_builder->CreateZExt(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::ZExt;
+						}
+						else if (node.cast.cast_type == Il_Cast_IntTrunc) {
+							regv[idx] = lc.llvm_builder->CreateTrunc(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::Trunc;
+						}
 						else {
 							GS_ASSERT_UNIMPL();
 						}
@@ -781,7 +797,7 @@ namespace Glass
 		if (lc.spec.validate)
 		{
 			std::error_code ELC;
-			llvm::raw_fd_ostream outputFile(".bin/llvm.ll", ELC, llvm::sys::fs::OF_None);
+			llvm::raw_fd_ostream outputFile(".bin/llvm.ll", ELC, llvm::sys::fs::OF_Text);
 			lc.llvm_module->print(outputFile, nullptr, true, true);
 		}
 

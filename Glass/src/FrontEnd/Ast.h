@@ -15,6 +15,7 @@ namespace Glass
 		BinaryExpression,
 
 		NegateExpression,
+		Not,
 
 		TE_TypeName,
 		TE_Pointer,
@@ -397,6 +398,26 @@ namespace Glass
 	};
 
 	class NegateExpr : public Expression
+	{
+	public:
+
+		Expression* What = nullptr;
+
+		virtual NodeType GetType() const override
+		{
+			return NodeType::NegateExpression;
+		}
+
+		virtual std::string ToString() const {
+			return "";
+		}
+
+		virtual const Token& GetLocation() const override {
+			return What->GetLocation();
+		}
+	};
+
+	class NotExpr : public Expression
 	{
 	public:
 

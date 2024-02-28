@@ -24,6 +24,8 @@ namespace Glass
 		Front_End front_end = Front_End(m_Options);
 		front_end.Compile();
 
+		int error = 0;
+
 		for (size_t i = 0; i < front_end.Data.Messages.count; i++)
 		{
 			Front_End_Message& message = front_end.Data.Messages[i];
@@ -31,8 +33,11 @@ namespace Glass
 			switch (message.Message_Type)
 			{
 			case Message_Error:
+			{
 				GS_CORE_ERROR("{}", message.Message);
-				break;
+				error = 1;
+			}
+			break;
 			case Message_Warning:
 				GS_CORE_WARN("{}", message.Message);
 				break;
@@ -44,6 +49,8 @@ namespace Glass
 				break;
 			}
 		}
+
+		if (error) exit(error);
 	}
 
 	void Application::OnShutdown()

@@ -383,6 +383,8 @@ namespace Glass
 
 		GS_PROFILE_FUNCTION();
 
+		std::filesystem::create_directories(".bin");
+
 		bool llvm = Options.Backend == Backend_Option::LLVM_Backend;
 
 		std::string linked_objects;
@@ -562,17 +564,31 @@ namespace Glass
 		Entity& file_entity = Data.entity_storage[entity_id];
 		ASSERT(file_entity.entity_type == Entity_Type::File_Scope);
 
+		auto& current_file = Data.Files[file_entity.file_scope.file_id];
+
 		fs_path path = load_node->FileName->Symbol.Symbol;
 		fs_path path_abs = normalizePath(std::filesystem::absolute(path));
 
 		File_ID loaded_file_id = File_Null;
 
-		auto previous_loaded_file_it = Data.Path_To_File.find(path_abs.string());
-		if (previous_loaded_file_it == Data.Path_To_File.end()) {
+		if (!std::filesystem::exists(path_abs)) {
 
-			if (!std::filesystem::exists(path_abs)) {
-				Push_Error_Loc(entity_id, load_node, FMT("1oad directive file not found!: '{}'", path.string()));
+			fs_path relative_to_file_path = current_file.Path / "../" / path;
+
+			if (!std::filesystem::exists(relative_to_file_path))
+			{
+				Push_Error_Loc(entity_id, load_node, FMT("load directive file not found!: '{}'", path.string()));
 			}
+			else
+			{
+				path = relative_to_file_path;
+				path_abs = normalizePath(std::filesystem::absolute(path));
+			}
+		}
+
+		auto previous_loaded_file_it = Data.Path_To_File.find(path_abs.string());
+
+		if (previous_loaded_file_it == Data.Path_To_File.end()) {
 
 			loaded_file_id = Generate_File(path, path_abs);
 			Entity_ID loaded_file_scope_entity_id = Insert_Entity(Create_File_Scope_Entity(loaded_file_id, Data.Files[loaded_file_id].Syntax), Data.global_scope_entity);
@@ -2752,7 +2768,7 @@ namespace Glass
 
 				if (i < callee_signature->proc.params.count) {
 					if (arg_result.expression_type != callee_signature->proc.params[i]) {
-						Push_Error_Loc(scope_id, arg_node, "call type mismatch in argument");
+						Push_Error_Loc(scope_id, arg_node, FMT("call type mismatch in argument: given: '{}', needed: '{}'", Print_Type(arg_result.expression_type), Print_Type(callee_signature->proc.params[i])));
 						return {};
 					}
 				}
@@ -2930,6 +2946,12 @@ namespace Glass
 			CodeGen_Result result;
 			result.ok = true;
 			result.expression_type = cast_to_type;
+			result.code_node_id = expr_result.code_node_id;
+
+			if (castee_type == cast_to_type)
+			{
+				return result;
+			}
 
 			auto castee_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, castee_type);
 			auto to_type_flags = TypeSystem_Get_Type_Flags(Data.type_system, cast_to_type);
@@ -2943,15 +2965,61 @@ namespace Glass
 					valid_cast = true;
 				}
 				else if (cast_to_type->kind == Type_Basic) {
+
 					if (to_type_flags & TN_Numeric_Type && castee_type_flags & TN_Numeric_Type)
 					{
-						if (!(castee_type_flags & TN_Float_Type) && to_type_flags & TN_Float_Type) {
+						bool is_castee_float = castee_type_flags & TN_Float_Type;
+						bool is_to_float = to_type_flags & TN_Float_Type;
+
+						if (!is_castee_float && is_to_float) {
 							result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Int2Float, cast_to_type, castee_type, expr_result.code_node_id);
 							valid_cast = true;
 						}
 
-						if (!(to_type_flags & TN_Float_Type) && castee_type_flags & TN_Float_Type) {
+						if (!is_to_float && is_castee_float) {
 							result.code_node_id = Il_Insert_Cast(proc, Il_Cast_Float2Int, cast_to_type, castee_type, expr_result.code_node_id);
+							valid_cast = true;
+						}
+
+						if (!is_to_float && !is_castee_float)
+						{
+							auto from_type_size = TypeSystem_Get_Type_Size(Data.type_system, castee_type);
+							auto to_type_size = TypeSystem_Get_Type_Size(Data.type_system, cast_to_type);
+
+							if (to_type_size == from_type_size) {
+								return result;
+							}
+
+							auto int_cast_type = Il_Cast_IntTrunc;
+
+							if (to_type_size > from_type_size) {
+
+								if (to_type_flags & TN_Unsigned_Type)
+									int_cast_type = Il_Cast_IntZExt;
+								else
+									int_cast_type = Il_Cast_IntSExt;
+							}
+
+							result.code_node_id = Il_Insert_Cast(proc, int_cast_type, cast_to_type, castee_type, expr_result.code_node_id);
+							valid_cast = true;
+						}
+
+						if (is_to_float && is_castee_float)
+						{
+							auto from_type_size = TypeSystem_Get_Type_Size(Data.type_system, castee_type);
+							auto to_type_size = TypeSystem_Get_Type_Size(Data.type_system, cast_to_type);
+
+							if (to_type_size == from_type_size) {
+								return result;
+							}
+
+							auto int_cast_type = Il_Cast_FloatTrunc;
+
+							if (to_type_size > from_type_size) {
+								int_cast_type = Il_Cast_FloatExt;
+							}
+
+							result.code_node_id = Il_Insert_Cast(proc, int_cast_type, cast_to_type, castee_type, expr_result.code_node_id);
 							valid_cast = true;
 						}
 					}
@@ -5085,7 +5153,7 @@ namespace Glass
 					}
 				}
 			}
-	}
+		}
 
 		if (scope_entity.parent != Entity_Null) {
 
@@ -5101,7 +5169,7 @@ namespace Glass
 		}
 
 		return Entity_Null;
-}
+	}
 
 	CodeGen_Result::operator bool()
 	{
