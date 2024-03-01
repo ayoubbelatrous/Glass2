@@ -34,7 +34,7 @@ namespace Glass
 				Il_IDX i = block.instructions[j];
 				Il_Node node = proc.instruction_storage[i];
 
-				GS_Type* node_type = &g.prog->type_system->type_storage[node.type_idx];
+				GS_Type* node_type = get_type_at(node.type_idx);
 
 				switch (node.node_type)
 				{
@@ -72,7 +72,7 @@ namespace Glass
 					lifetimes[node.math_op.right_node_idx]++;
 					break;
 				case Il_Ret:
-					if (node_type != g.type_system->void_Ty)
+					if (node_type != get_ts().void_Ty)
 						lifetimes[node.ret.value_node_idx]++;
 					break;
 				case Il_Store:
@@ -221,8 +221,6 @@ namespace Glass
 
 		i32 stack_sz = 0;
 		i32 stack_top_section_size = 0;
-
-		Type_System& ts = *g.prog->type_system;
 
 		struct Register_State
 		{
@@ -464,9 +462,9 @@ namespace Glass
 			{
 				Il_IDX idx = block.instructions[j];
 				Il_Node node = proc.instruction_storage[idx];
-				GS_Type* type = &ts.type_storage[node.type_idx];
-				u64 type_size = TypeSystem_Get_Type_Size(ts, type);
-				auto type_flags = TypeSystem_Get_Type_Flags(ts, type);
+				GS_Type* type = get_type_at(node.type_idx);
+				u64 type_size = get_type_size(type);
+				auto type_flags = get_type_flags(type);
 
 				register_values[idx].type = type;
 				register_values[idx].type_size = type_size;
@@ -476,8 +474,8 @@ namespace Glass
 				{
 				case Il_Alloca:
 				{
-					GS_Type* alloca_type = &ts.type_storage[node.aloca.type_idx];
-					u64 alloca_type_size = TypeSystem_Get_Type_Size(ts, alloca_type);
+					GS_Type* alloca_type = get_type_at(node.aloca.type_idx);
+					u64 alloca_type_size = get_type_size(alloca_type);
 
 					stack_sz += alloca_type_size;
 					register_values[idx].desc_type = ValD_Addr_Relative;
@@ -545,7 +543,7 @@ namespace Glass
 				break;
 				case Il_Struct_Initializer:
 				{
-					GS_Struct& _struct = g.type_system->struct_storage[g.type_system->type_name_storage[type->basic.type_name_id].struct_id];
+					GS_Struct& _struct = get_struct(type);
 
 					stack_sz += type_size;
 
@@ -555,7 +553,7 @@ namespace Glass
 					{
 						u64 offset = _struct.offsets[i];
 
-						u64 member_type_size = TypeSystem_Get_Type_Size(*g.type_system, _struct.members[i]);
+						u64 member_type_size = get_type_size(_struct.members[i]);
 
 						if (member_type_size > 8)
 							GS_ASSERT_UNIMPL();
@@ -591,7 +589,7 @@ namespace Glass
 				break;
 				case Il_StructElementPtr:
 				{
-					GS_Struct& _struct = g.type_system->struct_storage[g.type_system->type_name_storage[type->basic.type_name_id].struct_id];
+					GS_Struct& _struct = get_struct(type);
 					u64 offset = _struct.offsets[node.element_ptr.element_idx];
 
 					auto addr_gpr = allocate_gpr(idx);
@@ -749,7 +747,7 @@ namespace Glass
 				}
 				break;
 				case Il_Ret: {
-					if (type != g.type_system->void_Ty)
+					if (type != get_ts().void_Ty)
 					{
 						if (type_flags & TN_Float_Type) {
 							auto val_fp = XMM0;
@@ -815,7 +813,7 @@ namespace Glass
 				{
 					auto arguments_ptr = node.call.arguments;
 
-					auto signature = &g.type_system->type_storage[node.call.signature];
+					auto signature = get_type_at(node.call.signature);
 
 					if (node.call.argument_count > SMALL_ARG_COUNT) {
 						arguments_ptr = node.call.arguments_ptr;
@@ -839,9 +837,9 @@ namespace Glass
 					{
 						Il_IDX argument_idx = arguments_ptr[i];
 
-						GS_Type* argument_type = &g.type_system->type_storage[proc.instruction_storage[argument_idx].type_idx];
-						auto argument_type_flags = TypeSystem_Get_Type_Flags(*g.type_system, argument_type);
-						auto argument_type_size = TypeSystem_Get_Type_Size(*g.type_system, argument_type);
+						GS_Type* argument_type = get_type_at(proc.instruction_storage[argument_idx].type_idx);
+						auto argument_type_flags = get_type_flags(argument_type);
+						auto argument_type_size = get_type_flags(argument_type);
 
 						if (argument_type_flags & TN_Float_Type) {
 
@@ -976,7 +974,7 @@ namespace Glass
 						spill_gpr(RAX);
 					}
 
-					if (signature->proc.return_type == g.type_system->void_Ty) {
+					if (signature->proc.return_type == get_ts().void_Ty) {
 
 					}
 					else {
@@ -998,7 +996,7 @@ namespace Glass
 
 					Array_Add(g.code_relocations, relocation);
 
-					if (signature->proc.return_type == g.type_system->void_Ty || register_use_counts[idx] <= 0) {
+					if (signature->proc.return_type == get_ts().void_Ty || register_use_counts[idx] <= 0) {
 						if (is_float)
 						{
 							free_reg(XMM0);
@@ -1592,7 +1590,7 @@ namespace Glass
 				{
 					auto arguments_ptr = node.call.arguments;
 
-					auto signature = &g.type_system->type_storage[node.call.signature];
+					auto signature = get_type_at(node.call.signature);
 
 					if (node.call.argument_count > SMALL_ARG_COUNT) {
 						arguments_ptr = node.call.arguments_ptr;
@@ -1622,9 +1620,9 @@ namespace Glass
 					{
 						Il_IDX argument_idx = arguments_ptr[i];
 
-						GS_Type* argument_type = &g.type_system->type_storage[proc.instruction_storage[argument_idx].type_idx];
-						auto argument_type_flags = TypeSystem_Get_Type_Flags(*g.type_system, argument_type);
-						auto argument_type_size = TypeSystem_Get_Type_Size(*g.type_system, argument_type);
+						GS_Type* argument_type = get_type_at(proc.instruction_storage[argument_idx].type_idx);
+						auto argument_type_flags = get_type_flags(argument_type);
+						auto argument_type_size = get_type_size(argument_type);
 						auto arg_bit_size = argument_type_size * 8;
 
 						bool arg_is_float = argument_type_flags & TN_Float_Type;
@@ -2526,7 +2524,6 @@ namespace Glass
 		MC_Ctx ctx;
 
 		ctx.proc = &proc;
-		ctx.ts = g.type_system;
 
 		ctx.instructions = g.instruction_buffer;
 		ctx.instructions.count = 0;
@@ -2924,7 +2921,7 @@ namespace Glass
 			}
 			else {
 
-				auto type_size = TypeSystem_Get_Type_Size(*g.prog->type_system, global.type);
+				auto type_size = get_type_size(global.type);
 
 				symbol.value = (u32)g.rdata.count;
 
@@ -3005,35 +3002,34 @@ namespace Glass
 
 		if (use_test_program) {
 
-			Il_Program_Init(test_program, g.prog->type_system);
-			g.prog = &test_program;
-			g.type_system = g.prog->type_system;
-
-			auto int_ptr = TypeSystem_Get_Pointer_Type(*g.type_system, g.type_system->int_Ty, 1);
-
-			Il_IDX test_proc_idx = Il_Insert_Proc(test_program, String_Make("main"), TypeSystem_Get_Proc_Type(*g.type_system, g.type_system->void_Ty, {}));
-			Il_Proc& test_proc = test_program.procedures[test_proc_idx];
-
-			Il_IDX test_var = Il_Insert_Alloca(test_proc, g.type_system->int_Ty);
-			Il_IDX test_var2 = Il_Insert_Alloca(test_proc, int_ptr);
-			Il_IDX test_constant = Il_Insert_Constant(test_proc, (void*)0xffff, g.type_system->int_Ty);
-
-			Il_IDX add_res = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, test_constant, test_constant);
-			Il_IDX add_res2 = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, add_res, test_constant);
-
-			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res2);
-
-			//Il_IDX loaded_var = Il_Insert_Load(test_proc, g.type_system->int_Ty, test_var);
-			Il_Insert_Store(test_proc, int_ptr, test_var2, test_var);
-
-			GS_CORE_TRACE("test program: {}", Il_Print_Proc(test_proc));
+			// 			Il_Program_Init(test_program, g.prog->type_system);
+			// 			g.prog = &test_program;
+			// 			g.type_system = g.prog->type_system;
+			// 
+			// 			auto int_ptr = TypeSystem_Get_Pointer_Type(*g.type_system, g.type_system->int_Ty, 1);
+			// 
+			// 			Il_IDX test_proc_idx = Il_Insert_Proc(test_program, String_Make("main"), TypeSystem_Get_Proc_Type(*g.type_system, g.type_system->void_Ty, {}));
+			// 			Il_Proc& test_proc = test_program.procedures[test_proc_idx];
+			// 
+			// 			Il_IDX test_var = Il_Insert_Alloca(test_proc, g.type_system->int_Ty);
+			// 			Il_IDX test_var2 = Il_Insert_Alloca(test_proc, int_ptr);
+			// 			Il_IDX test_constant = Il_Insert_Constant(test_proc, (void*)0xffff, g.type_system->int_Ty);
+			// 
+			// 			Il_IDX add_res = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, test_constant, test_constant);
+			// 			Il_IDX add_res2 = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, add_res, test_constant);
+			// 
+			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
+			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
+			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
+			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res2);
+			// 
+			// 			//Il_IDX loaded_var = Il_Insert_Load(test_proc, g.type_system->int_Ty, test_var);
+			// 			Il_Insert_Store(test_proc, int_ptr, test_var2, test_var);
+			// 
+			// 			GS_CORE_TRACE("test program: {}", Il_Print_Proc(test_proc));
 		}
 		else
 		{
-			g.type_system = g.prog->type_system;
 		}
 
 		register_values = Array_Reserved<Value_Desc>(65553);
@@ -3314,7 +3310,6 @@ namespace Glass
 		MC_Gen g = { 0 };
 		g.output_path = String_Copy(spec.output_path);
 		g.prog = program;
-		g.ts = program->type_system;
 
 		ASSERT(g.prog);
 		ASSERT(g.ts);

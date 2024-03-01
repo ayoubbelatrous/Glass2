@@ -24,8 +24,8 @@ namespace Glass
 		{
 		case Type_Basic:
 		{
-			auto type_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, ty);
-			auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, ty);
+			auto type_size = get_type_size(ty);
+			auto type_flags = get_type_flags(ty);
 
 			if (!(type_flags & TN_Struct_Type)) {
 				switch (type_size)
@@ -53,8 +53,8 @@ namespace Glass
 
 				Array<llvm::Type*> members;
 
-				auto& type_name = lc.prog->type_system->type_name_storage[ty->basic.type_name_id];
-				GS_Struct& strct = lc.prog->type_system->struct_storage[type_name.struct_id];
+				auto& type_name = get_ts().type_name_storage[ty->basic.type_name_id];
+				GS_Struct& strct = get_ts().struct_storage[type_name.struct_id];
 
 				for (u64 i = 0; i < strct.members.count; i++) {
 					Array_Add(members, to_llvm(lc, strct.members[i]));
@@ -103,8 +103,8 @@ namespace Glass
 
 			auto param_ty = signature->proc.params[i];
 
-			auto param_ty_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, param_ty);
-			auto param_ty_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, param_ty);
+			auto param_ty_size = get_type_size(param_ty);
+			auto param_ty_flags = get_type_flags(param_ty);
 
 			if (param_ty_flags & TN_Struct_Type || param_ty->kind == Type_Array) {
 				if (param_ty_size == 2)
@@ -175,9 +175,9 @@ namespace Glass
 				Il_IDX idx = block.instructions[j];
 				Il_Node node = proc.instruction_storage[idx];
 
-				GS_Type* type = &lc.prog->type_system->type_storage[node.type_idx];
-				auto type_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, type);
-				auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, type);
+				GS_Type* type = get_type(node.type_idx);
+				auto type_size = get_type_size(type);
+				auto type_flags = get_type_flags(type);
 
 				regt[idx] = type;
 
@@ -197,7 +197,7 @@ namespace Glass
 				break;
 				case Il_Alloca:
 				{
-					auto alloca_type = &lc.prog->type_system->type_storage[node.aloca.type_idx];
+					auto alloca_type = get_type_at(node.aloca.type_idx);
 					regv[idx] = lc.llvm_builder->CreateAlloca(to_llvm(lc, alloca_type));
 				}
 				break;
@@ -240,16 +240,15 @@ namespace Glass
 
 					ASSERT(type->kind == Type_Basic);
 
-					auto type_system = lc.prog->type_system;
-					GS_Struct& strct = type_system->struct_storage[type_system->type_name_storage[type->basic.type_name_id].struct_id];
+					GS_Struct& strct = get_struct(type);
 
-					regt[idx] = TypeSystem_Get_Pointer_Type(*lc.prog->type_system, strct.members[node.element_ptr.element_idx], 1);
+					regt[idx] = get_pointer_type(strct.members[node.element_ptr.element_idx], 1);
 				}
 				break;
 				case Il_ArrayElementPtr:
 				{
 					regv[idx] = lc.llvm_builder->CreateGEP(to_llvm(lc, type), regv[node.aep.ptr_node_idx], regv[node.aep.index_node_idx]);
-					regt[idx] = TypeSystem_Get_Pointer_Type(*lc.prog->type_system, type, 1);
+					regt[idx] = get_pointer_type(type, 1);
 				}
 				break;
 				case Il_Call:
@@ -276,8 +275,8 @@ namespace Glass
 						Il_IDX argument_node_idx = arguments_ptr[i];
 						GS_Type* argument_type = regt[argument_node_idx];
 
-						auto argument_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, argument_type);
-						auto argument_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, argument_type);
+						auto argument_size = get_type_size(argument_type);
+						auto argument_flags = get_type_flags(argument_type);
 
 						if ((argument_flags & TN_Struct_Type || argument_type->kind == Type_Array) && argument_size <= 8) {
 
@@ -308,7 +307,7 @@ namespace Glass
 					if (node.node_type == Il_Call)
 						regv[idx] = lc.llvm_builder->CreateCall(lc.proc_to_llvm[node.call.proc_idx], llvm::ArrayRef(arguments.data, arguments.count));
 					else
-						regv[idx] = lc.llvm_builder->CreateCall(LLVMC_Get_Func_Type(lc, &lc.prog->type_system->type_storage[node.call.signature], false), regv[node.call.proc_idx], llvm::ArrayRef(arguments.data, arguments.count));
+						regv[idx] = lc.llvm_builder->CreateCall(LLVMC_Get_Func_Type(lc, get_type_at(node.call.signature), false), regv[node.call.proc_idx], llvm::ArrayRef(arguments.data, arguments.count));
 				}
 				break;
 				case Il_Sub:
@@ -444,7 +443,7 @@ namespace Glass
 				}
 				break;
 				case Il_Ret:
-					if (lc.prog->type_system->void_Ty == type) {
+					if (get_ts().void_Ty == type) {
 						lc.llvm_builder->CreateRetVoid();
 					}
 					else {
@@ -463,10 +462,10 @@ namespace Glass
 						regv[idx] = regv[node.cast.castee_node_idx];
 					}
 					else {
-						auto cast_from_type = &lc.prog->type_system->type_storage[node.cast.from_type_idx];
+						auto cast_from_type = get_type_at(node.cast.from_type_idx);
 						auto cast_from_type_llvm = to_llvm(lc, cast_from_type);
 
-						auto cast_to_type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, cast_from_type);
+						auto cast_to_type_flags = get_type_flags(cast_from_type);
 
 						auto llvm_Ty = to_llvm(lc, type);
 
@@ -526,11 +525,8 @@ namespace Glass
 	{
 		Il_Node node = nodes[node_idx];
 
-		GS_Type* type = &lc.prog->type_system->type_storage[node.type_idx];
-
-		auto& type_storage = lc.prog->type_system->type_storage;
-
-		auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, type);
+		GS_Type* type = get_type_at(node.type_idx);
+		auto type_flags = get_type_flags(type);
 
 		switch (node.node_type)
 		{
@@ -651,8 +647,8 @@ namespace Glass
 
 			llvm::GlobalVariable* global_variable = nullptr;
 
-			auto type_size = TypeSystem_Get_Type_Size(*lc.prog->type_system, global.type);
-			auto type_flags = TypeSystem_Get_Type_Flags(*lc.prog->type_system, global.type);
+			auto type_size = get_type_size(global.type);
+			auto type_flags = get_type_flags(global.type);
 
 			llvm::Type* llvm_type = to_llvm(lc, global.type);
 
@@ -770,24 +766,24 @@ namespace Glass
 		lc.llvm_double = llvm::Type::getDoubleTy(*lc.llvm_ctx);
 		lc.llvm_void = llvm::Type::getVoidTy(*lc.llvm_ctx);
 
-		lc.type_to_llvm[lc.prog->type_system->i8_Ty] = lc.llvm_i8;
-		lc.type_to_llvm[lc.prog->type_system->i16_Ty] = lc.llvm_i16;
-		lc.type_to_llvm[lc.prog->type_system->i32_Ty] = lc.llvm_i32;
-		lc.type_to_llvm[lc.prog->type_system->i64_Ty] = lc.llvm_i64;
+		lc.type_to_llvm[get_ts().i8_Ty] = lc.llvm_i8;
+		lc.type_to_llvm[get_ts().i16_Ty] = lc.llvm_i16;
+		lc.type_to_llvm[get_ts().i32_Ty] = lc.llvm_i32;
+		lc.type_to_llvm[get_ts().i64_Ty] = lc.llvm_i64;
 
-		lc.type_to_llvm[lc.prog->type_system->u8_Ty] = lc.llvm_i8;
-		lc.type_to_llvm[lc.prog->type_system->u16_Ty] = lc.llvm_i16;
-		lc.type_to_llvm[lc.prog->type_system->u32_Ty] = lc.llvm_i32;
-		lc.type_to_llvm[lc.prog->type_system->u64_Ty] = lc.llvm_i64;
+		lc.type_to_llvm[get_ts().u8_Ty] = lc.llvm_i8;
+		lc.type_to_llvm[get_ts().u16_Ty] = lc.llvm_i16;
+		lc.type_to_llvm[get_ts().u32_Ty] = lc.llvm_i32;
+		lc.type_to_llvm[get_ts().u64_Ty] = lc.llvm_i64;
 
-		lc.type_to_llvm[lc.prog->type_system->f32_Ty] = lc.llvm_float;
-		lc.type_to_llvm[lc.prog->type_system->f64_Ty] = lc.llvm_double;
+		lc.type_to_llvm[get_ts().f32_Ty] = lc.llvm_float;
+		lc.type_to_llvm[get_ts().f64_Ty] = lc.llvm_double;
 
-		lc.type_to_llvm[lc.prog->type_system->int_Ty] = lc.llvm_i32;
-		lc.type_to_llvm[lc.prog->type_system->float_Ty] = lc.llvm_float;
-		lc.type_to_llvm[lc.prog->type_system->void_Ty] = lc.llvm_void;
+		lc.type_to_llvm[get_ts().int_Ty] = lc.llvm_i32;
+		lc.type_to_llvm[get_ts().float_Ty] = lc.llvm_float;
+		lc.type_to_llvm[get_ts().void_Ty] = lc.llvm_void;
 
-		lc.llvm_Array = to_llvm(lc, lc.prog->type_system->Array_Ty);
+		lc.llvm_Array = to_llvm(lc, get_ts().Array_Ty);
 
 		LLVMC_Codegen(lc);
 

@@ -138,6 +138,27 @@ namespace Glass
 		Array<u64> offsets;
 	};
 
+
+	void init_typesystem();
+	Type_Name_ID insert_typename(Type_Name type_name);
+
+	Type_IDX get_type_index(GS_Type* type);
+	u64 get_type_flags(GS_Type* type);
+	u64 get_type_flags(int index);
+	GS_Type* get_type_at(int index);
+
+
+	GS_Type* get_type(Type_Name_ID type_name_id);
+	GS_Type* get_pointer_type(GS_Type* pointee, u32 indirection);
+	GS_Struct& get_struct(GS_Type* type);
+
+	u64 get_type_size(GS_Type* type);
+
+	Type_System& get_ts();
+
+	String print_type(GS_Type* type);
+	String print_type_index(int type_idx);
+
 	void TypeSystem_Init(Type_System& ts);
 
 	Type_Name_ID TypeSystem_Insert_TypeName(Type_System& ts, Type_Name type_name);

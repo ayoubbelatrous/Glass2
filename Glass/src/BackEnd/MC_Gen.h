@@ -175,8 +175,6 @@ namespace Glass
 
 		u32 program_counter;
 
-		Type_System* type_system;
-
 		Array<MC_Inst> instruction_buffer;
 		Array<MC_Label> label_buffer;
 		Array<MC_JumpPatch> jump_patches_buffer;

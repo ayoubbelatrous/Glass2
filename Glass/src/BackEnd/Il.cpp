@@ -15,14 +15,14 @@ namespace Glass
 		{
 			if (i != 0)
 				stream << ", ";
-			stream << TypeSystem_Print_Type(*proc.program->type_system, proc.signature->proc.params[i]).data << " ";
+			stream << print_type(proc.signature->proc.params[i]).data << " ";
 			stream << "$" << proc.parameters[i];
 		}
 
 		stream << ")";
 
 		stream << ": "
-			<< TypeSystem_Print_Type(*proc.program->type_system, proc.signature->proc.return_type).data
+			<< print_type(proc.signature->proc.return_type).data
 			<< "\n";
 
 		for (size_t i = 0; i < proc.blocks.count; i++)
@@ -55,18 +55,18 @@ namespace Glass
 					break;
 				case Il_Alloca:
 					stream << "alloca " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.aloca.type_idx).data
+						print_type_index(node.aloca.type_idx).data
 						<< " \n";
 					break;
 				case Il_Store:
 					stream << "store " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data
+						print_type_index(node.type_idx).data
 						<< " ptr [" << node.store.ptr_node_idx << "] " << "$" << node.store.value_node_idx << "\n";
 					break;
 
 				case Il_Load:
 					stream << "load " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data
+						print_type_index(node.type_idx).data
 						<< " ptr [" << node.load.ptr_node_idx << "]" << "\n";
 					break;
 
@@ -74,33 +74,33 @@ namespace Glass
 				{
 
 
-					auto type_flags = TypeSystem_Get_Type_Flags(*proc.program->type_system, &proc.program->type_system->type_storage[node.type_idx]);
+					auto type_flags = get_type_flags(node.type_idx);
 
 					if (type_flags & TN_Float_Type) {
-						stream << "constant " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " " << node.constant.as.f64 << "\n";
+						stream << "constant " << print_type_index(node.type_idx).data << " " << node.constant.as.f64 << "\n";
 					}
 					else {
-						stream << "constant " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " " << node.constant.as.us8 << "\n";
+						stream << "constant " << print_type_index(node.type_idx).data << " " << node.constant.as.us8 << "\n";
 					}
 				}
 				break;
 				case Il_Add:
-					stream << "add " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "add " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Sub:
-					stream << "sub " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "sub " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Mul:
-					stream << "mul " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "mul " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Div:
-					stream << "div " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "div " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Bit_And:
-					stream << "and " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "and " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Bit_Or:
-					stream << "or " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					stream << "or " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
 				case Il_Value_Cmp:
 				{
@@ -114,12 +114,12 @@ namespace Glass
 					else if (node.cmp_op.compare_type == Il_Cmp_And) stream << "and ";
 					else if (node.cmp_op.compare_type == Il_Cmp_Or) stream << "or ";
 					else GS_ASSERT_UNIMPL();
-					stream << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.cmp_op.left_node_idx << " $" << node.cmp_op.right_node_idx << "\n";
+					stream << print_type_index(node.type_idx).data << " $" << node.cmp_op.left_node_idx << " $" << node.cmp_op.right_node_idx << "\n";
 				}
 				break;
 				case Il_Ret:
 				{
-					stream << "ret " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data;
+					stream << "ret " << print_type_index(node.type_idx).data;
 
 					if (node.ret.value_node_idx != -1) {
 						stream << " $" << node.ret.value_node_idx;
@@ -132,10 +132,10 @@ namespace Glass
 				case Il_Call_Ptr:
 				{
 					if (node.node_type == Il_Call) {
-						stream << "call " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.call.proc_idx << "(";
+						stream << "call " << print_type_index(node.type_idx).data << " @" << node.call.proc_idx << "(";
 					}
 					else {
-						stream << "call_ptr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " ptr [" << node.call.proc_idx << "] (";
+						stream << "call_ptr " << print_type_index(node.type_idx).data << " ptr [" << node.call.proc_idx << "] (";
 					}
 
 					for (size_t i = 0; i < node.call.argument_count; i++)
@@ -148,12 +148,12 @@ namespace Glass
 				break;
 				case Il_ZI:
 				{
-					stream << "zero " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "\n";
+					stream << "zero " << print_type_index(node.type_idx).data << "\n";
 				}
 				break;
 				case Il_String:
 				{
-					stream << "string " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " \"" << node.string.str.data << "\"\n";
+					stream << "string " << print_type_index(node.type_idx).data << " \"" << node.string.str.data << "\"\n";
 				}
 				break;
 				case Il_Cond_Branch:
@@ -175,7 +175,7 @@ namespace Glass
 						false_case_block = "unnamed";
 					}
 
-					stream << "cbr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " $" << node.c_branch.condition_node_idx << " @" << node.c_branch.true_case_block_idx << true_case_block << " @" << node.c_branch.false_case_block_idx << false_case_block << "\n";
+					stream << "cbr " << print_type_index(node.type_idx).data << " $" << node.c_branch.condition_node_idx << " @" << node.c_branch.true_case_block_idx << true_case_block << " @" << node.c_branch.false_case_block_idx << false_case_block << "\n";
 				}
 				break;
 				case Il_Branch:
@@ -195,15 +195,15 @@ namespace Glass
 				case Il_Cast:
 				{
 					stream << "cast " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.cast.from_type_idx).data
+						print_type_index(node.cast.from_type_idx).data
 						<< " -> " <<
-						TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data
+						print_type_index(node.type_idx).data
 						<< " $" << node.cast.castee_node_idx << "\n";
 				}
 				break;
 				case Il_Struct_Initializer:
 				{
-					stream << "SI " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " {";
+					stream << "SI " << print_type_index(node.type_idx).data << " {";
 
 					ASSERT(node.si.member_count < SI_SMALL_COUNT);
 
@@ -217,22 +217,22 @@ namespace Glass
 				break;
 				case Il_StructElementPtr:
 				{
-					stream << "sep " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "." << node.element_ptr.element_idx << " $" << node.element_ptr.ptr_node_idx << "\n";
+					stream << "sep " << print_type_index(node.type_idx).data << "." << node.element_ptr.element_idx << " $" << node.element_ptr.ptr_node_idx << "\n";
 				}
 				break;
 				case Il_ArrayElementPtr:
 				{
-					stream << "aep " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << "[$" << node.aep.index_node_idx << "] $" << node.aep.ptr_node_idx << "\n";
+					stream << "aep " << print_type_index(node.type_idx).data << "[$" << node.aep.index_node_idx << "] $" << node.aep.ptr_node_idx << "\n";
 				}
 				break;
 				case Il_Global_Address:
 				{
-					stream << "global_addr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.global_address.global_idx << "\n";
+					stream << "global_addr " << print_type_index(node.type_idx).data << " @" << node.global_address.global_idx << "\n";
 				}
 				break;
 				case Il_Proc_Address:
 				{
-					stream << "proc_addr " << TypeSystem_Print_Type_Index(*proc.program->type_system, node.type_idx).data << " @" << node.proc_address.proc_idx << "\n";
+					stream << "proc_addr " << print_type_index(node.type_idx).data << " @" << node.proc_address.proc_idx << "\n";
 				}
 				break;
 				default:
@@ -270,7 +270,7 @@ namespace Glass
 
 		for (size_t i = 0; i < prog->globals.count; i++)
 		{
-			globals_storage_size += TypeSystem_Get_Type_Size(*prog->type_system, prog->globals[i].type);
+			globals_storage_size += get_type_size(prog->globals[i].type);
 		}
 
 		if (globals_storage_size != 0)
@@ -286,7 +286,7 @@ namespace Glass
 		{
 			Il_Global& global = prog->globals[i];
 
-			auto type_size = TypeSystem_Get_Type_Size(*prog->type_system, global.type);
+			auto type_size = get_type_size(global.type);
 			Array_Add(ee.globals_address_table, (void*)global_storage_pointer);
 
 			if (global.initializer != (Il_IDX)-1)
@@ -402,7 +402,7 @@ namespace Glass
 				case Il_Alloca: {
 					register_buffer[i].ptr = &stack[stack_pointer];
 					stack_pointer += std::max(type_size, sizeof(Const_Union));
-					register_type_buffer[i] = TypeSystem_Get_Pointer_Type(*proc.program->type_system, register_type_buffer[i], 1);
+					register_type_buffer[i] = get_pointer_type(register_type_buffer[i], 1);
 					if (stack_pointer > STACK_SZ * sizeof(u64)) {
 						ASSERT(nullptr, "Stack Overflow!");
 					}

@@ -2,6 +2,8 @@
 
 #include "stdlib.h"
 #include <cstring>
+#include <string>
+#include "Base/Types.h"
 
 namespace Glass
 {

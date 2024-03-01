@@ -4,6 +4,8 @@
 
 namespace Glass
 {
+	Type_System global_type_system;
+
 	Type_IDX TypeSystem_Get_Type_Index(Type_System& ts, GS_Type* type)
 	{
 		return (Type_IDX)(((u64)type - (u64)ts.type_storage.data) / sizeof(GS_Type));
@@ -19,6 +21,71 @@ namespace Glass
 	{
 		Array_Add(ts.type_name_storage, type_name);
 		return (Type_Name_ID)(ts.type_name_storage.count - 1);
+	}
+
+	Type_Name_ID insert_typename(Type_Name type_name)
+	{
+		return TypeSystem_Insert_TypeName(global_type_system, type_name);
+	}
+
+	Type_IDX get_type_index(GS_Type* type)
+	{
+		return TypeSystem_Get_Type_Index(global_type_system, type);
+	}
+
+	GS_Type* get_type(Type_Name_ID type_name_id)
+	{
+		return TypeSystem_Get_Basic_Type(global_type_system, type_name_id);
+	}
+
+	GS_Type* get_pointer_type(GS_Type* pointee, u32 indirection)
+	{
+		return TypeSystem_Get_Pointer_Type(global_type_system, pointee, indirection);
+	}
+
+	GS_Struct& get_struct(GS_Type* type)
+	{
+		return global_type_system.struct_storage[global_type_system.type_name_storage[type->basic.type_name_id].struct_id];
+	}
+
+	u64 get_type_size(GS_Type* type)
+	{
+		return TypeSystem_Get_Type_Size(global_type_system, type);
+	}
+
+	Type_System& get_ts()
+	{
+		return global_type_system;
+	}
+
+	String print_type(GS_Type* type)
+	{
+		return TypeSystem_Print_Type(global_type_system, type);
+	}
+
+	String print_type_index(int type_idx)
+	{
+		return print_type(get_type_at(type_idx));
+	}
+
+	u64 get_type_flags(GS_Type* type)
+	{
+		return TypeSystem_Get_Type_Flags(global_type_system, type);
+	}
+
+	u64 get_type_flags(int index)
+	{
+		return get_type_flags(get_type_at(index));
+	}
+
+	GS_Type* get_type_at(int index)
+	{
+		return &global_type_system.type_storage[index];
+	}
+
+	void init_typesystem()
+	{
+		TypeSystem_Init(global_type_system);
 	}
 
 	Type_Name_ID TypeSystem_Insert_TypeName_Struct(Type_System& ts, Type_Name type_name, GS_Struct strct)

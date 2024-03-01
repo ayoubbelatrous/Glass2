@@ -21,28 +21,29 @@ namespace Glass
 			FatalAbort(ExitCode::InvalidCommandLineInput, "No Input Source Files!");
 		}
 
-		Front_End front_end = Front_End(m_Options);
-		front_end.Compile();
+		Front_End front_end;
+		front_end.opts = m_Options;
+		frontend_compile(front_end);
 
 		int error = 0;
 
-		for (size_t i = 0; i < front_end.Data.Messages.count; i++)
+		for (size_t i = 0; i < front_end.messages.count; i++)
 		{
-			Front_End_Message& message = front_end.Data.Messages[i];
+			Front_End_Message& message = front_end.messages[i];
 
-			switch (message.Message_Type)
+			switch (message.type)
 			{
 			case Message_Error:
 			{
-				GS_CORE_ERROR("{}", message.Message);
+				GS_CORE_ERROR("{}", message.msg);
 				error = 1;
 			}
 			break;
 			case Message_Warning:
-				GS_CORE_WARN("{}", message.Message);
+				GS_CORE_WARN("{}", message.msg);
 				break;
 			case Message_Info:
-				GS_CORE_INFO("{}", message.Message);
+				GS_CORE_INFO("{}", message.msg);
 				break;
 			default:
 				GS_CORE_ASSERT(nullptr, "un reachable!");
