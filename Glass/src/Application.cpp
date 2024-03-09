@@ -21,8 +21,9 @@ namespace Glass
 			FatalAbort(ExitCode::InvalidCommandLineInput, "No Input Source Files!");
 		}
 
-		Front_End front_end;
+		Front_End front_end = {};
 		front_end.opts = m_Options;
+
 		frontend_compile(front_end);
 
 		int error = 0;

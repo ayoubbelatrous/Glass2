@@ -14,65 +14,66 @@ struct Array {
 	*void 	data				;
 };
 
-enum TypeInfo_Kind {
-	BASIC 		:: 1;
-	NUMERIC  	:: 2;
-	STRUCT 		:: 3;
-}
-
-enum #flags TypeInfo_Flags {
-	BASE_TYPE 			:: 0x1;
-	SIGNED_TYPE 	 	:: 0x2;
-	FLOAT_TYPE 			:: 0x4;
-}
-
-struct TypeInfo {
-	TypeInfo_Kind 	kind;
-	string 		  	name;
-	TypeInfo_Flags 	flags;
-}
-
-struct TypeInfo_Basic {
-	TypeInfo_Kind 	kind;
-	string 		  	name;
-	TypeInfo_Flags 	flags;
-	int 			size;
-	int 			alignment;
-}
-
-struct TypeInfo_Numeric {
-	TypeInfo_Kind 	kind;
-	string 		  	name;
-	TypeInfo_Flags 	flags;
-	int 			size;
-	int 			alignment;
-	int 			size_in_bits;
-}
-
-struct TypeInfo_Pointer {
-	TypeInfo_Kind 	kind;
-	string 		  	name;
-	TypeInfo_Flags 	flags;
-	Type 			pointee;
-	int 			indirection;
-}
-
-struct TypeInfo_Member
-{
-	TypeInfo_Kind 			kind;
-	string 		  			name;
-	Type 					type;
-	int 					offset;
-	[28] u8 				__padding;
-}
-
-struct TypeInfo_Struct {
-	TypeInfo_Kind 			kind;
-	string 		  			name;
-	TypeInfo_Flags 			flags;
-
-	int 				 	size;
-	int 				 	alignment;
-
-	[..] TypeInfo_Member 	members;
-}
+//enum TypeInfo_Kind {
+//	BASIC 		:: 1;
+//	NUMERIC  	:: 2;
+//	STRUCT 		:: 3;
+//}
+//
+//enum #flags TypeInfo_Flags {
+//	BASE_TYPE 			:: 0x1;
+//	SIGNED_TYPE 	 	:: 0x2;
+//	FLOAT_TYPE 			:: 0x4;
+//}
+//
+//struct TypeInfo {
+//	TypeInfo_Kind 	kind;
+//	string 		  	name;
+//	TypeInfo_Flags 	flags;
+//}
+//
+//struct TypeInfo_Basic {
+//	TypeInfo_Kind 	kind;
+//	string 		  	name;
+//	TypeInfo_Flags 	flags;
+//	int 			size;
+//	int 			alignment;
+//}
+//
+//struct TypeInfo_Numeric {
+//	TypeInfo_Kind 	kind;
+//	string 		  	name;
+//	TypeInfo_Flags 	flags;
+//	int 			size;
+//	int 			alignment;
+//	int 			size_in_bits;
+//}
+//
+//struct TypeInfo_Pointer {
+//	TypeInfo_Kind 	kind;
+//	string 		  	name;
+//	TypeInfo_Flags 	flags;
+//	Type 			pointee;
+//	int 			indirection;
+//}
+//
+//struct TypeInfo_Member
+//{
+//	TypeInfo_Kind 			kind;
+//	string 		  			name;
+//	Type 					type;
+//	int 					offset;
+//	[28] u8 				__padding;
+//}
+//
+//struct TypeInfo_Struct {
+//	TypeInfo_Kind 			kind;
+//	string 		  			name;
+//	TypeInfo_Flags 			flags;
+//
+//	int 				 	size;
+//	int 				 	alignment;
+//
+//	[..] TypeInfo_Member 	members;
+//}
+//

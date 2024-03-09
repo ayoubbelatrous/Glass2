@@ -1,0 +1,83 @@
+
+#load "C.glass"
+#load "Windows.glass";
+
+enum File_Open_Mode {
+	Read 	:: 0x1;
+	Write 	:: 0x2;
+}
+
+struct File
+{
+	*void 	platform_handle;
+}
+
+fn open_file(string path, File_Open_Mode open_mode, *bool success) : File {
+
+	File f;
+
+	< success = 0;
+
+	path_cstr := cast(*void) to_c_str(path);
+
+	int access;
+	int share_mode;
+	int creation_disposition;
+	int flags_and_attribs = FILE_ATTRIBUTE_NORMAL;
+
+	share_mode = FILE_SHARE_READ;
+
+	if open_mode & File_Open_Mode.Read {
+		access = access | GENERIC_READ;
+		creation_disposition = OPEN_EXISTING;
+	}
+
+	if open_mode & File_Open_Mode.Write {
+		access = access | GENERIC_WRITE;
+		creation_disposition = CREATE_ALWAYS;
+	}
+
+	f.platform_handle = CreateFileA(path_cstr, access, share_mode, null, creation_disposition, flags_and_attribs, null);
+
+	if f.platform_handle == INVALID_HANDLE_VALUE {
+		< success = 0;
+	} else {
+		< success = 1;
+	}
+
+	return f;
+}
+
+fn close_file(File file) : bool {
+	return CloseHandle(file.platform_handle);
+}
+
+fn file_read(File file, *void buffer, u64 byte_count, *u64 num_read_bytes) : bool {
+	assert(file.platform_handle != null, "file_read() :: file handle is null");
+	return ReadFile(file.platform_handle, buffer, < cast(*int) &byte_count, cast(*int) num_read_bytes, null);
+}
+
+fn get_file_size(File file) : u64 {
+	[2]int file_size;
+	file_size[0] = GetFileSize(file.platform_handle, &file_size[1]);
+	return < cast(*u64) &file_size;
+}
+
+fn read_entire_file(string file_name, *bool success) : string {
+
+	string contents;
+
+	f := open_file(file_name, File_Open_Mode.Read, success);
+	if < success == 0 return contents;
+
+	file_size := get_file_size(f);
+
+	contents.data = cast(*u8) malloc(file_size);
+	contents.count = file_size;
+
+	< success = file_read(f, cast(*void) contents.data, contents.count, null);
+
+	close_file(f);
+
+	return contents;
+}

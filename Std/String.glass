@@ -1,0 +1,22 @@
+
+#load "C.glass";
+#load "Assert.glass";
+
+fn to_c_str(string s) : *u8 {
+
+	*u8 cstr = cast(*u8) malloc(s.count);
+	assert(cstr != null, "to_c_str() :: failed to allocate memory for file path c_str");
+
+	memcpy(cast(*void) cstr, cast(*void) s.data, s.count);
+	cstr[(s.count)] = 0;
+
+	return cstr;
+}
+
+fn equal(string a, string b) : bool 
+{
+	if a.count != b.count return 0;
+	return strncmp(a.data, b.data, a.count) == 0;
+}
+
+#operator== equal;

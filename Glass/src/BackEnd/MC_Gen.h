@@ -99,8 +99,8 @@ namespace Glass
 		Il_IDX inst_first = 0xffff;
 
 		Il_Proc* proc;
-		Type_System* ts;
 		i32 stack_usage = 0;
+		i32 call_stack_usage = 0;
 		bool rsp_relative = false;
 	};
 

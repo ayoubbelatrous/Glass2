@@ -4,7 +4,7 @@
 
 namespace Glass
 {
-	std::string Il_Print_Proc(Il_Proc& proc)
+	std::string il_print_proc(Il_Proc& proc)
 	{
 		std::stringstream stream;
 
@@ -240,6 +240,20 @@ namespace Glass
 					break;
 				}
 			}
+		}
+
+		return stream.str();
+	}
+
+	std::string il_print_program(Il_Program& proc)
+	{
+		std::stringstream stream;
+
+		for (size_t i = 0; i < proc.procedures.count; i++)
+		{
+			stream << "\n";
+			stream << il_print_proc(proc.procedures[i]);
+			stream << "\n";
 		}
 
 		return stream.str();

@@ -1,0 +1,7 @@
+
+fn assert(bool cond, string message) {
+	if cond == 0 {
+		printf("Assertion Failed %c :: %s\n", cond, message.data);
+		abort();
+	}
+}

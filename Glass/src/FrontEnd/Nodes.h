@@ -48,6 +48,8 @@ namespace Glass
 
 		Tk_Range,
 
+		Tk_Arrow,
+
 		Tk_And,
 		Tk_Or,
 
@@ -70,7 +72,7 @@ namespace Glass
 
 	struct Tk
 	{
-		Tk_Type	 type;
+		Tk_Type	 	 type;
 		int			 start;
 		int			 end;
 		int			 line;
@@ -80,15 +82,27 @@ namespace Glass
 	enum Ast_Node_Type
 	{
 		Ast_Scope,
+		Ast_Function,
+		Ast_Struct,
 		Ast_Variable,
 		Ast_Binary,
 		Ast_Numeric,
+		Ast_String,
 		Ast_Ident,
 		Ast_Neg,
 		Ast_Not,
 		Ast_Ref,
 		Ast_DeRef,
+		Ast_Return,
 		Ast_Pointer,
+		Ast_Array_Type,
+		Ast_Func_Type,
+		Ast_Member,
+		Ast_Array,
+		Ast_Call,
+		Ast_Directive_Library,
+		Ast_Directive_Add_Library,
+		Ast_Directive_Load,
 	};
 
 	enum Ast_Flags : u64
@@ -122,6 +136,22 @@ namespace Glass
 		Array_UI<Ast_Node*> stmts;
 	};
 
+	struct Ast_Node_Member
+	{
+		Ast_Node* expr;
+		Tk member;
+	};
+
+	struct Ast_Node_Function
+	{
+		Array_UI<Ast_Node*> parameters;
+		Ast_Node* return_type;
+		Ast_Node_Scope		body;
+		String_Atom* foreign;
+		bool has_body;
+		bool c_varargs;
+	};
+
 	struct Ast_Node_Numeric
 	{
 		union
@@ -131,6 +161,30 @@ namespace Glass
 		};
 
 		bool is_float;
+	};
+
+	struct Ast_Node_Call
+	{
+		Ast_Node* callee;
+		Array_UI<Ast_Node*> args;
+	};
+
+	struct Ast_Node_Struct
+	{
+		Ast_Node_Scope		body;
+	};
+
+	struct Ast_Node_Array_Type
+	{
+		bool dynamic;
+		Ast_Node* size;
+		Ast_Node* elem;
+	};
+
+	struct Ast_Node_Func_Type
+	{
+		Array_UI<Ast_Node*> params;
+		Ast_Node* return_type;
 	};
 
 	struct Ast_Node
@@ -146,6 +200,12 @@ namespace Glass
 			Ast_Node_Unary	  un;
 			Ast_Node_Numeric  num;
 			Ast_Node_Scope    scope;
+			Ast_Node_Function fn;
+			Ast_Node_Struct _struct;
+			Ast_Node_Member	  mem;
+			Ast_Node_Call	  call;
+			Ast_Node_Array_Type	array_type;
+			Ast_Node_Func_Type	func_type;
 		};
 	};
 }

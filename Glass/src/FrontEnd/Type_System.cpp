@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "FrontEnd/Type_System.h"
+#include "Type_System.h"
 
 namespace Glass
 {
@@ -28,6 +29,44 @@ namespace Glass
 		return TypeSystem_Insert_TypeName(global_type_system, type_name);
 	}
 
+	Type_Name_ID insert_typename_struct(Type_Name type_name, GS_Struct strct)
+	{
+		return TypeSystem_Insert_TypeName_Struct(global_type_system, type_name, strct);
+	}
+
+	Type_Name_ID insert_struct(String name, Array<GS_Type*> members)
+	{
+		GS_Struct_Data_Layout layout = struct_compute_align_size_offsets(members);
+
+		GS_Struct gs_struct;
+		gs_struct.members = members;
+		gs_struct.offsets = layout.offsets;
+
+		Type_Name tn = {};
+		tn.name = String_Copy(name);
+		tn.flags = TN_Struct_Type;
+		tn.size = layout.size;
+		tn.alignment = layout.alignment;
+
+		return insert_typename_struct(tn, gs_struct);
+	}
+
+	void insert_struct(int typename_id, Array<GS_Type*> members)
+	{
+		GS_Struct_Data_Layout layout = struct_compute_align_size_offsets(members);
+
+		GS_Struct gs_struct;
+		gs_struct.members = members;
+		gs_struct.offsets = layout.offsets;
+
+		Type_Name& tn = global_type_system.type_name_storage[typename_id];
+		tn.size = layout.size;
+		tn.alignment = layout.alignment;
+		tn.struct_id = global_type_system.struct_storage.count;
+
+		Array_Add(global_type_system.struct_storage, gs_struct);
+	}
+
 	Type_IDX get_type_index(GS_Type* type)
 	{
 		return TypeSystem_Get_Type_Index(global_type_system, type);
@@ -41,6 +80,21 @@ namespace Glass
 	GS_Type* get_pointer_type(GS_Type* pointee, u32 indirection)
 	{
 		return TypeSystem_Get_Pointer_Type(global_type_system, pointee, indirection);
+	}
+
+	GS_Type* get_proc_type(GS_Type* return_type, Array<GS_Type*> params)
+	{
+		return TypeSystem_Get_Proc_Type(global_type_system, return_type, params);
+	}
+
+	GS_Type* get_dynarray_type(GS_Type* element)
+	{
+		return TypeSystem_Get_Dyn_Array_Type(global_type_system, element);
+	}
+
+	GS_Type* get_array_type(GS_Type* element, u64 size)
+	{
+		return TypeSystem_Get_Array_Type(global_type_system, element, size);
 	}
 
 	GS_Struct& get_struct(GS_Type* type)
@@ -68,6 +122,11 @@ namespace Glass
 		return print_type(get_type_at(type_idx));
 	}
 
+	GS_Struct_Data_Layout struct_compute_align_size_offsets(Array<GS_Type*> members)
+	{
+		return TypeSystem_Struct_Compute_Align_Size_Offsets(global_type_system, members);
+	}
+
 	u64 get_type_flags(GS_Type* type)
 	{
 		return TypeSystem_Get_Type_Flags(global_type_system, type);
@@ -81,6 +140,28 @@ namespace Glass
 	GS_Type* get_type_at(int index)
 	{
 		return &global_type_system.type_storage[index];
+	}
+
+	bool is_type_aggr(GS_Type* type)
+	{
+		if (type->kind == Type_Array || type->kind == Type_Dyn_Array)
+		{
+			return true;
+		}
+		else if (type->kind == Type_Basic) {
+
+			auto flags = get_type_flags(type);
+			auto size = type->size();
+
+			bool is_power_of_two = (size > 0) && ((size & (size - 1)) == 0);
+
+			if (flags & TN_Struct_Type && (size > 8 || !is_power_of_two && size <= 8))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void init_typesystem()
@@ -357,6 +438,12 @@ namespace Glass
 	{
 		std::stringstream stream;
 
+		if (!type)
+		{
+			stream << "<untyped>";
+			return String_Make(stream.str());
+		}
+
 		switch (type->kind)
 		{
 		case Type_Basic:
@@ -393,7 +480,7 @@ namespace Glass
 
 			stream << ')';
 
-			stream << " : ";
+			stream << " -> ";
 
 			stream << TypeSystem_Print_Type(ts, type->proc.return_type).data;
 
@@ -426,4 +513,23 @@ namespace Glass
 		}
 	}
 
+	GS_Type* GS_Type::get_pointer(int indirection)
+	{
+		return get_pointer_type(this, indirection);
+	}
+
+	GS_Type* GS_Type::get_dynarray()
+	{
+		return get_dynarray_type(this);
+	}
+
+	GS_Type* GS_Type::get_array(u64 size)
+	{
+		return get_array_type(this, size);
+	}
+
+	u64 GS_Type::size()
+	{
+		return get_type_size(this);
+	}
 }

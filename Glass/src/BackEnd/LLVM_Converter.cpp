@@ -175,7 +175,7 @@ namespace Glass
 				Il_IDX idx = block.instructions[j];
 				Il_Node node = proc.instruction_storage[idx];
 
-				GS_Type* type = get_type(node.type_idx);
+				GS_Type* type = get_type_at(node.type_idx);
 				auto type_size = get_type_size(type);
 				auto type_flags = get_type_flags(type);
 
@@ -278,7 +278,7 @@ namespace Glass
 						auto argument_size = get_type_size(argument_type);
 						auto argument_flags = get_type_flags(argument_type);
 
-						if ((argument_flags & TN_Struct_Type || argument_type->kind == Type_Array) && argument_size <= 8) {
+						if (is_type_aggr(argument_type)) {
 
 							llvm::Type* adjusted_type = nullptr;
 
@@ -783,7 +783,8 @@ namespace Glass
 		lc.type_to_llvm[get_ts().float_Ty] = lc.llvm_float;
 		lc.type_to_llvm[get_ts().void_Ty] = lc.llvm_void;
 
-		lc.llvm_Array = to_llvm(lc, get_ts().Array_Ty);
+		if (get_ts().Array_Ty)
+			lc.llvm_Array = to_llvm(lc, get_ts().Array_Ty);
 
 		LLVMC_Codegen(lc);
 

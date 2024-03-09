@@ -1,0 +1,49 @@
+struct GLFWwindow {}
+
+glfw_lib :: #library "glfw3";
+#add_library "glfw3";
+
+#add_library "Winmm";
+#add_library "opengl32";
+#add_library "gdi32";
+#add_library "user32";
+#add_library "shell32";
+#add_library "kernel32";
+#add_library "raylib";
+
+GLFW_CONTEXT_VERSION_MAJOR  :: 0x00022002;
+GLFW_CONTEXT_VERSION_MINOR  :: 0x00022003;
+GLFW_OPENGL_PROFILE 		:: 0x00022008;
+GLFW_OPENGL_CORE_PROFILE 	:: 0x00032001;
+GLFW_OPENGL_COMPAT_PROFILE 	:: 0x00032002;
+
+fn glfwInit() -> int #foreign glfw_lib;
+
+fn glfwCreateWindow(int w, int h, *u8 name, *void share, *void monitor) -> *GLFWwindow #foreign glfw_lib;
+
+fn glfwMakeContextCurrent(*GLFWwindow wnd) -> void #foreign glfw_lib;
+
+fn glfwWindowShouldClose(*GLFWwindow wnd) -> int #foreign glfw_lib;
+
+fn glfwPollEvents() -> void  #foreign glfw_lib;
+
+fn glfwSwapBuffers(*GLFWwindow wnd) -> void  #foreign glfw_lib;
+
+fn glfwSetWindowSizeCallback(*GLFWwindow window, (*GLFWwindow,int,int) -> void callback) -> *void #foreign glfw_lib;
+
+fn glfwSetFramebufferSizeCallback(*GLFWwindow window, (*GLFWwindow,int,int) -> void callback) -> *void  #foreign glfw_lib;
+
+fn glfwSetKeyCallback(*GLFWwindow window, (*GLFWwindow, int, int, int, int) -> void callback) -> *void  #foreign glfw_lib;
+
+fn glfwSetScrollCallback(*GLFWwindow window, (*GLFWwindow, f64, f64) -> void callback) -> *void  #foreign glfw_lib;
+
+fn glfwWindowHint(int hint, int value) -> void  #foreign glfw_lib;
+
+fn glfwGetKey(*GLFWwindow window, int key) -> int #foreign glfw_lib;
+
+fn glfwSetWindowUserPointer(*GLFWwindow window, *void pointer) #foreign glfw_lib;
+fn glfwGetWindowUserPointer(*GLFWwindow window) -> *void #foreign glfw_lib;
+
+fn glfwGetTime() -> f64 #foreign glfw_lib;
+
+fn glfwSwapInterval(int interval) #foreign glfw_lib;

@@ -1405,7 +1405,7 @@ namespace Glass
 		return ctx.stack_usage;
 	}
 
-#define DBG(x) x
+#define DBG(x)
 
 	int interval_compare(const void* a, const void* b)
 	{
@@ -1455,7 +1455,7 @@ namespace Glass
 
 		auto can_imm_32 = [&](Il_Node& node, i32 bit_size)
 		{
-			if (node.node_type != Il_Const) {
+			if (node.node_type != Il_Const || get_type_flags(node.type_idx) & TN_Float_Type) {
 				return false;
 			}
 
@@ -1483,6 +1483,22 @@ namespace Glass
 				}
 
 				Inst_RM(ctx, Inst_LEA, reg, RBP, -get_vreg(node_idx)->stack_slot, bit_size);
+			}
+			else if (n->node_type == Il_Param && n->param.index > 3)
+			{
+				auto argument_vreg = make_vreg(node_idx);
+
+				if (get_type_flags(n->type_idx) & TN_Float_Type)
+				{
+					virtual_registers[argument_vreg].fp = true;
+					Inst_RM(ctx, Inst_MOVF, argument_vreg, RBP, 32 + 8 + (n->param.index - 3) * 8, 64);
+				}
+				else
+				{
+					Inst_RM(ctx, Inst_MOV, argument_vreg, RBP, 32 + 8 + (n->param.index - 3) * 8, 64);
+				}
+
+				return argument_vreg;
 			}
 			else
 			{
@@ -1536,10 +1552,10 @@ namespace Glass
 			{
 				Il_IDX idx = block.instructions[j];
 				Il_Node node = proc.instruction_storage[idx];
-				GS_Type* type = &ctx.ts->type_storage[node.type_idx];
-				u64 type_size = TypeSystem_Get_Type_Size(*ctx.ts, type);
+				GS_Type* type = get_type_at(node.type_idx);
+				u64 type_size = get_type_size(type);
 				u8 bit_size = type_size * 8;
-				auto type_flags = TypeSystem_Get_Type_Flags(*ctx.ts, type);
+				auto type_flags = get_type_flags(type);
 				bool is_float = type_flags & TN_Float_Type;
 				bool is_signed = !(type_flags & TN_Unsigned_Type);
 
@@ -1616,6 +1632,8 @@ namespace Glass
 					for (size_t i = 0; i < num_caller_saved_fp; i++)
 						saved_registers[caller_saved_registers_fp[i]] = true;
 
+					int stack_top_pointer = 0;
+
 					for (size_t i = 0; i < node.call.argument_count; i++)
 					{
 						Il_IDX argument_idx = arguments_ptr[i];
@@ -1629,48 +1647,80 @@ namespace Glass
 
 						Il_Node& arg_node = proc.instruction_storage[argument_idx];
 
-						auto argument_conv_reg = call_conv_parameter_registers[i];
-
-						if (arg_is_float)
+						if (i < 4)
 						{
-							argument_conv_reg = call_conv_parameter_fp_registers[i];
-						}
+							auto argument_conv_reg = call_conv_parameter_registers[i];
 
-						auto argument_vreg = make_vreg();
-						virtual_registers[argument_vreg].reg = argument_conv_reg;
-						saved_registers[argument_conv_reg] = false;
-
-						if (arg_is_float)
-						{
-							virtual_registers[argument_vreg].fp = true;
-							get_vreg(argument_idx)->hint = argument_conv_reg;
-							Inst_RR(ctx, Inst_MOVF, argument_vreg, get_vreg_idx(argument_idx), arg_bit_size);
-
-							if (variadic)
+							if (arg_is_float)
 							{
-								auto argument_gpr = call_conv_parameter_registers[i];
-								auto argument_vreg_gpr = make_vreg();
-								virtual_registers[argument_vreg_gpr].reg = argument_gpr;
-								saved_registers[argument_gpr] = false;
-
-								Inst_RR(ctx, Inst_MovF2G, argument_vreg_gpr, argument_vreg, arg_bit_size);
+								argument_conv_reg = call_conv_parameter_fp_registers[i];
 							}
+
+							auto argument_vreg = make_vreg();
+							virtual_registers[argument_vreg].reg = argument_conv_reg;
+							saved_registers[argument_conv_reg] = false;
+
+							if (arg_is_float)
+							{
+								virtual_registers[argument_vreg].fp = true;
+								get_vreg(argument_idx)->hint = argument_conv_reg;
+								Inst_RR(ctx, Inst_MOVF, argument_vreg, get_vreg_idx(argument_idx), arg_bit_size);
+
+								if (variadic)
+								{
+									auto argument_gpr = call_conv_parameter_registers[i];
+									auto argument_vreg_gpr = make_vreg();
+									virtual_registers[argument_vreg_gpr].reg = argument_gpr;
+									saved_registers[argument_gpr] = false;
+
+									Inst_RR(ctx, Inst_MovF2G, argument_vreg_gpr, argument_vreg, arg_bit_size);
+								}
+							}
+							else
+							{
+								if (can_imm_32(arg_node, arg_bit_size))
+								{
+									Inst_RI(ctx, Inst_MOV, argument_vreg, arg_node.constant.as.s4, arg_bit_size);
+								}
+								else
+								{
+									input_reg(&arg_node, argument_idx, arg_bit_size, argument_vreg);
+									get_vreg(argument_idx)->hint = argument_conv_reg;
+								}
+							}
+
+							call_inst.operands[call_inst.in_count] = argument_vreg;
+							call_inst.in_count++;
 						}
 						else
 						{
-							if (can_imm_32(arg_node, arg_bit_size))
+							if (is_float)
 							{
-								Inst_RI(ctx, Inst_MOV, argument_vreg, arg_node.constant.as.s4, arg_bit_size);
+								int src = input_reg(&arg_node, argument_idx, arg_bit_size);
+								Inst_MR(ctx, Inst_MOVF, src, RSP, 32 + stack_top_pointer, arg_bit_size);
 							}
-							else {
-								input_reg(&arg_node, argument_idx, arg_bit_size, argument_vreg);
-								get_vreg(argument_idx)->hint = argument_conv_reg;
+							else
+							{
+								if (can_imm_32(arg_node, arg_bit_size))
+								{
+									Inst_MI(ctx, Inst_MOV, arg_node.constant.as.s4, RSP, 32 + stack_top_pointer, arg_bit_size);
+								}
+								else
+								{
+									int src = input_reg(&arg_node, argument_idx, arg_bit_size);
+									Inst_MR(ctx, Inst_MOV, src, RSP, 32 + stack_top_pointer, arg_bit_size);
+								}
 							}
 						}
 
-						call_inst.operands[call_inst.in_count] = argument_vreg;
-						call_inst.in_count++;
+						if (i > 3)
+						{
+							stack_top_pointer += 8;
+						}
+
 					}
+
+					ctx.call_stack_usage = std::max(stack_top_pointer, ctx.call_stack_usage);
 
 					call_inst.op_code = Inst_CALL;
 					call_inst.operands[1] = node.call.proc_idx;
@@ -1709,37 +1759,43 @@ namespace Glass
 				case Il_Alloca:
 				{
 					Il_IDX vreg = make_vreg(idx);
-					GS_Type* alloca_type = &ctx.ts->type_storage[node.aloca.type_idx];
-					int alloca_size = TypeSystem_Get_Type_Size(*ctx.ts, alloca_type);
+					GS_Type* alloca_type = get_type_at(node.aloca.type_idx);
+					int alloca_size = get_type_size(alloca_type);
 					virtual_registers[vreg].stack_slot = Stack_Alloc(ctx, alloca_size, idx);
 				}
 				break;
 				case Il_Load:
 				{
-					Il_IDX vreg = make_vreg(idx);
-
-					Il_Node& ptr_node = proc.instruction_storage[node.load.ptr_node_idx];
-
-					u8 base = 0;
-					i32 disp = 0;
-
-					if (ptr_node.node_type == Il_Alloca)
+					if (is_type_aggr(type))
 					{
-						auto stack_slot = get_vreg(node.load.ptr_node_idx)->stack_slot;
-						disp = -stack_slot;
-						base = RBP;
 					}
-					else {
-						base = get_vreg_idx(node.load.ptr_node_idx);
-					}
-
-					if (is_float)
+					else
 					{
-						virtual_registers[vreg].fp = true;
-						Inst_RM(ctx, Inst_MOVF, vreg, base, disp, bit_size);
-					}
-					else {
-						Inst_RM(ctx, Inst_MOV, vreg, base, disp, bit_size);
+						Il_IDX vreg = make_vreg(idx);
+
+						Il_Node& ptr_node = proc.instruction_storage[node.load.ptr_node_idx];
+
+						u8 base = 0;
+						i32 disp = 0;
+
+						if (ptr_node.node_type == Il_Alloca)
+						{
+							auto stack_slot = get_vreg(node.load.ptr_node_idx)->stack_slot;
+							disp = -stack_slot;
+							base = RBP;
+						}
+						else {
+							base = get_vreg_idx(node.load.ptr_node_idx);
+						}
+
+						if (is_float)
+						{
+							virtual_registers[vreg].fp = true;
+							Inst_RM(ctx, Inst_MOVF, vreg, base, disp, bit_size);
+						}
+						else {
+							Inst_RM(ctx, Inst_MOV, vreg, base, disp, bit_size);
+						}
 					}
 				}
 				break;
@@ -1807,6 +1863,69 @@ namespace Glass
 							remainder -= moved_size;
 
 							Inst_MI(ctx, Inst_MOV, 0, base, disp + pointer, moved_size * 8);
+
+							pointer += moved_size;
+						}
+					}
+					else if (is_type_aggr(type))
+					{
+						Il_IDX dest_base;
+						i32 dest_disp = 0;
+
+						Il_IDX src_base;
+						i32 src_disp = 0;
+
+						if (ptr_node.node_type == Il_Alloca)
+						{
+							dest_base = RBP;
+							dest_disp = -get_vreg(node.store.ptr_node_idx)->stack_slot;
+						}
+						else
+						{
+							dest_base = input_reg(&ptr_node, node.store.ptr_node_idx, 64);
+						}
+
+						ASSERT(val_node.node_type == Il_Load);
+
+						Il_Node& val_ptr_node = proc.instruction_storage[val_node.load.ptr_node_idx];
+						int val_ptr_node_idx = val_node.load.ptr_node_idx;
+
+						if (val_ptr_node.node_type == Il_Alloca)
+						{
+							src_base = RBP;
+							src_disp = -get_vreg(val_ptr_node_idx)->stack_slot;
+						}
+						else
+						{
+							input_reg(&val_ptr_node, val_ptr_node_idx, 64);
+						}
+
+						u64 remainder = type_size;
+						u64 pointer = 0;
+
+						int vreg = make_vreg();
+
+						while (remainder > 0) {
+
+							u8 moved_size = 0;
+
+							if (remainder >= 8) {
+								moved_size = 8;
+							}
+							else if (remainder >= 4) {
+								moved_size = 4;
+							}
+							else if (remainder >= 2) {
+								moved_size = 2;
+							}
+							else {
+								moved_size = 1;
+							}
+
+							remainder -= moved_size;
+
+							Inst_RM(ctx, Inst_MOV, vreg, src_base, src_disp + pointer, moved_size * 8);
+							Inst_MR(ctx, Inst_MOV, vreg, dest_base, dest_disp + pointer, moved_size * 8);
 
 							pointer += moved_size;
 						}
@@ -2058,15 +2177,19 @@ namespace Glass
 				break;
 				case Il_Param:
 				{
-					auto argument_vreg = make_vreg(idx);
+					if (node.param.index < 4)
+					{
+						auto argument_vreg = make_vreg(idx);
 
-					if (is_float)
-					{
-						virtual_registers[argument_vreg].reg = call_conv_parameter_fp_registers[node.param.index];
-					}
-					else
-					{
-						virtual_registers[argument_vreg].reg = call_conv_parameter_registers[node.param.index];
+						if (is_float)
+						{
+							virtual_registers[argument_vreg].reg = call_conv_parameter_fp_registers[node.param.index];
+							virtual_registers[argument_vreg].fp = true;
+						}
+						else
+						{
+							virtual_registers[argument_vreg].reg = call_conv_parameter_registers[node.param.index];
+						}
 					}
 				}
 				break;
@@ -2484,6 +2607,7 @@ namespace Glass
 
 				if (!found_free)
 				{
+					GS_ASSERT_UNIMPL();
 					break;
 				}
 
@@ -3000,38 +3124,6 @@ namespace Glass
 		g.label_buffer = Array_Reserved<MC_Label>(0xffff);
 		g.virtual_registers_buffer = Array_Reserved<MC_VReg>(0xffff);
 
-		if (use_test_program) {
-
-			// 			Il_Program_Init(test_program, g.prog->type_system);
-			// 			g.prog = &test_program;
-			// 			g.type_system = g.prog->type_system;
-			// 
-			// 			auto int_ptr = TypeSystem_Get_Pointer_Type(*g.type_system, g.type_system->int_Ty, 1);
-			// 
-			// 			Il_IDX test_proc_idx = Il_Insert_Proc(test_program, String_Make("main"), TypeSystem_Get_Proc_Type(*g.type_system, g.type_system->void_Ty, {}));
-			// 			Il_Proc& test_proc = test_program.procedures[test_proc_idx];
-			// 
-			// 			Il_IDX test_var = Il_Insert_Alloca(test_proc, g.type_system->int_Ty);
-			// 			Il_IDX test_var2 = Il_Insert_Alloca(test_proc, int_ptr);
-			// 			Il_IDX test_constant = Il_Insert_Constant(test_proc, (void*)0xffff, g.type_system->int_Ty);
-			// 
-			// 			Il_IDX add_res = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, test_constant, test_constant);
-			// 			Il_IDX add_res2 = Il_Insert_Math_Op(test_proc, g.type_system->int_Ty, Il_Add, add_res, test_constant);
-			// 
-			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res);
-			// 			Il_Insert_Store(test_proc, g.type_system->int_Ty, test_var, add_res2);
-			// 
-			// 			//Il_IDX loaded_var = Il_Insert_Load(test_proc, g.type_system->int_Ty, test_var);
-			// 			Il_Insert_Store(test_proc, int_ptr, test_var2, test_var);
-			// 
-			// 			GS_CORE_TRACE("test program: {}", Il_Print_Proc(test_proc));
-		}
-		else
-		{
-		}
-
 		register_values = Array_Reserved<Value_Desc>(65553);
 		register_values.count = 65553;
 
@@ -3307,12 +3399,9 @@ namespace Glass
 
 	MC_Gen MC_Gen_Make(MC_Gen_Spec spec, Il_Program* program)
 	{
-		MC_Gen g = { 0 };
+		MC_Gen g = { };
 		g.output_path = String_Copy(spec.output_path);
 		g.prog = program;
-
-		ASSERT(g.prog);
-		ASSERT(g.ts);
 
 		return g;
 	}

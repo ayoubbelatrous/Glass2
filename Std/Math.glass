@@ -1,0 +1,113 @@
+
+fn ortho_matrix(float left, float right, float bottom, float top, float near, float far) : m44 {
+	m44 r;
+	glmc_ortho_projection(&r, left, right, bottom, top, near, far);
+	return r;
+}
+
+fn translate(m44 m, v3 v) : m44 {
+	m44 r = m;
+	glmc_translate(&r, &v);
+	return r;
+}
+
+fn scale(m44 m, v3 v) : m44 {
+	m44 r = m;
+	glmc_scale(&r, &v);
+	return r;
+}
+
+fn identity_m44() : m44 {
+	m44 r;
+	glmc_identity(&r);
+	return r;
+}
+
+fn translation_matrix(v3 v) : m44 {
+	r := identity_m44();
+	r = translate(r, v);
+	return r;
+}
+
+fn scaling_matrix(v3 v) : m44 {
+	r := identity_m44();
+	r = scale(r, v);
+	return r;
+}
+
+fn m44_mul_v4(m44 m, v4 v) : v3 {
+	v3 r;
+	glmc_mat4_mul_v4(&r, &m, &v);
+	return r;
+}
+
+#operator* m44_mul_v4;
+
+fn m44_mul(m44 m, m44 m2) : m44 {
+	m44 r = m;
+	glmc_mat4_mul(&r, &m2);
+	return r;
+}
+
+fn make_v3(float x, float y, float z) : v3 {
+	v3 r;
+	r.x = x;
+	r.y = y;
+	r.z = z;
+	return r;
+}
+
+fn make_v2(float x, float y) : v2 {
+	v2 r;
+	r.x = x;
+	r.y = y;
+	return r;
+}
+
+fn make_v4(float x, float y, float z, float w) : v4 {
+	v4 r;
+	r.x = x;
+	r.y = y;
+	r.z = z;
+	r.w = w;
+	return r;
+}
+
+struct v4
+{
+	float x;
+	float y;
+	float z;
+	float w;
+}
+
+struct v3
+{
+	float x;
+	float y;
+	float z;
+}
+
+struct v2
+{
+	float x;
+	float y;
+}
+
+struct m44
+{
+	[4][4]float comps;
+}
+
+#library glmc_lib "glm_c";
+#add_library "glm_c";
+
+fn glmc_identity(*m44 result) #foreign glmc_lib;
+
+fn glmc_mat4_mul(*m44 result, *m44 m) #foreign glmc_lib;
+fn glmc_mat4_mul_v4(*v3 r, *m44 m, *v4 v) #foreign glmc_lib;
+
+fn glmc_translate(*m44 result, *v3 t) #foreign glmc_lib;
+fn glmc_scale(*m44 result, *v3 s) #foreign glmc_lib;
+
+fn glmc_ortho_projection(*m44 result, float left, float right, float bottom, float top, float near, float far) #foreign glmc_lib;

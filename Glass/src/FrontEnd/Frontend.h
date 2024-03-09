@@ -85,6 +85,11 @@ namespace Glass
 		Entity_TypeName,
 		Entity_Constant,
 		Entity_Variable,
+		Entity_Function,
+		Entity_Struct,
+		Entity_Struct_Member,
+		Entity_Load,
+		Entity_Library,
 	};
 
 	enum Entity_Flags
@@ -122,6 +127,52 @@ namespace Glass
 		Const_Union value;
 	};
 
+	struct Entity_Ld
+	{
+		int file_id;
+		int file_scope_id;
+	};
+
+	struct Entity_Func
+	{
+		int scope_id;
+		int proc_idx;
+		GS_Type* code_proc_signature;
+		GS_Type* signature;
+		int return_variable_id;
+		Array<int> return_branches;
+		bool c_varargs;
+		int foreign;
+		Array<int> parameters;
+	};
+
+	struct Entity_Strct
+	{
+		int scope_id;
+		int typename_id;
+	};
+
+	struct Entity_Strct_Member
+	{
+		int index;
+		Const_Union initializer;
+		bool		has_initializer;
+	};
+
+	struct Entity_Lib
+	{
+		String_Atom* file_name;
+	};
+
+	struct Entity_Var
+	{
+		bool global;
+		int code_id;
+		bool parameter;
+		int parameter_code_idx;
+		GS_Type* code_type;
+	};
+
 	using Entity_Deps = std::unordered_set<int>;
 
 	struct Entity
@@ -139,8 +190,14 @@ namespace Glass
 
 		union
 		{
-			Entity_TN tn;
-			Entity_Const cnst;
+			Entity_TN			tn;
+			Entity_Const		cnst;
+			Entity_Func			fn;
+			Entity_Strct		_struct;
+			Entity_Strct_Member struct_mem;
+			Entity_Ld			load;
+			Entity_Lib			library;
+			Entity_Var			var;
 		};
 	};
 
@@ -149,6 +206,8 @@ namespace Glass
 		Scope_Invalid,
 		Scope_Global,
 		Scope_File,
+		Scope_Function,
+		Scope_Struct,
 	};
 
 	struct Scope
@@ -157,6 +216,7 @@ namespace Glass
 		Ast_Node* syntax;
 		int file_id;
 		int parent;
+		int entity_id;
 		Array<int> children;
 		Array<int> entities;
 		std::unordered_map<String_Atom*, int> name_to_entity;
@@ -180,7 +240,12 @@ namespace Glass
 		Array<Entity> entities;
 		std::unordered_map<String_Atom*, int> filename_to_id;
 		std::unordered_map<int, int> file_to_scope;
+		std::unordered_map<int, int> typename_to_struct;
 
+		GS_Type* i8_Ty;
+		GS_Type* u8_Ty;
+		GS_Type* i16_Ty;
+		GS_Type* u16_Ty;
 		GS_Type* i32_Ty;
 		GS_Type* i64_Ty;
 		GS_Type* u32_Ty;
@@ -195,11 +260,67 @@ namespace Glass
 		GS_Type* Type_Ty;
 
 		GS_Type* bool_Ty;
+
+		GS_Type* void_Ty;
+
+		GS_Type* c_str_Ty;
+
+		Il_Program program;
+
+		std::unordered_set<String_Atom*> added_library_paths;
+
+		GS_Type* Array_Ty;
+		GS_Type* string_Ty;
+		String_Atom* keyword_Array;
+		String_Atom* keyword_string;
 	};
 
 	void frontend_push_error(Front_End& f, String error);
 	void frontend_push_error(Front_End& f, Tk& token, String file_path, String error);
 	void frontend_push_error(Front_End& f, Ast_Node* stmt, int file_id, String error);
+
+	int find_filescope_parent(Front_End& f, int scope_id);
+	int insert_entity(Front_End& f, Entity entity, int scope_id = 0);
+	int find_entity(Front_End& f, String_Atom* name, int scope_id = 0);
+	int find_entity(Front_End& f, String_Atom* name, int scope_id, int ignore, bool ignore_global);
+	Scope& get_scope(Front_End& f, int scope_id);
+	Entity& get_entity(Front_End& f, int entity_id);
+	Entity make_entity(Entity_Kind type, String_Atom* name, Ast_Node* syntax = nullptr, int scope_id = 0, int file_id = 0);
+	bool frontend_decl_stmt(Front_End& f, int scope_id, int file_id, Ast_Node* stmt);
+	bool frontend_decl_file(Front_End& f, Scope& file_scope, int scope_id);
+	void insert_dep(Front_End& f, int dep, Entity_Deps& deps);
+	bool frontend_expr_deps(Front_End& f, Ast_Node* expr, int file_id, int scope_id, int entity_id, Entity_Deps& deps);
+	bool frontend_entity_deps(Front_End& f, Scope& scope, int scope_id, int file_id, Entity& entity, int entity_id);
+	bool frontend_file_deps(Front_End& f, Scope& file_scope, int scope_id);
+	int frontend_do_load(Front_End& f, fs_path file_path, fs_path search_path);
+
+	struct CodeGen_Result
+	{
+		bool success = false;
+		bool is_constant;
+		bool in_complete_lit;
+		bool is_float_lit;
+		bool lvalue;
+		GS_Type* type;
+		Const_Union	 value;
+		int code_id;
+		int entity_id;
+
+		operator bool()
+		{
+			return success;
+		}
+	};
+
+	CodeGen_Result make_result(bool is_constant, GS_Type* type, Const_Union value = {}, bool in_complete_lit = false, bool lit_float = false, int code_id = -1, int entity = 0);
+	GS_Type* resolve_type(Front_End& f, int scope_id, Ast_Node* expr);
+
+	CodeGen_Result expr_resolve_assign(Front_End& f, int scope_id, Ast_Node* expr, GS_Type* inferred_type = nullptr, bool is_top_level = false, bool const_eval = false, Il_Proc* proc = nullptr, bool by_reference = false);
+	CodeGen_Result expr_resolve(Front_End& f, int scope_id, Ast_Node* expr, GS_Type* inferred_type = nullptr, bool is_top_level = false, bool const_eval = false, Il_Proc* proc = nullptr, bool by_reference = false);
+
+	bool frontend_entity_resolve(Front_End& f, Scope& scope, int scope_id, int file_id, Entity& entity, int entity_id);
+	bool frontend_file_resolve(Front_End& f, Scope& file_scope, int scope_id);
+	bool frontend_file_codegen(Front_End& f, Scope& file_scope, int scope_id);
 
 	void frontend_compile(Front_End& f);
 

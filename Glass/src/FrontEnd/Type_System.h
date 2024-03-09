@@ -91,6 +91,11 @@ namespace Glass
 			GS_Dyn_Array_Type	 dyn_array;
 			GS_Proc_Type		 proc;
 		};
+
+		GS_Type* get_pointer(int indirection = 1);
+		GS_Type* get_dynarray();
+		GS_Type* get_array(u64 size);
+		u64 size();
 	};
 
 	struct GS_Struct
@@ -141,15 +146,24 @@ namespace Glass
 
 	void init_typesystem();
 	Type_Name_ID insert_typename(Type_Name type_name);
+	Type_Name_ID insert_typename_struct(Type_Name type_name, GS_Struct strct);
+
+	Type_Name_ID insert_struct(String name, Array<GS_Type*> members);
+	void insert_struct(int typename_id, Array<GS_Type*> members);
 
 	Type_IDX get_type_index(GS_Type* type);
 	u64 get_type_flags(GS_Type* type);
 	u64 get_type_flags(int index);
 	GS_Type* get_type_at(int index);
 
+	bool is_type_aggr(GS_Type* type);
 
 	GS_Type* get_type(Type_Name_ID type_name_id);
 	GS_Type* get_pointer_type(GS_Type* pointee, u32 indirection);
+	GS_Type* get_proc_type(GS_Type* return_type, Array<GS_Type*> params);
+	GS_Type* get_dynarray_type(GS_Type* element);
+	GS_Type* get_array_type(GS_Type* element, u64 size);
+
 	GS_Struct& get_struct(GS_Type* type);
 
 	u64 get_type_size(GS_Type* type);
@@ -158,6 +172,8 @@ namespace Glass
 
 	String print_type(GS_Type* type);
 	String print_type_index(int type_idx);
+
+	GS_Struct_Data_Layout struct_compute_align_size_offsets(Array<GS_Type*> members);
 
 	void TypeSystem_Init(Type_System& ts);
 

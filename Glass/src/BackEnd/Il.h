@@ -337,7 +337,7 @@ namespace Glass
 		prog.procedures = Array_Reserved<Il_Proc>(1024);
 	}
 
-	inline Il_IDX Il_Proc_Insert(Il_Proc& proc, Il_Node node, Il_IDX block_idx = -1) {
+	inline Il_IDX il_proc_insert(Il_Proc& proc, Il_Node node, Il_IDX block_idx = -1) {
 
 		ASSERT(node.node_type != Il_Node_Type::Il_None, node.node_type < Il_Node_Type::Il_Max);
 
@@ -374,7 +374,7 @@ namespace Glass
 		return node_idx;
 	}
 
-	inline Il_IDX Il_Insert_Proc(Il_Program& prog, String name, GS_Type* signature, bool variadic = false) {
+	inline Il_IDX il_insert_proc(Il_Program& prog, String name, GS_Type* signature, bool variadic = false) {
 
 		Il_Proc proc = {};
 		proc.proc_name = name;
@@ -394,7 +394,7 @@ namespace Glass
 
 		for (size_t i = 0; i < signature->proc.params.count; i++)
 		{
-			Il_IDX inserted_param_idx = Il_Proc_Insert(proc, Il_Make_Param((Il_IDX)get_type_index(signature->proc.params[i]), (Il_IDX)i));
+			Il_IDX inserted_param_idx = il_proc_insert(proc, Il_Make_Param((Il_IDX)get_type_index(signature->proc.params[i]), (Il_IDX)i));
 			Array_Add(proc.parameters, inserted_param_idx);
 		}
 
@@ -403,7 +403,7 @@ namespace Glass
 		return (Il_IDX)(prog.procedures.count - 1);
 	}
 
-	inline Il_IDX Il_Insert_Library(Il_Program& prog, String path) {
+	inline Il_IDX il_insert_library(Il_Program& prog, String path) {
 
 		Il_Library library = {};
 		library.path = path;
@@ -413,7 +413,7 @@ namespace Glass
 		return (Il_IDX)(prog.libraries.count - 1);
 	}
 
-	inline Il_IDX Il_Insert_External_Proc(Il_Program& prog, String name, GS_Type* signature, Il_IDX library_node_idx, bool variadic = false) {
+	inline Il_IDX il_insert_external_proc(Il_Program& prog, String name, GS_Type* signature, Il_IDX library_node_idx, bool variadic = false) {
 
 		Il_Proc proc = {};
 		proc.proc_name = name;
@@ -428,7 +428,7 @@ namespace Glass
 		return (Il_IDX)(prog.procedures.count - 1);
 	}
 
-	inline Il_Node Il_Make_Constant(void* value, Type_IDX type_index) {
+	inline Il_Node il_make_const(void* value, Type_IDX type_index) {
 
 		Il_Node const_node = { 0 };
 		const_node.node_type = Il_Const;
@@ -514,7 +514,7 @@ namespace Glass
 		return sep_node;
 	}
 
-	inline Il_Node Il_Make_Constant(Const_Union value, Type_IDX type_index) {
+	inline Il_Node il_make_const(Const_Union value, Type_IDX type_index) {
 
 		Il_Node const_node = { 0 };
 		const_node.node_type = Il_Const;
@@ -638,7 +638,7 @@ namespace Glass
 		return math_op_node;
 	}
 
-	inline Il_Node Il_Make_Call(Type_IDX return_type_index, Array<Il_Argument> arguments, Il_IDX proc_idx, Il_IDX signature_type_idx) {
+	inline Il_Node Il_Make_Call(Type_IDX return_type_index, Array<int> arguments, Il_IDX proc_idx, Il_IDX signature_type_idx) {
 
 		Il_Node call_node = { 0 };
 		call_node.node_type = Il_Call;
@@ -648,7 +648,7 @@ namespace Glass
 		if (arguments.count <= SMALL_ARG_COUNT) {
 			for (size_t i = 0; i < arguments.count; i++)
 			{
-				call_node.call.arguments[i] = arguments[i].value_node_idx;
+				call_node.call.arguments[i] = arguments[i];
 			}
 		}
 		else {
@@ -657,7 +657,7 @@ namespace Glass
 
 			for (size_t i = 0; i < arguments.count; i++)
 			{
-				call_node.call.arguments_ptr[i] = arguments[i].value_node_idx;
+				call_node.call.arguments_ptr[i] = arguments[i];
 			}
 		}
 
@@ -667,7 +667,7 @@ namespace Glass
 		return call_node;
 	}
 
-	inline Il_Node Il_Make_Call_Ptr(Type_IDX return_type_index, Array<Il_Argument> arguments, Il_IDX ptr_node_idx, Type_IDX signature) {
+	inline Il_Node Il_Make_Call_Ptr(Type_IDX return_type_index, Array<int> arguments, Il_IDX ptr_node_idx, Type_IDX signature) {
 
 		Il_Node call_node = { 0 };
 		call_node.node_type = Il_Call_Ptr;
@@ -676,7 +676,7 @@ namespace Glass
 		if (arguments.count <= SMALL_ARG_COUNT) {
 			for (size_t i = 0; i < arguments.count; i++)
 			{
-				call_node.call.arguments[i] = arguments[i].value_node_idx;
+				call_node.call.arguments[i] = arguments[i];
 			}
 		}
 		else {
@@ -685,7 +685,7 @@ namespace Glass
 
 			for (size_t i = 0; i < arguments.count; i++)
 			{
-				call_node.call.arguments_ptr[i] = arguments[i].value_node_idx;
+				call_node.call.arguments_ptr[i] = arguments[i];
 			}
 		}
 
@@ -719,115 +719,115 @@ namespace Glass
 		return proc_addr_node;
 	}
 
-	inline Il_IDX Il_Insert_Alloca(Il_Proc& proc, GS_Type* type) {
+	inline Il_IDX il_insert_alloca(Il_Proc& proc, GS_Type* type) {
 		Il_Node alloca_node = Il_Make_Alloca((Il_IDX)get_type_index(type), (Il_IDX)get_type_index(get_pointer_type(type, 1)));
-		return Il_Proc_Insert(proc, alloca_node, 0);
+		return il_proc_insert(proc, alloca_node, 0);
 	}
 
-	inline Il_IDX Il_Insert_Store(Il_Proc& proc, GS_Type* type, Il_IDX ptr, Il_IDX value) {
+	inline Il_IDX il_insert_store(Il_Proc& proc, GS_Type* type, Il_IDX ptr, Il_IDX value) {
 		Il_Node store_node = Il_Make_Store(ptr, value, (Il_IDX)get_type_index(type));
-		return Il_Proc_Insert(proc, store_node);
+		return il_proc_insert(proc, store_node);
 	}
 
-	inline Il_IDX Il_Insert_Load(Il_Proc& proc, GS_Type* type, Il_IDX ptr) {
+	inline Il_IDX il_insert_load(Il_Proc& proc, GS_Type* type, Il_IDX ptr) {
 		Il_Node load_node = Il_Make_Load(ptr, (Il_IDX)get_type_index(type));
-		return Il_Proc_Insert(proc, load_node);
+		return il_proc_insert(proc, load_node);
 	}
 
-	inline Il_IDX Il_Insert_Constant(Il_Proc& proc, Const_Union constant, GS_Type* type) {
-		Il_Node const_node = Il_Make_Constant(constant, (Il_IDX)get_type_index(type));
-		return Il_Proc_Insert(proc, const_node);
+	inline Il_IDX il_insert_constant(Il_Proc& proc, Const_Union constant, GS_Type* type) {
+		Il_Node const_node = il_make_const(constant, (Il_IDX)get_type_index(type));
+		return il_proc_insert(proc, const_node);
 	}
 
-	inline Il_IDX Il_Insert_Constant(Il_Proc& proc, void* constant, GS_Type* type) {
+	inline Il_IDX il_insert_constant(Il_Proc& proc, void* constant, GS_Type* type) {
 
 		Const_Union constant_value = {};
 		constant_value.ptr = constant;
 
-		Il_Node const_node = Il_Make_Constant(constant_value, (Il_IDX)get_type_index(type));
-		return Il_Proc_Insert(proc, const_node);
+		Il_Node const_node = il_make_const(constant_value, (Il_IDX)get_type_index(type));
+		return il_proc_insert(proc, const_node);
 	}
 
-	inline Il_IDX Il_Insert_Math_Op(Il_Proc& proc, GS_Type* type, Il_Node_Type math_op_type, Il_IDX left, Il_IDX right) {
+	inline Il_IDX il_insert_math_op(Il_Proc& proc, GS_Type* type, Il_Node_Type math_op_type, Il_IDX left, Il_IDX right) {
 		Il_Node math_op_node = Il_Make_Math_Op(math_op_type, (Il_IDX)get_type_index(type), left, right);
-		return Il_Proc_Insert(proc, math_op_node);
+		return il_proc_insert(proc, math_op_node);
 	}
 
-	inline Il_IDX Il_Insert_Ret(Il_Proc& proc, GS_Type* type, Il_IDX value) {
+	inline Il_IDX il_insert_ret(Il_Proc& proc, GS_Type* type, Il_IDX value) {
 		Il_Node ret_node = Il_Make_Ret((Il_IDX)get_type_index(type), value);
-		return Il_Proc_Insert(proc, ret_node);
+		return il_proc_insert(proc, ret_node);
 	}
 
-	inline Il_IDX Il_Insert_Call(Il_Proc& proc, GS_Type* signature, Array<Il_Argument> arguments, Il_IDX callee_proc) {
+	inline Il_IDX il_insert_call(Il_Proc& proc, GS_Type* signature, Array<int> arguments, Il_IDX callee_proc) {
 		Il_Node call_node = Il_Make_Call((Il_IDX)get_type_index(signature->proc.return_type), arguments, callee_proc, (Il_IDX)get_type_index(signature));
-		return Il_Proc_Insert(proc, call_node);
+		return il_proc_insert(proc, call_node);
 	}
 
-	inline Il_IDX Il_Insert_Call_Ptr(Il_Proc& proc, GS_Type* signature, Array<Il_Argument> arguments, Il_IDX ptr_node_idx) {
+	inline Il_IDX Il_Insert_Call_Ptr(Il_Proc& proc, GS_Type* signature, Array<int> arguments, Il_IDX ptr_node_idx) {
 		Il_Node call_ptr_node = Il_Make_Call_Ptr((Il_IDX)get_type_index(signature->proc.return_type), arguments, ptr_node_idx, (Il_IDX)get_type_index(signature));
-		return Il_Proc_Insert(proc, call_ptr_node);
+		return il_proc_insert(proc, call_ptr_node);
 	}
 
-	inline Il_IDX Il_Insert_Zero_Init(Il_Proc& proc, GS_Type* type) {
+	inline Il_IDX il_insert_zero_init(Il_Proc& proc, GS_Type* type) {
 		Il_Node zi_node = Il_Make_Zero_Init((Il_IDX)get_type_index(type));
-		return Il_Proc_Insert(proc, zi_node);
+		return il_proc_insert(proc, zi_node);
 	}
 
-	inline Il_IDX Il_Insert_Struct_Init(Il_Proc& proc, GS_Type* struct_type, Array<Il_IDX> members_values) {
+	inline Il_IDX il_insert_si(Il_Proc& proc, GS_Type* struct_type, Array<Il_IDX> members_values) {
 		Il_Node si_node = Il_Make_Struct_Init((Il_IDX)get_type_index(struct_type), members_values);
-		return Il_Proc_Insert(proc, si_node);
+		return il_proc_insert(proc, si_node);
 	}
 
-	inline Il_IDX Il_Insert_String(Il_Proc& proc, GS_Type* a_pointer_type, String string) {
+	inline Il_IDX il_insert_string(Il_Proc& proc, GS_Type* a_pointer_type, String string) {
 		ASSERT(a_pointer_type->kind == Type_Pointer);
 		Il_Node string_node = Il_Make_String(string, (Il_IDX)get_type_index(a_pointer_type));
-		return Il_Proc_Insert(proc, string_node);
+		return il_proc_insert(proc, string_node);
 	}
 
-	inline Il_IDX Il_Insert_Compare(Il_Proc& proc, Il_Node_Type cmp_node_type, Il_Cmp_Type compare_type, GS_Type* type, Il_IDX left, Il_IDX right) {
+	inline Il_IDX il_insert_compare(Il_Proc& proc, Il_Node_Type cmp_node_type, Il_Cmp_Type compare_type, GS_Type* type, Il_IDX left, Il_IDX right) {
 		Il_Node cmp_node = Il_Make_Compare(cmp_node_type, compare_type, (Il_IDX)get_type_index(type), left, right);
-		return Il_Proc_Insert(proc, cmp_node);
+		return il_proc_insert(proc, cmp_node);
 	}
 
-	inline Il_IDX Il_Insert_Cast(Il_Proc& proc, Il_Cast_Type cast_type, GS_Type* to_type, GS_Type* from_type, Il_IDX castee_node_idx) {
+	inline Il_IDX il_insert_cast(Il_Proc& proc, Il_Cast_Type cast_type, GS_Type* to_type, GS_Type* from_type, Il_IDX castee_node_idx) {
 		Il_Node cast_node = Il_Make_Cast(cast_type, (Type_IDX)get_type_index(to_type), (Type_IDX)get_type_index(from_type), castee_node_idx);
-		return Il_Proc_Insert(proc, cast_node);
+		return il_proc_insert(proc, cast_node);
 	}
 
 	inline Il_IDX Il_Insert_CBR(Il_Proc& proc, GS_Type* type, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
 		Il_Node cbr_node = Il_Make_CBR((Type_IDX)get_type_index(type), condition_node_idx, true_case_block, false_case_block);
-		return Il_Proc_Insert(proc, cbr_node);
+		return il_proc_insert(proc, cbr_node);
 	}
 
 	inline Il_IDX Il_Insert_Br(Il_Proc& proc, Il_IDX block_idx) {
 		Il_Node br_node = Il_Make_Br(block_idx);
 		br_node.type_idx = 0;
-		return Il_Proc_Insert(proc, br_node);
+		return il_proc_insert(proc, br_node);
 	}
 
-	inline Il_IDX Il_Insert_SEP(Il_Proc& proc, GS_Type* struct_type, u64 member_index, Il_IDX struct_pointer_node_idx) {
+	inline Il_IDX il_insert_sep(Il_Proc& proc, GS_Type* struct_type, u64 member_index, Il_IDX struct_pointer_node_idx) {
 		Il_Node sep_node = Il_Make_Struct_Element_Ptr((Type_IDX)get_type_index(struct_type), member_index, struct_pointer_node_idx);
 		GS_Struct& _struct = get_struct(struct_type);
 		sep_node.element_ptr.offset = _struct.offsets[member_index];
-		return Il_Proc_Insert(proc, sep_node);
+		return il_proc_insert(proc, sep_node);
 	}
 
 	inline Il_IDX Il_Insert_Global_Address(Il_Proc& proc, Il_IDX global_idx) {
 		Il_Node ga_node = Il_Make_Global_Address(global_idx, (Type_IDX)get_type_index(proc.program->globals[global_idx].type));
-		return Il_Proc_Insert(proc, ga_node);
+		return il_proc_insert(proc, ga_node);
 	}
 
 	inline Il_IDX Il_Insert_Proc_Address(Il_Proc& proc, Il_IDX proc_idx) {
 		Il_Node proc_addr_node = Il_Make_Proc_Address(proc_idx, (Type_IDX)get_type_index(proc.program->procedures[proc_idx].signature));
-		return Il_Proc_Insert(proc, proc_addr_node);
+		return il_proc_insert(proc, proc_addr_node);
 	}
 
 	inline Il_IDX Il_Insert_AEP(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
 		Il_Node aep_node = Il_Make_AEP((Type_IDX)get_type_index(type), ptr_node_idx, index_node_idx);
-		return Il_Proc_Insert(proc, aep_node);
+		return il_proc_insert(proc, aep_node);
 	}
 
-	inline Il_IDX Il_Insert_Block(Il_Proc& proc, String name = {}) {
+	inline Il_IDX il_insert_block(Il_Proc& proc, String name = {}) {
 
 		Il_Block block = {};
 		block.instructions = Array_Reserved<Il_IDX>(128);
@@ -844,7 +844,8 @@ namespace Glass
 		proc.insertion_point = insert_point;
 	}
 
-	std::string Il_Print_Proc(Il_Proc& proc);
+	std::string il_print_proc(Il_Proc& proc);
+	std::string il_print_program(Il_Program& proc);
 
 #define REG_BUF_SZ 4091
 #define STACK_SZ 512
