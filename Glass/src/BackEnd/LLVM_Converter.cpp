@@ -278,7 +278,7 @@ namespace Glass
 						auto argument_size = get_type_size(argument_type);
 						auto argument_flags = get_type_flags(argument_type);
 
-						if (is_type_aggr(argument_type)) {
+						if ((argument_flags & TN_Struct_Type || argument_type->kind == Type_Array) && argument_size <= 8) {
 
 							llvm::Type* adjusted_type = nullptr;
 
@@ -288,6 +288,8 @@ namespace Glass
 								adjusted_type = lc.llvm_i32;
 							if (argument_size == 2)
 								adjusted_type = lc.llvm_i16;
+							if (argument_size == 1)
+								adjusted_type = lc.llvm_i8;
 
 							auto tmp_alloca = LLVMC_CreateAlloca(lc, adjusted_type);
 

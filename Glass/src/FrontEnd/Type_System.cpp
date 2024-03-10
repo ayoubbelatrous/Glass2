@@ -155,7 +155,7 @@ namespace Glass
 
 			bool is_power_of_two = (size > 0) && ((size & (size - 1)) == 0);
 
-			if (flags & TN_Struct_Type && (size > 8 || !is_power_of_two && size <= 8))
+			if (flags & TN_Struct_Type && (size > 8 || (!is_power_of_two && size <= 8)))
 			{
 				return true;
 			}

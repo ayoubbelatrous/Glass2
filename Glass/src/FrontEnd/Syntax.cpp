@@ -301,6 +301,10 @@ namespace Glass
 						type = Tk_Struct;
 					if (tok.name == keyword_if)
 						type = Tk_If;
+					if (tok.name == keyword_while)
+						type = Tk_While;
+					if (tok.name == keyword_for)
+						type = Tk_For;
 				}
 
 				tok.type = type;
@@ -671,6 +675,25 @@ namespace Glass
 			ident->token = tk;
 
 			return ident;
+		}
+		else if (tk.type == Tk_Dollar)
+		{
+			consume(s);
+
+			Ast_Node* poly = allocate_node();
+			poly->type = Ast_Poly;
+			poly->token = tk;
+
+			if (!expected(s, Tk_Identifier))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected identifier"));
+				s.error = true;
+				return nullptr;
+			}
+
+			poly->poly.name = consume(s);
+
+			return poly;
 		}
 		else if (tk.type == Tk_Star)
 		{
@@ -1329,6 +1352,7 @@ namespace Glass
 			}
 
 			fn->fn.body = body->scope;
+			fn->fn.has_body = true;
 
 			return fn;
 		}
@@ -1365,6 +1389,71 @@ namespace Glass
 		return _struct;
 	}
 
+	Ast_Node* parse_conditional(Parser_State& s)
+	{
+		Ast_Node* cnd_node = allocate_node();
+		cnd_node->token = consume(s);
+
+		if (cnd_node->token.type == Tk_If)
+			cnd_node->type = Ast_If;
+		if (cnd_node->token.type == Tk_While)
+			cnd_node->type = Ast_While;
+		if (cnd_node->token.type == Tk_For)
+			cnd_node->type = Ast_For;
+
+		Ast_Node* condition = parse_expr(s);
+
+		if (s.error || !condition) {
+			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+			s.error = true;
+			return nullptr;
+		}
+
+		if (current(s).type == Tk_Colon)
+		{
+			if (condition->type != Ast_Ident)
+			{
+				frontend_push_error(*s.f, condition->token, s.file_path, String_Make("expected identifier"));
+				s.error = true;
+				return nullptr;
+			}
+
+			if (cnd_node->type != Ast_For)
+			{
+				frontend_push_error(*s.f, condition->token, s.file_path, String_Make("named iterator not expected"));
+				s.error = true;
+				return nullptr;
+			}
+
+			cnd_node->cond.named_iterator = condition;
+
+			consume(s);
+
+			condition = nullptr;
+			condition = parse_expr(s);
+
+			if (s.error || !condition) {
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+				s.error = true;
+				return nullptr;
+			}
+		}
+
+		cnd_node->cond.condition = condition;
+
+		Ast_Node* body = parse_statement(s);
+
+		if (s.error || !body) {
+			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected statement or expression"));
+			s.error = true;
+			return nullptr;
+		}
+
+		cnd_node->cond.body = body;
+
+		return cnd_node;
+	}
+
 	Ast_Node* parse_statement(Parser_State& s, bool expect_semi)
 	{
 		auto expect_semicolon = [&]()
@@ -1387,7 +1476,7 @@ namespace Glass
 		if (current(s).type == Tk_SemiColon)
 		{
 			consume(s);
-			return parse_statement(s, false);
+			return nullptr;
 		}
 
 		if (current(s).type == Tk_Identifier)
@@ -1416,6 +1505,11 @@ namespace Glass
 		if (current(s).type == Tk_Fn)
 		{
 			return parse_function(s);
+		}
+
+		if (current(s).type == Tk_If || current(s).type == Tk_While || current(s).type == Tk_For)
+		{
+			return parse_conditional(s);
 		}
 
 		if (current(s).type == Tk_Struct)
@@ -1515,4 +1609,52 @@ namespace Glass
 		success = true;
 		return file_node;
 	}
+
+	Ast_Node* copy_statement(Ast_Node* stmt)
+	{
+		switch (stmt->type)
+		{
+		case Ast_Variable:
+		{
+			Ast_Node* new_var = allocate_node();
+			*new_var = *stmt;
+
+			if (stmt->var.assignment)
+				new_var->var.assignment = copy_statement(stmt->var.assignment);
+
+			if (stmt->var.type)
+				new_var->var.type = copy_statement(stmt->var.type);
+
+			return new_var;
+		}
+		break;
+		case Ast_Array_Type:
+		{
+			Ast_Node* new_array_type = allocate_node();
+			*new_array_type = *stmt;
+
+			if (new_array_type->array_type.size)
+				new_array_type->array_type.size = copy_statement(stmt->array_type.size);
+
+			new_array_type->array_type.elem = copy_statement(stmt->array_type.elem);
+
+			return new_array_type;
+		}
+		break;
+		case Ast_Poly:
+		case Ast_Ident:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			return new_stmt;
+		}
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+
+		return nullptr;
+	}
+
 }

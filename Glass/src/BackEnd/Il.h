@@ -794,12 +794,12 @@ namespace Glass
 		return il_proc_insert(proc, cast_node);
 	}
 
-	inline Il_IDX Il_Insert_CBR(Il_Proc& proc, GS_Type* type, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
+	inline Il_IDX il_insert_cbr(Il_Proc& proc, GS_Type* type, Il_IDX condition_node_idx, Il_IDX true_case_block, Il_IDX false_case_block) {
 		Il_Node cbr_node = Il_Make_CBR((Type_IDX)get_type_index(type), condition_node_idx, true_case_block, false_case_block);
 		return il_proc_insert(proc, cbr_node);
 	}
 
-	inline Il_IDX Il_Insert_Br(Il_Proc& proc, Il_IDX block_idx) {
+	inline Il_IDX il_insert_br(Il_Proc& proc, Il_IDX block_idx) {
 		Il_Node br_node = Il_Make_Br(block_idx);
 		br_node.type_idx = 0;
 		return il_proc_insert(proc, br_node);
@@ -839,7 +839,7 @@ namespace Glass
 		return (Il_IDX)proc.insertion_point;
 	}
 
-	inline void Il_Set_Insert_Point(Il_Proc& proc, Il_IDX insert_point) {
+	inline void il_set_insert_point(Il_Proc& proc, Il_IDX insert_point) {
 		ASSERT((Il_IDX)proc.blocks.count > insert_point, "insert point out of range");
 		proc.insertion_point = insert_point;
 	}

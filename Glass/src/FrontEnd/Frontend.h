@@ -86,6 +86,7 @@ namespace Glass
 		Entity_Constant,
 		Entity_Variable,
 		Entity_Function,
+		Entity_Poly_Function,
 		Entity_Struct,
 		Entity_Struct_Member,
 		Entity_Load,
@@ -144,6 +145,20 @@ namespace Glass
 		bool c_varargs;
 		int foreign;
 		Array<int> parameters;
+		bool poly_morphic;
+	};
+
+	struct Poly_Decl
+	{
+		String_Atom* name;
+		bool		 is_type;
+		int			 parameter_index;
+	};
+
+	struct Entity_Poly_Func
+	{
+		Array<Poly_Decl> declarations;
+		Array<Ast_Node*> parameters_syntax;
 	};
 
 	struct Entity_Strct
@@ -186,13 +201,12 @@ namespace Glass
 
 		GS_Type* type;
 
-		Entity_Deps deps;
-
 		union
 		{
 			Entity_TN			tn;
 			Entity_Const		cnst;
 			Entity_Func			fn;
+			Entity_Poly_Func	poly_fn;
 			Entity_Strct		_struct;
 			Entity_Strct_Member struct_mem;
 			Entity_Ld			load;
@@ -280,47 +294,18 @@ namespace Glass
 	void frontend_push_error(Front_End& f, Ast_Node* stmt, int file_id, String error);
 
 	int find_filescope_parent(Front_End& f, int scope_id);
+
 	int insert_entity(Front_End& f, Entity entity, int scope_id = 0);
+
 	int find_entity(Front_End& f, String_Atom* name, int scope_id = 0);
 	int find_entity(Front_End& f, String_Atom* name, int scope_id, int ignore, bool ignore_global);
+
 	Scope& get_scope(Front_End& f, int scope_id);
 	Entity& get_entity(Front_End& f, int entity_id);
-	Entity make_entity(Entity_Kind type, String_Atom* name, Ast_Node* syntax = nullptr, int scope_id = 0, int file_id = 0);
-	bool frontend_decl_stmt(Front_End& f, int scope_id, int file_id, Ast_Node* stmt);
-	bool frontend_decl_file(Front_End& f, Scope& file_scope, int scope_id);
-	void insert_dep(Front_End& f, int dep, Entity_Deps& deps);
-	bool frontend_expr_deps(Front_End& f, Ast_Node* expr, int file_id, int scope_id, int entity_id, Entity_Deps& deps);
-	bool frontend_entity_deps(Front_End& f, Scope& scope, int scope_id, int file_id, Entity& entity, int entity_id);
-	bool frontend_file_deps(Front_End& f, Scope& file_scope, int scope_id);
+
+	Entity make_entity(Entity_Kind type, String_Atom* name, Ast_Node* syntax = nullptr);
+
 	int frontend_do_load(Front_End& f, fs_path file_path, fs_path search_path);
-
-	struct CodeGen_Result
-	{
-		bool success = false;
-		bool is_constant;
-		bool in_complete_lit;
-		bool is_float_lit;
-		bool lvalue;
-		GS_Type* type;
-		Const_Union	 value;
-		int code_id;
-		int entity_id;
-
-		operator bool()
-		{
-			return success;
-		}
-	};
-
-	CodeGen_Result make_result(bool is_constant, GS_Type* type, Const_Union value = {}, bool in_complete_lit = false, bool lit_float = false, int code_id = -1, int entity = 0);
-	GS_Type* resolve_type(Front_End& f, int scope_id, Ast_Node* expr);
-
-	CodeGen_Result expr_resolve_assign(Front_End& f, int scope_id, Ast_Node* expr, GS_Type* inferred_type = nullptr, bool is_top_level = false, bool const_eval = false, Il_Proc* proc = nullptr, bool by_reference = false);
-	CodeGen_Result expr_resolve(Front_End& f, int scope_id, Ast_Node* expr, GS_Type* inferred_type = nullptr, bool is_top_level = false, bool const_eval = false, Il_Proc* proc = nullptr, bool by_reference = false);
-
-	bool frontend_entity_resolve(Front_End& f, Scope& scope, int scope_id, int file_id, Entity& entity, int entity_id);
-	bool frontend_file_resolve(Front_End& f, Scope& file_scope, int scope_id);
-	bool frontend_file_codegen(Front_End& f, Scope& file_scope, int scope_id);
 
 	void frontend_compile(Front_End& f);
 

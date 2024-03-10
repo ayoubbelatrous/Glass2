@@ -95,6 +95,7 @@ namespace Glass
 		Ast_DeRef,
 		Ast_Return,
 		Ast_Pointer,
+		Ast_Poly,
 		Ast_Array_Type,
 		Ast_Func_Type,
 		Ast_Member,
@@ -103,6 +104,9 @@ namespace Glass
 		Ast_Directive_Library,
 		Ast_Directive_Add_Library,
 		Ast_Directive_Load,
+		Ast_If,
+		Ast_While,
+		Ast_For,
 	};
 
 	enum Ast_Flags : u64
@@ -134,6 +138,7 @@ namespace Glass
 	struct Ast_Node_Scope
 	{
 		Array_UI<Ast_Node*> stmts;
+		int scope_id;
 	};
 
 	struct Ast_Node_Member
@@ -187,6 +192,20 @@ namespace Glass
 		Ast_Node* return_type;
 	};
 
+	struct Ast_Node_Cond
+	{
+		Ast_Node* condition;
+		Ast_Node* body;
+		Ast_Node* named_iterator;
+		Ast_Node* named_index;
+		int scope_id;
+	};
+
+	struct Ast_Ply
+	{
+		Tk name;
+	};
+
 	struct Ast_Node
 	{
 		Tk				token;
@@ -206,6 +225,8 @@ namespace Glass
 			Ast_Node_Call	  call;
 			Ast_Node_Array_Type	array_type;
 			Ast_Node_Func_Type	func_type;
+			Ast_Node_Cond		cond;
+			Ast_Ply			poly;
 		};
 	};
 }
