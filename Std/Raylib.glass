@@ -1,7 +1,7 @@
 
-#load "C.glass";
+#load "Std/C.glass";
 
-#library rl "raylib";
+rl :: #library "raylib";
 #add_library "Winmm";
 #add_library "opengl32";
 #add_library "gdi32";
@@ -24,22 +24,31 @@ struct Vector2
 	float y;
 }
 
-fn SetConfigFlags(int flags) : void #foreign rl;
-fn InitWindow(int w, int h, *u8 title) : void #foreign rl;
-fn WindowShouldClose() : int #foreign rl;
-fn BeginDrawing() : void #foreign rl;
-fn EndDrawing() : void #foreign rl;
-fn ClearBackground(Color color) : void #foreign rl;
-fn DrawRectangle(int posX, int posY, int width, int height, int color) : void #foreign rl;
-fn DrawRectangleV(Vector2 position, Vector2 size, Color color): void #foreign rl;
-fn DrawText(*u8 text, int posX, int posY, int fontSize, int color) : void #foreign rl;
+fn make_color(u8 r, u8 g, u8 b, u8 a) -> Color {
+	Color c;
+	c.r = r;
+	c.g = g;
+	c.b = b;
+	c.a = a;
+	return c;
+}
 
-fn DrawCircle(int x, int y, int radius, i64 color): void #foreign rl;
-fn DrawFPS(int x, int y): void #foreign rl;
+fn SetConfigFlags(int flags) -> void #foreign rl;
+fn InitWindow(int w, int h, *u8 title) -> void #foreign rl;
+fn WindowShouldClose() -> int #foreign rl;
+fn BeginDrawing() -> void #foreign rl;
+fn EndDrawing() -> void #foreign rl;
+fn ClearBackground(Color color) -> void #foreign rl;
+fn DrawRectangle(int posX, int posY, int width, int height, int color) -> void #foreign rl;
+fn DrawRectangleV(Vector2 position, Vector2 size, Color color)-> void #foreign rl;
+fn DrawText(*u8 text, int posX, int posY, int fontSize, Color color) -> void #foreign rl;
 
-fn IsKeyPressed(int key) : bool #foreign rl;
-fn IsKeyPressedRepeat(int key) : bool #foreign rl;
-fn IsKeyDown(int key) : bool #foreign rl;
+fn DrawCircle(int x, int y, int radius, i64 color)-> void #foreign rl;
+fn DrawFPS(int x, int y)-> void #foreign rl;
+
+fn IsKeyPressed(int key) -> bool #foreign rl;
+fn IsKeyPressedRepeat(int key) -> bool #foreign rl;
+fn IsKeyDown(int key) -> bool #foreign rl;
 
 fn SetTargetFPS(int fps) #foreign rl;
 

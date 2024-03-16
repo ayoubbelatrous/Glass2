@@ -4,7 +4,9 @@ ucrt  :: #library "ucrtbase";
 #add_library "legacy_stdio_definitions";
 #add_library "legacy_stdio_wide_specifiers";
 
-fn printf(*u8 fmt) #c_varargs 									-> int		#foreign msvcrt;
+fn printf		(*u8 fmt) #c_varargs 							-> int		#foreign msvcrt;
+fn sprintf		(*u8 str, *u8 fmt) #c_varargs 					-> int		#foreign msvcrt;
+
 fn fopen		(*u8 path, *u8 mode) 							-> *u64 	#foreign msvcrt;
 fn fclose		(*u64 file) 									-> void 	#foreign msvcrt;
 fn malloc		(u64 size) 										-> *void 	#foreign ucrt;

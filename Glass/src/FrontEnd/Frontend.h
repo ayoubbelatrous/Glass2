@@ -28,8 +28,12 @@ namespace Glass
 
 		Op_Eq = Tk_Equal,
 		Op_NotEq = Tk_NotEqual,
+		Op_Greater = Tk_CloseAngular,
+		Op_Lesser = Tk_OpenAngular,
 
 		Op_Assign = Tk_Assign,
+
+		Op_Range = Tk_Range,
 	};
 
 	inline Tk_Operator tk_to_operator(Tk_Type type) {
@@ -53,6 +57,7 @@ namespace Glass
 		case Op_Eq: return String_Make("==");
 		case Op_NotEq: return String_Make("!=");
 		case Op_Assign: return String_Make("=");
+		case Op_Range: return String_Make("..");
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -89,6 +94,8 @@ namespace Glass
 		Entity_Poly_Function,
 		Entity_Struct,
 		Entity_Struct_Member,
+		Entity_Enum,
+		Entity_Enum_Member,
 		Entity_Load,
 		Entity_Library,
 	};
@@ -118,6 +125,44 @@ namespace Glass
 		return static_cast<Entity_Flags>(static_cast<int>(a) & static_cast<int>(b));
 	}
 
+	using Entity_Deps = std::unordered_set<int>;
+
+	struct Flat_Node
+	{
+		Ast_Node** reference;
+		int scope_id;
+	};
+
+	struct Expr_Value
+	{
+		GS_Type* type;
+		Const_Union value;
+		int referenced_entity;
+		bool is_unsolid;
+		bool is_unsolid_float;
+		int code_id;
+
+		union
+		{
+			Il_Cast_Type cast_type;
+			struct Checked_For
+			{
+				GS_Type* it_type;
+				GS_Type* it_index_type;
+				int it;
+				int it_index;
+			} _for;
+
+			struct Checked_Member
+			{
+				bool is_constant;
+				bool is_ptr_access;
+			} member;
+		};
+	};
+
+	using Expr_Val_Map = std::unordered_map<Ast_Node*, Expr_Value>;
+
 	struct Entity_TN
 	{
 		int type_name_id;
@@ -137,15 +182,14 @@ namespace Glass
 	struct Entity_Func
 	{
 		int scope_id;
-		int proc_idx;
-		GS_Type* code_proc_signature;
+		int proc_id;
 		GS_Type* signature;
-		int return_variable_id;
-		Array<int> return_branches;
+		GS_Type* return_type;
 		bool c_varargs;
 		int foreign;
 		Array<int> parameters;
-		bool poly_morphic;
+		bool header_complete;
+		int return_ast_count;
 	};
 
 	struct Poly_Decl
@@ -167,11 +211,29 @@ namespace Glass
 		int typename_id;
 	};
 
+	struct Entity_Enm
+	{
+		int scope_id;
+		int typename_id;
+		GS_Type* type;
+		GS_Type* underlying_type;
+		int underlying_type_id;
+		int previous_member;
+	};
+
 	struct Entity_Strct_Member
 	{
 		int index;
 		Const_Union initializer;
 		bool		has_initializer;
+	};
+
+	struct Entity_Enm_Member
+	{
+		int index;
+		Const_Union value;
+		int previous_member;
+		int enum_entity_id;
 	};
 
 	struct Entity_Lib
@@ -183,12 +245,9 @@ namespace Glass
 	{
 		bool global;
 		int code_id;
-		bool parameter;
-		int parameter_code_idx;
 		GS_Type* code_type;
+		bool big_parameter;
 	};
-
-	using Entity_Deps = std::unordered_set<int>;
 
 	struct Entity
 	{
@@ -201,6 +260,13 @@ namespace Glass
 
 		GS_Type* type;
 
+		Entity_Deps deps;
+
+		Expr_Val_Map expr_values;
+		Array<Flat_Node> flat_syntax;
+
+		int progress;
+
 		union
 		{
 			Entity_TN			tn;
@@ -208,7 +274,9 @@ namespace Glass
 			Entity_Func			fn;
 			Entity_Poly_Func	poly_fn;
 			Entity_Strct		_struct;
+			Entity_Enm			enm;
 			Entity_Strct_Member struct_mem;
+			Entity_Enm_Member   enum_mem;
 			Entity_Ld			load;
 			Entity_Lib			library;
 			Entity_Var			var;
@@ -222,6 +290,7 @@ namespace Glass
 		Scope_File,
 		Scope_Function,
 		Scope_Struct,
+		Scope_Enum,
 	};
 
 	struct Scope
@@ -252,9 +321,11 @@ namespace Glass
 		Array<Scope> scopes;
 		Array<Comp_File> files;
 		Array<Entity> entities;
+
 		std::unordered_map<String_Atom*, int> filename_to_id;
 		std::unordered_map<int, int> file_to_scope;
 		std::unordered_map<int, int> typename_to_struct;
+		std::unordered_map<int, int> scope_id_to_enum;
 
 		GS_Type* i8_Ty;
 		GS_Type* u8_Ty;
@@ -287,6 +358,16 @@ namespace Glass
 		GS_Type* string_Ty;
 		String_Atom* keyword_Array;
 		String_Atom* keyword_string;
+		String_Atom* keyword_TypeInfo;
+
+		int typeinfo_member_array_global;
+		int typeinfo_table_global;
+		GS_Type* typeinfo_entry;
+		GS_Type* TypeInfo_Ty;
+
+		int TypeInfo_entity_id;
+		int Array_entity_id;
+		int string_entity_id;
 	};
 
 	void frontend_push_error(Front_End& f, String error);

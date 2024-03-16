@@ -229,9 +229,19 @@ namespace Glass
 				break;
 				case Il_Store:
 				{
-					ASSERT(regv[node.store.ptr_node_idx]);
-					ASSERT(regv[node.store.value_node_idx]);
-					regv[idx] = lc.llvm_builder->CreateStore(regv[node.store.value_node_idx], regv[node.store.ptr_node_idx]);
+					Il_Node& value_node = proc.instruction_storage[node.store.value_node_idx];
+
+					if (value_node.node_type == Il_ZI)
+					{
+						lc.llvm_builder->CreateMemSet(regv[node.store.ptr_node_idx], llvm::ConstantInt::get(lc.llvm_i8, 0), type_size, {});
+					}
+					else
+					{
+						ASSERT(regv[node.store.ptr_node_idx]);
+						ASSERT(regv[node.store.value_node_idx]);
+
+						regv[idx] = lc.llvm_builder->CreateStore(regv[node.store.value_node_idx], regv[node.store.ptr_node_idx]);
+					}
 				}
 				break;
 				case Il_StructElementPtr:
@@ -435,7 +445,7 @@ namespace Glass
 				break;
 				case Il_ZI:
 				{
-					regv[idx] = llvm::ConstantAggregateZero::get(to_llvm(lc, type));
+					//regv[idx] = llvm::ConstantAggregateZero::get(to_llvm(lc, type));
 				}
 				break;
 				case Il_String:

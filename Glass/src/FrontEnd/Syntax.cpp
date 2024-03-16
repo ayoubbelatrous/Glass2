@@ -25,6 +25,9 @@ namespace Glass
 	String_Atom* keyword_library;
 	String_Atom* keyword_add_library;
 	String_Atom* keyword_load;
+	String_Atom* keyword_cast;
+	String_Atom* keyword_char;
+	String_Atom* keyword_type_info;
 
 	void parser_init()
 	{
@@ -47,6 +50,9 @@ namespace Glass
 		keyword_library = get_atom(String_Make("library"));
 		keyword_add_library = get_atom(String_Make("add_library"));
 		keyword_load = get_atom(String_Make("load"));
+		keyword_cast = get_atom(String_Make("cast"));
+		keyword_char = get_atom(String_Make("char"));
+		keyword_type_info = get_atom(String_Make("type_info"));
 	}
 
 	inline static bool begins_with_alpha_alnum(const std::string_view& token)
@@ -299,12 +305,18 @@ namespace Glass
 						type = Tk_Return;
 					if (tok.name == keyword_struct)
 						type = Tk_Struct;
+					if (tok.name == keyword_enum)
+						type = Tk_Enum;
 					if (tok.name == keyword_if)
 						type = Tk_If;
 					if (tok.name == keyword_while)
 						type = Tk_While;
 					if (tok.name == keyword_for)
 						type = Tk_For;
+					if (tok.name == keyword_cast)
+						type = Tk_Cast;
+					if (tok.name == keyword_type_info)
+						type = Tk_Type_Info;
 				}
 
 				tok.type = type;
@@ -332,7 +344,7 @@ namespace Glass
 			Tk tok = {};
 			tok.type = Tk_StringLiteral;
 			tok.line = (int)line;
-			tok.start = (int)begin - accumulator.size();
+			tok.start = (int)begin - accumulator.size() - 1;
 			tok.end = (int)accumulator.size();
 			tok.name = get_atom(String_Make(accumulator));
 
@@ -611,12 +623,27 @@ namespace Glass
 				return nullptr;
 			}
 		}
+		else if (name == keyword_char)
+		{
+			node->token = consume(s);
+
+			node->type = Ast_Char;
+
+			if (node->token.type != Tk_StringLiteral)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected literal"));
+				s.error = true;
+				return nullptr;
+			}
+		}
 		else
 		{
 			frontend_push_error(*s.f, current(s), s.file_path, String_Make("unknown directive"));
 			s.error = true;
 			return nullptr;
 		}
+
+		return node;
 	}
 
 	Ast_Node* parse_primary_expr(Parser_State& s)
@@ -652,7 +679,7 @@ namespace Glass
 			lit->type = Ast_Numeric;
 			lit->token = tk;
 
-			lit->num.integer = std::stoll(tk.name->str.data);
+			lit->num.integer = std::stoll(tk.name->str.data, nullptr, 16);
 
 			return lit;
 		}
@@ -856,6 +883,98 @@ namespace Glass
 		else if (tk.type == Tk_Pound)
 		{
 			return parse_directive(s);
+		}
+		else if (tk.type == Tk_Cast)
+		{
+			Tk tk = consume(s);
+
+			Ast_Node* cast = allocate_node();
+			cast->type = Ast_Cast;
+			cast->token = tk;
+
+			if (!expected(s, Tk_OpenParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '('"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			cast->bin.lhs = parse_expr(s);
+
+			if (!expected(s, Tk_CloseParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected ')'"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			if (s.error)
+				return nullptr;
+
+			if (!cast->bin.lhs)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+				s.error = true;
+				return nullptr;
+			}
+
+			cast->bin.rhs = parse_expr(s);
+
+			if (s.error)
+				return nullptr;
+
+			if (!cast->bin.rhs)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+				s.error = true;
+				return nullptr;
+			}
+
+			return cast;
+		}
+		else if (tk.type == Tk_Type_Info)
+		{
+			Tk tk = consume(s);
+
+			Ast_Node* type_info = allocate_node();
+			type_info->type = Ast_Type_Info;
+			type_info->token = tk;
+
+			if (!expected(s, Tk_OpenParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '('"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			type_info->un.expr = parse_expr(s);
+
+			if (!expected(s, Tk_CloseParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected ')'"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			if (s.error)
+				return nullptr;
+
+			if (!type_info->un.expr)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+				s.error = true;
+				return nullptr;
+			}
+
+			return type_info;
 		}
 
 		return nullptr;
@@ -1389,6 +1508,37 @@ namespace Glass
 		return _struct;
 	}
 
+	Ast_Node* parse_enum(Parser_State& s)
+	{
+		consume(s);
+
+		Ast_Node* _enum = allocate_node();
+		_enum->type = Ast_Enum;
+		_enum->token = consume(s);
+
+		if (!expected(s, Tk_OpenCurly))
+		{
+			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '{'"));
+			s.error = true;
+			return nullptr;
+		}
+
+		Ast_Node* body = parse_statement(s);
+
+		if (!body) return nullptr;
+
+		if (body->type != Ast_Scope)
+		{
+			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected body following enum declaration"));
+			s.error = true;
+			return nullptr;
+		}
+
+		_enum->_enum.body = body->scope;
+
+		return _enum;
+	}
+
 	Ast_Node* parse_conditional(Parser_State& s)
 	{
 		Ast_Node* cnd_node = allocate_node();
@@ -1515,6 +1665,11 @@ namespace Glass
 		if (current(s).type == Tk_Struct)
 		{
 			return parse_struct(s);
+		}
+
+		if (current(s).type == Tk_Enum)
+		{
+			return parse_enum(s);
 		}
 
 		if (current(s).type == Tk_OpenCurly)

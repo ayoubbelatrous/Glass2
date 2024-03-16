@@ -142,6 +142,11 @@ namespace Glass
 		return &global_type_system.type_storage[index];
 	}
 
+	u64 get_type_alignment(GS_Type* type)
+	{
+		return TypeSystem_Get_Type_Alignment(global_type_system, type);
+	}
+
 	bool is_type_aggr(GS_Type* type)
 	{
 		if (type->kind == Type_Array || type->kind == Type_Dyn_Array)
@@ -155,7 +160,7 @@ namespace Glass
 
 			bool is_power_of_two = (size > 0) && ((size & (size - 1)) == 0);
 
-			if (flags & TN_Struct_Type && (size > 8 || (!is_power_of_two && size <= 8)))
+			if ((size > 8 || (!is_power_of_two && size <= 8)))
 			{
 				return true;
 			}
@@ -475,7 +480,7 @@ namespace Glass
 				stream << TypeSystem_Print_Type(ts, type->proc.params[i]).data;
 
 				if (i != type->proc.params.count - 1)
-					stream << ",";
+					stream << ", ";
 			}
 
 			stream << ')';

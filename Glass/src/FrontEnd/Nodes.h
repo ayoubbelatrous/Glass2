@@ -2,6 +2,8 @@
 
 namespace Glass
 {
+	struct GS_Type;
+
 	enum Tk_Type
 	{
 		Tk_Invalid = 0,
@@ -62,6 +64,10 @@ namespace Glass
 		Tk_Enum,
 		Tk_Fn,
 
+		Tk_Cast,
+
+		Tk_Type_Info,
+
 		Tk_Return,
 		Tk_Break,
 
@@ -84,6 +90,7 @@ namespace Glass
 		Ast_Scope,
 		Ast_Function,
 		Ast_Struct,
+		Ast_Enum,
 		Ast_Variable,
 		Ast_Binary,
 		Ast_Numeric,
@@ -107,6 +114,9 @@ namespace Glass
 		Ast_If,
 		Ast_While,
 		Ast_For,
+		Ast_Cast,
+		Ast_Type_Info,
+		Ast_Char,
 	};
 
 	enum Ast_Flags : u64
@@ -122,6 +132,7 @@ namespace Glass
 		Ast_Node* type;
 		Ast_Node* assignment;
 		bool is_constant;
+		int entity_id;
 	};
 
 	struct Ast_Node_Binary
@@ -166,6 +177,8 @@ namespace Glass
 		};
 
 		bool is_float;
+
+		GS_Type* solid_type;
 	};
 
 	struct Ast_Node_Call
@@ -175,6 +188,11 @@ namespace Glass
 	};
 
 	struct Ast_Node_Struct
+	{
+		Ast_Node_Scope		body;
+	};
+
+	struct Ast_Node_Enum
 	{
 		Ast_Node_Scope		body;
 	};
@@ -221,6 +239,7 @@ namespace Glass
 			Ast_Node_Scope    scope;
 			Ast_Node_Function fn;
 			Ast_Node_Struct _struct;
+			Ast_Node_Enum	_enum;
 			Ast_Node_Member	  mem;
 			Ast_Node_Call	  call;
 			Ast_Node_Array_Type	array_type;

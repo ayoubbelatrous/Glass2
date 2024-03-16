@@ -318,7 +318,7 @@ namespace Glass
 		Array<Il_Global> globals;
 	};
 
-	inline Il_IDX Il_Insert_Global(Il_Program& prog, Il_Global global) {
+	inline Il_IDX il_insert_global(Il_Program& prog, Il_Global global) {
 		Array_Add(prog.globals, global);
 		return (Il_IDX)(prog.globals.count - 1);
 	}
@@ -812,7 +812,7 @@ namespace Glass
 		return il_proc_insert(proc, sep_node);
 	}
 
-	inline Il_IDX Il_Insert_Global_Address(Il_Proc& proc, Il_IDX global_idx) {
+	inline Il_IDX il_insert_global_address(Il_Proc& proc, Il_IDX global_idx) {
 		Il_Node ga_node = Il_Make_Global_Address(global_idx, (Type_IDX)get_type_index(proc.program->globals[global_idx].type));
 		return il_proc_insert(proc, ga_node);
 	}
@@ -822,7 +822,7 @@ namespace Glass
 		return il_proc_insert(proc, proc_addr_node);
 	}
 
-	inline Il_IDX Il_Insert_AEP(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
+	inline Il_IDX il_inser_aep(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
 		Il_Node aep_node = Il_Make_AEP((Type_IDX)get_type_index(type), ptr_node_idx, index_node_idx);
 		return il_proc_insert(proc, aep_node);
 	}
