@@ -8,7 +8,7 @@
 
 #define FMT(...) String_Make(fmt::format(__VA_ARGS__))
 
-#define DBG(x) x
+#define DBG(x) 
 
 namespace Glass
 {
@@ -293,6 +293,7 @@ namespace Glass
 			flatten_syntax(&node->cond.body, flat_ast, node->cond.scope_id);
 			break;
 		case Ast_Type_Info:
+		case Ast_SizeOf:
 		{
 			flatten_syntax(&node->un.expr, flat_ast, scope_id);
 			Array_Add(flat_ast, { reference, scope_id });
@@ -750,6 +751,7 @@ namespace Glass
 		case Ast_Binary:
 		case Ast_Call:
 		case Ast_Type_Info:
+		case Ast_SizeOf:
 		case Ast_Char:
 		case Ast_Break:
 		case Ast_Continue:
@@ -951,6 +953,12 @@ namespace Glass
 		{
 			Entity& fn_instance = get_entity(f, cache_entity_id);
 
+			if (!fn_instance.fn.header_complete)
+			{
+				insert_dep(f, cache_entity_id, deps);
+				suspend = true;
+			}
+
 			GS_Type* varargs_type = nullptr;
 
 			GS_Type* signature = fn_instance.fn.signature;
@@ -1087,7 +1095,9 @@ namespace Glass
 		my_value.call.proc_id = fn->fn.proc_id;
 		my_value.call.callee_signature = signature;
 		my_value.call.varargs = fn->fn.has_varargs;
-		my_value.call.varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
+
+		if (my_value.call.varargs)
+			my_value.call.varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
 
 		return true;
 	}
@@ -1917,6 +1927,23 @@ namespace Glass
 				my_value.type = f.TypeInfo_Ty->get_pointer();
 			}
 			break;
+			case Ast_SizeOf:
+			{
+				Expr_Value& expr = expr_values[node->un.expr];
+
+				if (expr.type == f.Type_Ty)
+				{
+					my_value.value.s8 = get_type_size(get_type_at(expr.value.s4));
+				}
+				else
+				{
+					my_value.value.s8 = get_type_size(expr.type);
+				}
+
+				my_value.type = f.int_Ty;
+				my_value.is_unsolid = true;
+			}
+			break;
 			case Ast_Return:
 			{
 				if ((!return_type || return_type == f.void_Ty) && node->un.expr)
@@ -2227,12 +2254,7 @@ namespace Glass
 			Array<GS_Type*> argument_types;
 			Array<GS_Type*> code_argument_types;
 
-			GS_Type* varargs_type = nullptr;
-
-			if (varargs)
-			{
-				varargs_type = signature->proc.params[signature->proc.params.count - 1];
-			}
+			GS_Type* varargs_type = my_value.call.varargs_type;
 
 			int arg_count = call.args.count;
 
@@ -2383,6 +2405,7 @@ namespace Glass
 		break;
 		case Ast_Numeric:
 		case Ast_Char:
+		case Ast_SizeOf:
 		{
 			my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
 		}

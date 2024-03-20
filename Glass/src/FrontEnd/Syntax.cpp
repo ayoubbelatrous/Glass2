@@ -31,6 +31,8 @@ namespace Glass
 	String_Atom* keyword_break;
 	String_Atom* keyword_continue;
 
+	String_Atom* keyword_sizeof;
+
 	void parser_init()
 	{
 		keyword_and = get_atom(String_Make("and"));
@@ -57,6 +59,8 @@ namespace Glass
 		keyword_false = get_atom(String_Make("false"));
 		keyword_break = get_atom(String_Make("break"));
 		keyword_continue = get_atom(String_Make("continue"));
+
+		keyword_sizeof = get_atom(String_Make("sizeof"));
 	}
 
 	inline static bool begins_with_alpha_alnum(const std::string_view& token)
@@ -323,6 +327,8 @@ namespace Glass
 						type = Tk_Cast;
 					if (tok.name == keyword_type_info)
 						type = Tk_Type_Info;
+					if (tok.name == keyword_sizeof)
+						type = Tk_SizeOf;
 					if (tok.name == keyword_true)
 						type = Tk_True;
 					if (tok.name == keyword_false)
@@ -1003,6 +1009,46 @@ namespace Glass
 			}
 
 			return type_info;
+		}
+		else if (tk.type == Tk_SizeOf)
+		{
+			Tk tk = consume(s);
+
+			Ast_Node* size_of = allocate_node();
+			size_of->type = Ast_SizeOf;
+			size_of->token = tk;
+
+			if (!expected(s, Tk_OpenParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '('"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			size_of->un.expr = parse_expr(s);
+
+			if (!expected(s, Tk_CloseParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected ')'"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			if (s.error)
+				return nullptr;
+
+			if (!size_of->un.expr)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
+				s.error = true;
+				return nullptr;
+			}
+
+			return size_of;
 		}
 		else if (tk.type == Tk_Null || tk.type == Tk_True || tk.type == Tk_False)
 		{
@@ -1954,6 +2000,11 @@ namespace Glass
 		}
 		break;
 		case Ast_Pointer:
+		case Ast_DeRef:
+		case Ast_Ref:
+		case Ast_Not:
+		case Ast_SizeOf:
+		case Ast_Type_Info:
 		{
 			Ast_Node* new_stmt = allocate_node();
 			*new_stmt = *stmt;
@@ -1963,6 +2014,8 @@ namespace Glass
 		}
 		break;
 		case Ast_Binary:
+		case Ast_Array:
+		case Ast_Cast:
 		{
 			Ast_Node* new_stmt = allocate_node();
 			*new_stmt = *stmt;
@@ -1985,6 +2038,10 @@ namespace Glass
 		break;
 		case Ast_Null:
 		case Ast_String:
+		case Ast_Numeric:
+		case Ast_True:
+		case Ast_False:
+		case Ast_Char:
 		{
 			Ast_Node* new_stmt = allocate_node();
 			*new_stmt = *stmt;

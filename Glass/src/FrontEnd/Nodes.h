@@ -67,6 +67,7 @@ namespace Glass
 		Tk_Cast,
 
 		Tk_Type_Info,
+		Tk_SizeOf,
 
 		Tk_Return,
 
@@ -119,6 +120,7 @@ namespace Glass
 		Ast_For,
 		Ast_Cast,
 		Ast_Type_Info,
+		Ast_SizeOf,
 		Ast_Char,
 
 		Ast_Null,

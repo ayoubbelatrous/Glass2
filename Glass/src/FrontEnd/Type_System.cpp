@@ -388,7 +388,7 @@ namespace Glass
 			return 8;
 		}
 		else if (type->kind == Type_Dyn_Array) {
-			return 16;
+			return 24;
 		}
 		else if (type->kind == Type_Array) {
 			return TypeSystem_Get_Type_Size(ts, type->array.element_type) * type->array.size;
