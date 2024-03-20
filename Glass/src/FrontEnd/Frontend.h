@@ -103,6 +103,7 @@ namespace Glass
 		Entity_Enum_Member,
 		Entity_Load,
 		Entity_Library,
+		Entity_Operator
 	};
 
 	enum Entity_Flags
@@ -177,6 +178,12 @@ namespace Glass
 				bool varargs;
 				GS_Type* varargs_type;
 			} call;
+
+			struct Checked_Bin
+			{
+				bool is_overload;
+				int proc_idx;
+			} bin;
 		};
 	};
 
@@ -212,6 +219,14 @@ namespace Glass
 		int var_arg_parameter;
 		bool header_complete;
 		int return_ast_count;
+	};
+
+	struct Entity_Oper
+	{
+		int fn_entity_id;
+		Tk_Operator op;
+		Array<GS_Type*> parameters;
+		GS_Type* result_type;
 	};
 
 	struct Poly_Decl
@@ -311,6 +326,7 @@ namespace Glass
 			Entity_Ld			load;
 			Entity_Lib			library;
 			Entity_Var			var;
+			Entity_Oper			op;
 		};
 	};
 

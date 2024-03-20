@@ -146,6 +146,87 @@ namespace Glass
 		return 0;
 	}
 
+	void find_entities(Front_End& f, String_Atom* name, int scope_id, int ignore, bool ignore_global, Array<int>& entities)
+	{
+		Scope& scope = f.scopes[scope_id];
+
+		auto it = scope.name_to_entity.find(name);
+
+		if (it != scope.name_to_entity.end())
+		{
+			Array_Add(entities, it->second);
+		}
+
+		if (scope.parent)
+		{
+			find_entities(f, name, scope.parent, ignore, ignore_global, entities);
+			return;
+		}
+
+		if (!ignore_global)
+		{
+			for (size_t i = 0; i < scope.entities.count; i++)
+			{
+				Entity& entity = get_entity(f, scope.entities[i]);
+				if (entity.kind == Entity_Load)
+					if (entity.load.file_scope_id != ignore)
+					{
+						find_entities(f, name, entity.load.file_scope_id, ignore, true, entities);
+					}
+			}
+		}
+	}
+
+	Array<int> find_entities(Front_End& f, String_Atom* name, int scope_id)
+	{
+		int file_scope_entity_id = find_filescope_parent(f, scope_id);
+		Array<int> entities;
+		find_entities(f, name, scope_id, file_scope_entity_id, false, entities);
+		return entities;
+	}
+
+	void find_entities_by_kind(Front_End& f, Entity_Kind kind, int scope_id, int ignore, bool ignore_global, Array<int>& entities)
+	{
+		Scope& scope = f.scopes[scope_id];
+
+		for (size_t i = 0; i < scope.entities.count; i++)
+		{
+			int entity_id = scope.entities[i];
+
+			if (get_entity(f, entity_id).kind == kind)
+			{
+				Array_Add(entities, entity_id);
+			}
+		}
+
+		if (scope.parent)
+		{
+			find_entities_by_kind(f, kind, scope.parent, ignore, ignore_global, entities);
+			return;
+		}
+
+		if (!ignore_global)
+		{
+			for (size_t i = 0; i < scope.entities.count; i++)
+			{
+				Entity& entity = get_entity(f, scope.entities[i]);
+				if (entity.kind == Entity_Load)
+					if (entity.load.file_scope_id != ignore)
+					{
+						find_entities_by_kind(f, kind, entity.load.file_scope_id, ignore, true, entities);
+					}
+			}
+		}
+	}
+
+	Array<int> find_entities_by_kind(Front_End& f, Entity_Kind kind, int scope_id)
+	{
+		int file_scope_entity_id = find_filescope_parent(f, scope_id);
+		Array<int> entities;
+		find_entities_by_kind(f, kind, scope_id, file_scope_entity_id, false, entities);
+		return entities;
+	}
+
 	int insert_scope(Front_End& f, Scope_Type type, int parent, int file_id, int entity_id, Ast_Node* syntax)
 	{
 		int scope_id = f.scopes.count;
@@ -422,6 +503,19 @@ namespace Glass
 
 		switch (stmt->type)
 		{
+		case Ast_Operator:
+		{
+			Tk_Operator op = tk_to_operator(stmt->op._operator.type);
+			String_Atom* op_name = get_atom(operator_to_str(op));
+
+			int entity_id = insert_entity(f, make_entity(Entity_Operator, op_name, stmt), scope_id);
+			Entity& entity = get_entity(f, entity_id);
+
+			entity.op.op = op;
+
+			flatten_syntax(&stmt->op.fn, entity.flat_syntax, scope_id);
+		}
+		break;
 		case Ast_Directive_Add_Library:
 		{
 			f.added_library_paths.emplace(stmt->token.name);
@@ -957,6 +1051,7 @@ namespace Glass
 			{
 				insert_dep(f, cache_entity_id, deps);
 				suspend = true;
+				return true;
 			}
 
 			GS_Type* varargs_type = nullptr;
@@ -1113,6 +1208,70 @@ namespace Glass
 		return get_type_at(value.value.s8);
 	}
 
+	bool try_for_binary_overload(Front_End& f, Ast_Node* node, int scope_id, Expr_Val_Map& expr_values, int& index, Entity_Deps& deps, bool const_eval, bool& suspend)
+	{
+		Expr_Value& my_value = expr_values[node];
+
+		ASSERT(!const_eval);
+
+		Tk_Operator op = tk_to_operator(node->token.type);
+
+		Expr_Value& lhs_value = expr_values[node->bin.lhs];
+		Expr_Value& rhs_value = expr_values[node->bin.rhs];
+
+		Array<int> possible_overloads = find_entities_by_kind(f, Entity_Operator, scope_id);
+
+		int most_suitable_overload = 0;
+
+		for (size_t i = 0; i < possible_overloads.count; i++)
+		{
+			int possible_overload = possible_overloads[i];
+			Entity& overload = get_entity(f, possible_overload);
+
+			if (!(overload.flags & Flag_Complete))
+			{
+				continue;
+			}
+
+			if (overload.op.op == op)
+			{
+				if (lhs_value.type == overload.op.parameters[0] && rhs_value.type == overload.op.parameters[0]) {
+					most_suitable_overload = possible_overload;
+				}
+			}
+		}
+
+		if (!most_suitable_overload)
+		{
+			for (size_t i = 0; i < possible_overloads.count; i++)
+			{
+				int possible_overload = possible_overloads[i];
+				Entity& overload = get_entity(f, possible_overload);
+
+				if (!(overload.flags & Flag_Complete))
+				{
+					insert_dep(f, possible_overload, deps);
+					suspend = true;
+					return true;
+				}
+			}
+		}
+
+		if (!most_suitable_overload)
+		{
+			push_error_scope(f, node, scope_id, FMT("no operator overloaded for types: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
+			return false;
+		}
+
+		Entity& operator_overload = get_entity(f, most_suitable_overload);
+
+		my_value.bin.is_overload = true;
+		my_value.bin.proc_idx = get_entity(f, operator_overload.op.fn_entity_id).fn.proc_id;
+		my_value.type = operator_overload.op.result_type;
+
+		return true;
+	}
+
 	bool type_check_pass(Front_End& f, Array<Flat_Node>& flat_ast, int scope_id, Expr_Val_Map& expr_values, int& index, Entity_Deps& deps, bool const_eval, GS_Type* return_type = nullptr)
 	{
 		for (; index < flat_ast.count; index++)
@@ -1248,6 +1407,25 @@ namespace Glass
 					try_promote(f, most_complete_type, rhs_value);
 				}
 
+				bool lhs_is_overloadable = lhs_value.type->kind == Type_Basic && !(get_type_flags(lhs_value.type) & TN_Base_Type);
+				bool rhs_is_overloadable = rhs_value.type->kind == Type_Basic && !(get_type_flags(rhs_value.type) & TN_Base_Type);
+
+				if (rhs_is_overloadable || lhs_is_overloadable)
+				{
+					bool suspend = false;
+
+					bool result = try_for_binary_overload(f, node, scope_id, expr_values, index, deps, const_eval, suspend);
+
+					if (suspend) {
+						return true;
+					}
+
+					if (!result)
+						return false;
+
+					continue;
+				}
+
 				if (lhs_value.type != f.Any_Ty && lhs_value.type != rhs_value.type) {
 					push_error_scope(f, node, scope_id, FMT("type mismatch: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return {};
@@ -1266,9 +1444,15 @@ namespace Glass
 				bool is_integer = !(type_flags & TN_Float_Type);
 				bool is_signed = !(type_flags & TN_Unsigned_Type);
 				bool is_numeric = type_flags & TN_Numeric_Type;
+				bool is_base = !(lhs_value.type->kind == Type_Basic && !(get_type_flags(lhs_value.type) & TN_Base_Type));
 
 				if ((numeric_op || is_range) && !is_numeric) {
 					push_error_scope(f, node, scope_id, FMT("types must be numeric: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
+					return false;
+				}
+
+				if (comparative_op && !is_base) {
+					push_error_scope(f, node, scope_id, FMT("no operator overloaded for types: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return false;
 				}
 
@@ -2417,94 +2601,158 @@ namespace Glass
 			Expr_Value& lhs = expr_values[node->bin.lhs];
 			Expr_Value& rhs = expr_values[node->bin.rhs];
 
-			bool is_op_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
-
-			if (op == Op_Assign)
+			if (my_value.bin.is_overload)
 			{
-				Expr_Value& lhs = expr_values[node->bin.lhs];
-				Expr_Value& rhs = expr_values[node->bin.rhs];
+				Array<GS_Type*> param_types;
+				Array<int> arguments;
+				GS_Type* return_type = nullptr;
 
-				bool is_any_assign = lhs.type == f.Any_Ty && rhs.type != f.Any_Ty;
+				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, is_type_aggr(lhs.type));
+				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc, is_type_aggr(rhs.type));
 
-				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
-				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc, is_any_assign);
+				int return_lvalue = -1;
 
-				if (is_any_assign)
+				if (is_type_aggr(my_value.type))
 				{
-					rhs.code_id = convert_to_any(f, scope_id, node->bin.rhs, expr_values, proc);
+					return_lvalue = il_insert_alloca(proc, my_value.type);
+					Array_Add(param_types, my_value.type->get_pointer());
+					Array_Add(arguments, return_lvalue);
+					return_type = f.void_Ty;
+				}
+				else
+				{
+					return_type = my_value.type;
 				}
 
-				il_insert_store(proc, my_value.type, lhs.code_id, rhs.code_id);
-			}
-			else if (is_op_assign)
-			{
-				Expr_Value& lhs = expr_values[node->bin.lhs];
-				Expr_Value& rhs = expr_values[node->bin.rhs];
+				Array_Add(arguments, lhs.code_id);
+				Array_Add(arguments, rhs.code_id);
 
-				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
-				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
-
-				Il_Node_Type op_type;
-
-				switch (op)
+				if (is_type_aggr(lhs.type))
 				{
-				case Op_AddAssign: op_type = Il_Add; break;
-				case Op_SubAssign: op_type = Il_Sub; break;
-				case Op_MulAssign: op_type = Il_Mul; break;
-				case Op_DivAssign: op_type = Il_Div; break;
-				default:
-					GS_ASSERT_UNIMPL();
-					break;
+					ASSERT(lhs.lvalue);
+					Array_Add(param_types, lhs.type->get_pointer());
+				}
+				else
+				{
+					Array_Add(param_types, lhs.type);
 				}
 
-				int value_code_id = il_insert_math_op(proc, my_value.type, op_type, il_insert_load(proc, my_value.type, lhs.code_id), rhs.code_id);
-				il_insert_store(proc, my_value.type, lhs.code_id, value_code_id);
-			}
-			else if (my_value.is_unsolid) {
-				my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
+				if (is_type_aggr(rhs.type))
+				{
+					ASSERT(rhs.lvalue);
+					Array_Add(param_types, rhs.type->get_pointer());
+				}
+				else
+				{
+					Array_Add(param_types, lhs.type);
+				}
+
+				my_value.code_id = il_insert_call(proc, get_proc_type(return_type, param_types), arguments, my_value.bin.proc_idx);
+
+				if (is_type_aggr(my_value.type))
+				{
+					if (lval)
+					{
+						my_value.code_id = return_lvalue;
+						my_value.lvalue = true;
+					}
+					else
+					{
+						my_value.code_id = il_insert_load(proc, my_value.type, return_lvalue);
+					}
+				}
 			}
 			else
 			{
-				bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater;
+				bool is_op_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
 
-				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc);
-				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
-
-				if (!comparative_op)
+				if (op == Op_Assign)
 				{
+					Expr_Value& lhs = expr_values[node->bin.lhs];
+					Expr_Value& rhs = expr_values[node->bin.rhs];
+
+					bool is_any_assign = lhs.type == f.Any_Ty && rhs.type != f.Any_Ty;
+
+					code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
+					code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc, is_any_assign);
+
+					if (is_any_assign)
+					{
+						rhs.code_id = convert_to_any(f, scope_id, node->bin.rhs, expr_values, proc);
+					}
+
+					il_insert_store(proc, my_value.type, lhs.code_id, rhs.code_id);
+				}
+				else if (is_op_assign)
+				{
+					Expr_Value& lhs = expr_values[node->bin.lhs];
+					Expr_Value& rhs = expr_values[node->bin.rhs];
+
+					code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
+					code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
+
 					Il_Node_Type op_type;
 
 					switch (op)
 					{
-					case Op_Add: op_type = Il_Add; break;
-					case Op_Sub: op_type = Il_Sub; break;
-					case Op_Mul: op_type = Il_Mul; break;
-					case Op_Div: op_type = Il_Div; break;
-					case Op_BitAnd: op_type = Il_Bit_And; break;
-					case Op_BitOr: op_type = Il_Bit_Or; break;
+					case Op_AddAssign: op_type = Il_Add; break;
+					case Op_SubAssign: op_type = Il_Sub; break;
+					case Op_MulAssign: op_type = Il_Mul; break;
+					case Op_DivAssign: op_type = Il_Div; break;
 					default:
 						GS_ASSERT_UNIMPL();
 						break;
 					}
 
-					my_value.code_id = il_insert_math_op(proc, my_value.type, op_type, lhs.code_id, rhs.code_id);
+					int value_code_id = il_insert_math_op(proc, my_value.type, op_type, il_insert_load(proc, my_value.type, lhs.code_id), rhs.code_id);
+					il_insert_store(proc, my_value.type, lhs.code_id, value_code_id);
+				}
+				else if (my_value.is_unsolid) {
+					my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
 				}
 				else
 				{
-					Il_Cmp_Type comp_type;
+					bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater;
 
-					switch (op)
+					code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc);
+					code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
+
+					if (!comparative_op)
 					{
-					case Op_Eq: comp_type = Il_Cmp_Equal; break;
-					case Op_NotEq: comp_type = Il_Cmp_NotEqual; break;
-					case Op_Lesser: comp_type = Il_Cmp_Lesser; break;
-					case Op_Greater: comp_type = Il_Cmp_Greater; break;
-					default:
-						GS_ASSERT_UNIMPL();
-						break;
-					}
+						Il_Node_Type op_type;
 
-					my_value.code_id = il_insert_compare(proc, Il_Value_Cmp, comp_type, lhs.type, lhs.code_id, rhs.code_id);
+						switch (op)
+						{
+						case Op_Add: op_type = Il_Add; break;
+						case Op_Sub: op_type = Il_Sub; break;
+						case Op_Mul: op_type = Il_Mul; break;
+						case Op_Div: op_type = Il_Div; break;
+						case Op_BitAnd: op_type = Il_Bit_And; break;
+						case Op_BitOr: op_type = Il_Bit_Or; break;
+						default:
+							GS_ASSERT_UNIMPL();
+							break;
+						}
+
+						my_value.code_id = il_insert_math_op(proc, my_value.type, op_type, lhs.code_id, rhs.code_id);
+					}
+					else
+					{
+						Il_Cmp_Type comp_type;
+
+						switch (op)
+						{
+						case Op_Eq: comp_type = Il_Cmp_Equal; break;
+						case Op_NotEq: comp_type = Il_Cmp_NotEqual; break;
+						case Op_Lesser: comp_type = Il_Cmp_Lesser; break;
+						case Op_Greater: comp_type = Il_Cmp_Greater; break;
+						default:
+							GS_ASSERT_UNIMPL();
+							break;
+						}
+
+						my_value.code_id = il_insert_compare(proc, Il_Value_Cmp, comp_type, lhs.type, lhs.code_id, rhs.code_id);
+					}
 				}
 			}
 		}
@@ -2882,6 +3130,77 @@ namespace Glass
 
 		switch (entity.kind)
 		{
+		case Entity_Operator:
+		{
+			bool success = type_check_pass(f, entity.flat_syntax, scope_id, entity.expr_values, entity.progress, entity.deps, true);
+
+			if (!success)
+				return false;
+
+			if (entity.progress < entity.flat_syntax.count) {
+				return true;
+			}
+
+			Expr_Value expr = entity.expr_values[entity.syntax->op.fn];
+
+			bool is_function = expr.referenced_entity && get_entity(f, expr.referenced_entity).kind == Entity_Function;
+
+			if (!is_function)
+			{
+				push_error_scope(f, entity.syntax->op.fn, scope_id, FMT("expected function"));
+				return false;
+			}
+
+			Entity& fn = get_entity(f, expr.referenced_entity);
+
+			entity.op.fn_entity_id = expr.referenced_entity;
+			entity.op.result_type = fn.fn.signature->proc.return_type;
+			entity.op.parameters = Array_Copy(*(Array<GS_Type*>*) & fn.fn.signature->proc.params);
+
+			Array<int> previous_overloads = find_entities_by_kind(f, Entity_Operator, scope_id);
+
+			for (size_t i = 0; i < previous_overloads.count; i++)
+			{
+				int previous_overload = previous_overloads[i];
+				Entity& previous = get_entity(f, previous_overload);
+
+				if (previous_overload == entity_id || !(previous.flags & Flag_Complete))
+				{
+					continue;
+				}
+
+				if (previous.op.op == entity.op.op)
+				{
+					bool same = true;
+
+					for (size_t i = 0; i < previous.op.parameters.count; i++)
+					{
+						if (previous.op.parameters[i] != entity.op.parameters[i])
+						{
+							same = false;
+						}
+					}
+
+					if (same)
+					{
+						std::string types;
+
+						for (size_t i = 0; i < entity.op.parameters.count; i++)
+						{
+							types.append(" ");
+							types.append(print_type(entity.op.parameters[i]).data);
+							types.append(",");
+						}
+
+						push_error_scope(f, entity.syntax->op.fn, scope_id, FMT("operator '{}' already overloaded for types: {}", entity.name->str, types));
+						return false;
+					}
+				}
+			}
+
+			entity.flags = Flag_Complete;
+		}
+		break;
 		case Entity_Constant:
 		{
 			Array<Flat_Node>& flat_ast = entity.flat_syntax;

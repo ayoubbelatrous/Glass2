@@ -32,6 +32,7 @@ namespace Glass
 	String_Atom* keyword_continue;
 
 	String_Atom* keyword_sizeof;
+	String_Atom* keyword_operator;
 
 	void parser_init()
 	{
@@ -61,6 +62,7 @@ namespace Glass
 		keyword_continue = get_atom(String_Make("continue"));
 
 		keyword_sizeof = get_atom(String_Make("sizeof"));
+		keyword_operator = get_atom(String_Make("operator"));
 	}
 
 	inline static bool begins_with_alpha_alnum(const std::string_view& token)
@@ -612,6 +614,7 @@ namespace Glass
 			return nullptr;
 		}
 
+		Tk tk = current(s);
 		String_Atom* name = consume(s).name;
 
 		Ast_Node* node = allocate_node();
@@ -654,6 +657,25 @@ namespace Glass
 			if (node->token.type != Tk_StringLiteral)
 			{
 				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected literal"));
+				s.error = true;
+				return nullptr;
+			}
+		}
+		else if (name == keyword_operator)
+		{
+			node->token = tk;
+
+			node->type = Ast_Operator;
+			node->op._operator = consume(s);
+
+			node->op.fn = parse_expr(s);
+
+			if (s.error)
+				return nullptr;
+
+			if (!node->op.fn)
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
 				s.error = true;
 				return nullptr;
 			}
@@ -2009,6 +2031,16 @@ namespace Glass
 			Ast_Node* new_stmt = allocate_node();
 			*new_stmt = *stmt;
 			new_stmt->un.expr = copy_statement(stmt->un.expr);
+
+			return new_stmt;
+		}
+		break;
+		case Ast_Return:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+			if (new_stmt->un.expr)
+				new_stmt->un.expr = copy_statement(stmt->un.expr);
 
 			return new_stmt;
 		}

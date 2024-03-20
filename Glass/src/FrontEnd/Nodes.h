@@ -130,6 +130,8 @@ namespace Glass
 
 		Ast_Break,
 		Ast_Continue,
+
+		Ast_Operator,
 	};
 
 	enum Ast_Flags : u64
@@ -239,6 +241,12 @@ namespace Glass
 		Tk name;
 	};
 
+	struct Ast_Operator_Overload
+	{
+		Tk _operator;
+		Ast_Node* fn;
+	};
+
 	struct Ast_Node
 	{
 		Tk				token;
@@ -261,6 +269,7 @@ namespace Glass
 			Ast_Node_Func_Type	func_type;
 			Ast_Node_Cond		cond;
 			Ast_Ply			poly;
+			Ast_Operator_Overload op;
 		};
 	};
 }
