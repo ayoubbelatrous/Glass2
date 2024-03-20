@@ -8,7 +8,7 @@
 
 #define FMT(...) String_Make(fmt::format(__VA_ARGS__))
 
-#define DBG(x)
+#define DBG(x) x
 
 namespace Glass
 {
@@ -184,6 +184,7 @@ namespace Glass
 			Array_Add(flat_ast, { reference, scope_id });
 			break;
 		case Ast_Binary:
+		case Ast_Array:
 		{
 			flatten_syntax(&node->bin.lhs, flat_ast, scope_id);
 			flatten_syntax(&node->bin.rhs, flat_ast, scope_id);
@@ -254,12 +255,18 @@ namespace Glass
 		break;
 		case Ast_Ref:
 		case Ast_DeRef:
+		case Ast_Not:
 		{
 			flatten_syntax(&node->un.expr, flat_ast, scope_id);
 			Array_Add(flat_ast, { reference, scope_id });
 		}
 		break;
 		case Ast_Char:
+		case Ast_Break:
+		case Ast_Continue:
+		case Ast_Null:
+		case Ast_True:
+		case Ast_False:
 			Array_Add(flat_ast, { reference, scope_id });
 			break;
 		case Ast_Scope:
@@ -272,10 +279,18 @@ namespace Glass
 		break;
 		case Ast_If:
 		case Ast_While:
-		case Ast_For:
 			flatten_syntax(&node->cond.condition, flat_ast, scope_id);
 			Array_Add(flat_ast, { reference, scope_id });
 			flatten_syntax(&node->cond.body, flat_ast, scope_id);
+
+			if (node->cond._else)
+				flatten_syntax(&node->cond._else, flat_ast, scope_id);
+
+			break;
+		case Ast_For:
+			flatten_syntax(&node->cond.condition, flat_ast, scope_id);
+			Array_Add(flat_ast, { reference, scope_id });
+			flatten_syntax(&node->cond.body, flat_ast, node->cond.scope_id);
 			break;
 		case Ast_Type_Info:
 		{
@@ -283,6 +298,15 @@ namespace Glass
 			Array_Add(flat_ast, { reference, scope_id });
 		}
 		break;
+		case Ast_Return:
+
+			if (node->un.expr)
+			{
+				flatten_syntax(&node->un.expr, flat_ast, scope_id);
+			}
+
+			Array_Add(flat_ast, { reference, scope_id });
+			break;
 		case Ast_Function:
 		case Ast_Struct:
 			break;
@@ -308,34 +332,75 @@ namespace Glass
 		u64 type_flags = get_type_flags(to_type);
 		bool is_float = type_flags & TN_Float_Type;
 
-		if (expr_value.is_unsolid && !expr_value.is_unsolid_float && to_type == f.bool_Ty)
+		//GS_CORE_TRACE("{}", print_type(expr_value.type));
+
+		if (expr_value.is_unsolid_null && to_type->kind == Type_Pointer)
 		{
 			expr_value.type = to_type;
 		}
+		else
+		{
 
-		if (expr_value.is_unsolid && (type_flags & TN_Numeric_Type)) {
-
-			if (!(!is_float && expr_value.is_unsolid_float))
+			if (expr_value.is_unsolid && !expr_value.is_unsolid_float && to_type == f.bool_Ty)
 			{
 				expr_value.type = to_type;
+			}
 
-				if (!expr_value.is_unsolid_float && is_float) {
-					expr_value.value.f64 = (double)expr_value.value.s8;
-					return true;
+			if (expr_value.is_unsolid && expr_value.type == f.string_Ty) {
+				static GS_Type* cstr_type = f.u8_Ty->get_pointer();
+				if (to_type == cstr_type) {
+					expr_value.is_unsolid = false;
+					expr_value.type = cstr_type;
 				}
 			}
-		}
+			else if (expr_value.is_unsolid && (type_flags & TN_Numeric_Type)) {
 
-		if (expr_value.is_unsolid && expr_value.type == f.string_Ty) {
-			static GS_Type* cstr_type = f.u8_Ty->get_pointer();
-			if (to_type == cstr_type) {
-				expr_value.is_unsolid = false;
-				expr_value.type = cstr_type;
+				if (!(!is_float && expr_value.is_unsolid_float))
+				{
+					expr_value.type = to_type;
+
+					if (!expr_value.is_unsolid_float && is_float) {
+						expr_value.value.f64 = (double)expr_value.value.s8;
+						return true;
+					}
+				}
 			}
 		}
 
 		return false;
 	};
+
+	void get_poly_declarations(Ast_Node* node, int parameter_index, Array<Poly_Decl>& decls)
+	{
+		switch (node->type)
+		{
+		case Ast_Variable:
+		{
+			get_poly_declarations(node->var.type, parameter_index, decls);
+		}
+		break;
+		case Ast_Array_Type:
+		{
+			get_poly_declarations(node->array_type.elem, parameter_index, decls);
+		}
+		break;
+		case Ast_Pointer:
+		{
+			get_poly_declarations(node->un.expr, parameter_index, decls);
+		}
+		break;
+		case Ast_Poly:
+		{
+			Array_Add(decls, Poly_Decl{ node->poly.name.name, true, parameter_index });
+		}
+		break;
+		case Ast_Ident:
+			break;
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+	}
 
 	bool prewalk_stmt(Front_End& f, Ast_Node* stmt, int scope_id, int file_id)
 	{
@@ -383,6 +448,25 @@ namespace Glass
 					flatten_syntax(&stmt->var.assignment, struct_data_member.flat_syntax, scope_id);
 
 				insert_entity(f, struct_data_member, scope_id);
+			}
+			else if (stmt->var.is_constant && current_scope_type == Scope_Enum)
+			{
+				if (!already_decalared_error()) {
+					return false;
+				}
+
+				int enum_entity_id = f.scope_id_to_enum.at(scope_id);
+
+				Entity& enum_entity = get_entity(f, enum_entity_id);
+
+				int entity_id = insert_entity(f, make_entity(Entity_Enum_Member, stmt->token.name, stmt), scope_id);
+				Entity& entity = get_entity(f, entity_id);
+
+				flatten_syntax(&stmt->var.assignment, entity.flat_syntax, scope_id);
+
+				entity.enum_mem.enum_entity_id = enum_entity_id;
+				entity.enum_mem.previous_member = enum_entity.enm.previous_member;
+				enum_entity.enm.previous_member = entity_id;
 			}
 			else if (stmt->var.is_constant)
 			{
@@ -443,6 +527,10 @@ namespace Glass
 			if (stmt->token.name == f.keyword_TypeInfo) {
 				f.TypeInfo_Ty = get_type(struct_entity._struct.typename_id);
 				f.TypeInfo_entity_id = entity_id;
+			}
+
+			if (stmt->token.name == f.keyword_Any) {
+				f.Any_Ty = get_type(struct_entity._struct.typename_id);
 			}
 
 			for (size_t i = 0; i < stmt->_struct.body.stmts.count; i++)
@@ -543,6 +631,34 @@ namespace Glass
 				return false;
 			}
 
+			Array<Poly_Decl> poly_decls;
+
+			for (size_t i = 0; i < stmt->fn.parameters.count; i++)
+			{
+				Ast_Node* parameter = stmt->fn.parameters[i];
+				get_poly_declarations(parameter, i, poly_decls);
+			}
+
+			if (poly_decls.count)
+			{
+				int entity_id = insert_entity(f, make_entity(Entity_Poly_Function, stmt->token.name, stmt), scope_id);
+				Entity& entity = get_entity(f, entity_id);
+				entity.flags = Flag_Complete;
+
+				entity.poly_fn.poly_declarations = *(Array_UI<Poly_Decl>*) & poly_decls;
+				entity.poly_fn.parameter_count = stmt->fn.parameters.count;
+
+				for (size_t i = 0; i < stmt->fn.parameters.count; i++)
+				{
+					Ast_Node* parameter = stmt->fn.parameters[i];
+
+					if (parameter->var.is_varargs)
+						entity.poly_fn.has_varargs = true;
+				}
+
+				return true;
+			}
+
 			int entity_id = insert_entity(f, make_entity(Entity_Function, stmt->token.name, stmt), scope_id);
 			int func_scope_id = insert_scope(f, Scope_Function, scope_id, file_id, entity_id, nullptr);
 
@@ -567,6 +683,11 @@ namespace Glass
 					return false;
 				}
 
+				if (parameter->var.is_varargs)
+				{
+					entity.fn.has_varargs = true;
+				}
+
 				int param_entity_id = insert_entity(f, make_entity(Entity_Variable, parameter->token.name, parameter), func_scope_id);
 				Entity& param_entity = get_entity(f, param_entity_id);
 
@@ -574,6 +695,8 @@ namespace Glass
 				{
 					flatten_syntax(&parameter->var.type, param_entity.flat_syntax, func_scope_id);
 				}
+
+				param_entity.var.parameter = true;
 
 				insert_dep(f, param_entity_id, entity.deps);
 				Array_Add(entity.fn.parameters, param_entity_id);
@@ -611,6 +734,9 @@ namespace Glass
 		case Ast_While:
 		{
 			prewalk_stmt(f, stmt->cond.body, scope_id, file_id);
+
+			if (stmt->cond._else)
+				prewalk_stmt(f, stmt->cond._else, scope_id, file_id);
 		}
 		break;
 		case Ast_For:
@@ -624,6 +750,15 @@ namespace Glass
 		case Ast_Binary:
 		case Ast_Call:
 		case Ast_Type_Info:
+		case Ast_Char:
+		case Ast_Break:
+		case Ast_Continue:
+		case Ast_Null:
+		case Ast_True:
+		case Ast_False:
+		case Ast_Array:
+		case Ast_Member:
+		case Ast_Return:
 			break;
 		default:
 			GS_ASSERT_UNIMPL();
@@ -633,7 +768,245 @@ namespace Glass
 		return true;
 	}
 
-	bool type_check_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index)
+	bool type_check_poly_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend)
+	{
+		Ast_Node* node = *reference;
+		Ast_Node_Call& call = node->call;
+
+		Expr_Value& callee = expr_values[call.callee];
+
+		Entity& fn = get_entity(f, callee.referenced_entity);
+
+		if (call.args.count < fn.poly_fn.parameter_count - (int)fn.poly_fn.has_varargs)
+		{
+			push_error_scope(f, node, scope_id, FMT("too few argument for call: (needed: {}, given: {})", fn.poly_fn.parameter_count, call.args.count));
+			return {};
+		}
+
+		if (call.args.count > fn.poly_fn.parameter_count && !fn.poly_fn.has_varargs)
+		{
+			push_error_scope(f, node->call.args[node->call.args.count - 1], scope_id, FMT("too many argument for call: (needed: {}, given: {})", fn.poly_fn.parameter_count, call.args.count));
+			return {};
+		}
+
+		std::map<String_Atom*, GS_Type*> overloads;
+
+		Ast_Node* syntax = fn.syntax;
+
+		for (size_t i = 0; i < syntax->fn.parameters.count; i++)
+		{
+			Ast_Node* parameter = syntax->fn.parameters[i];
+		}
+
+		for (size_t i = 0; i < fn.poly_fn.poly_declarations.count; i++)
+		{
+			Poly_Decl& declaration = fn.poly_fn.poly_declarations[i];
+			Ast_Node* parameter = syntax->fn.parameters[declaration.parameter_index];
+
+			Ast_Node* argument = call.args[declaration.parameter_index];
+			Expr_Value& arg = expr_values[argument];
+
+			Ast_Node* type_syntax = parameter->var.type;
+			GS_Type* match = arg.type;
+
+			bool solved = false;
+			while (!solved)
+			{
+				switch (type_syntax->type)
+				{
+				case Ast_Poly:
+				{
+					if (type_syntax->poly.name.name == declaration.name)
+					{
+						solved = true;
+					}
+				}
+				break;
+				case Ast_Pointer:
+				{
+					if (match->kind != Type_Pointer)
+					{
+						push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' mismatching levels of indirection", declaration.name->str));
+						return {};
+					}
+
+					match = reduce_indirection(match);
+
+					type_syntax = type_syntax->un.expr;
+				}
+				break;
+				case Ast_Array_Type:
+				{
+					if (type_syntax->array_type.dynamic)
+					{
+						if (match->kind != Type_Dyn_Array)
+						{
+							push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' needed [..]", declaration.name->str));
+							return {};
+						}
+
+						match = match->dyn_array.element_type;
+						type_syntax = type_syntax->array_type.elem;
+					}
+					else
+					{
+						GS_ASSERT_UNIMPL();
+					}
+				}
+				break;
+				case Ast_Ident:
+					break;
+				default:
+					GS_ASSERT_UNIMPL();
+					break;
+				}
+			}
+
+			GS_CORE_TRACE("solved poly declaration: '{}' -> '{}'", declaration.name->str, print_type(match));
+
+			overloads[declaration.name] = match;
+		}
+
+		int cache_entity_id = 0;
+
+		for (size_t i = 0; i < fn.poly_fn.instances.count; i++)
+		{
+			Poly_Instance& instance = fn.poly_fn.instances[i];
+
+			bool equal = true;
+
+			for (size_t i = 0; i < instance.overloads.count; i++)
+			{
+				auto& [name, type] = instance.overloads[i];
+
+				if (overloads[name] != type)
+				{
+					equal = false;
+					break;
+				}
+			}
+
+			if (equal)
+			{
+				cache_entity_id = instance.entity_id;
+			}
+		}
+
+		if (!cache_entity_id)
+		{
+			std::string std_mangled_name = fn.name->str.data;
+
+			for (auto& o : overloads)
+			{
+				std_mangled_name.append(" ");
+				std_mangled_name.append(print_type(o.second).data);
+				std_mangled_name.append(" ");
+			}
+
+			String mangled_name = String_Make(std_mangled_name);
+
+			syntax->token.name = get_atom(mangled_name);
+
+			int phony_scope = insert_scope(f, Scope_Function, find_filescope_parent(f, scope_id), fn.file_id, 0, nullptr);
+
+			for (auto& o : overloads)
+			{
+				Entity& constant = get_entity(f, insert_entity(f, make_entity(Entity_Constant, o.first, nullptr), phony_scope));
+				constant.cnst.value.s8 = get_type_index(o.second);
+				constant.type = f.Type_Ty;
+				constant.flags = Flag_Complete;
+			}
+
+			Ast_Node* new_syntax = copy_statement(syntax);
+
+			for (size_t i = 0; i < new_syntax->fn.parameters.count; i++)
+			{
+				unpoly_statement(new_syntax->fn.parameters[i]);
+			}
+
+			if (!prewalk_stmt(f, new_syntax, phony_scope, fn.file_id)) {
+				return false;
+			}
+
+			int poly_fn_id = find_entity(f, get_atom(mangled_name), phony_scope);
+			ASSERT(poly_fn_id);
+
+			Poly_Instance new_instance = {};
+			new_instance.entity_id = poly_fn_id;
+
+			for (auto& o : overloads)
+			{
+				Array_Add(new_instance.overloads, { o.first, o.second });
+			}
+
+			Array_Add(fn.poly_fn.instances, new_instance);
+
+			insert_dep(f, poly_fn_id, deps);
+
+			suspend = true;
+
+			return true;
+		}
+		else
+		{
+			Entity& fn_instance = get_entity(f, cache_entity_id);
+
+			GS_Type* varargs_type = nullptr;
+
+			GS_Type* signature = fn_instance.fn.signature;
+
+			bool varargs = false;
+
+			varargs = fn_instance.fn.has_varargs;
+
+			if (varargs)
+			{
+				varargs_type = signature->proc.params[fn_instance.fn.parameters.count - 1]->dyn_array.element_type;
+			}
+
+			for (int i = 0; i < call.args.count; i++)
+			{
+				Ast_Node* argument = call.args[i];
+				Expr_Value& value = expr_values[argument];
+
+				GS_Type* param_type = nullptr;
+
+				if (i < signature->proc.params.count - (int)varargs) {
+					param_type = signature->proc.params[i];
+				}
+
+				if (!param_type && varargs)
+				{
+					param_type = varargs_type;
+				}
+
+				if (param_type)
+				{
+					try_promote(f, param_type, value);
+
+					if (param_type != f.Any_Ty && value.type != param_type) {
+						push_error_scope(f, argument, scope_id, FMT("argument type mismatch: (needed: '{}', given: '{}')", print_type(param_type), print_type(value.type)));
+						return false;
+					}
+				}
+			}
+
+			Expr_Value& my_value = expr_values[node];
+			my_value.type = fn_instance.fn.signature->proc.return_type;
+
+			my_value.call.is_proc_call = true;
+			my_value.call.proc_id = fn_instance.fn.proc_id;
+			my_value.call.callee_signature = fn_instance.fn.signature;
+			my_value.call.varargs = fn_instance.fn.has_varargs;
+			my_value.call.varargs_type = fn_instance.fn.signature->proc.params[fn_instance.fn.parameters.count - 1]->dyn_array.element_type;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	bool type_check_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend)
 	{
 		Ast_Node* node = *reference;
 		Ast_Node_Call& call = node->call;
@@ -643,23 +1016,38 @@ namespace Glass
 		ASSERT(callee.referenced_entity);
 
 		Entity* fn = &get_entity(f, callee.referenced_entity);
+
+		if (fn->kind == Entity_Poly_Function)
+		{
+			return type_check_poly_call(f, reference, scope_id, expr_values, index, deps, suspend);
+		}
+
 		int fn_id = callee.referenced_entity;
 		GS_Type* signature = fn->fn.signature;
 
 		bool c_varargs = false;
+		bool varargs = false;
 
 		if (fn)
 		{
 			c_varargs = fn->fn.c_varargs;
+			varargs = fn->fn.has_varargs;
 		}
 
-		if (call.args.count < signature->proc.params.count)
+		GS_Type* varargs_type = nullptr;
+
+		if (varargs)
+		{
+			varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
+		}
+
+		if (call.args.count < signature->proc.params.count - (int)varargs)
 		{
 			push_error_scope(f, node, scope_id, FMT("too few argument for call: (needed: {}, given: {}): {}", signature->proc.params.count, call.args.count, print_type(signature)));
 			return {};
 		}
 
-		if (call.args.count > signature->proc.params.count && !c_varargs)
+		if (call.args.count > signature->proc.params.count && !c_varargs && !varargs)
 		{
 			push_error_scope(f, node->call.args[node->call.args.count - 1], scope_id, FMT("too many argument for call: (needed: {}, given: {}): {}", signature->proc.params.count, call.args.count, print_type(signature)));
 			return {};
@@ -670,18 +1058,36 @@ namespace Glass
 			Ast_Node* argument = call.args[i];
 			Expr_Value& value = expr_values[argument];
 
-			if (i < signature->proc.params.count) {
+			GS_Type* param_type = nullptr;
 
-				GS_Type* param_type = signature->proc.params[i];
+			if (i < signature->proc.params.count - (int)varargs) {
+				param_type = signature->proc.params[i];
+			}
 
+			if (!param_type && varargs)
+			{
+				param_type = varargs_type;
+			}
+
+			if (param_type)
+			{
 				try_promote(f, param_type, value);
 
-				if (value.type != param_type) {
+				if (param_type != f.Any_Ty && value.type != param_type) {
 					push_error_scope(f, argument, scope_id, FMT("argument type mismatch: (needed: '{}', given: '{}')", print_type(param_type), print_type(value.type)));
 					return false;
 				}
 			}
 		}
+
+		Expr_Value& my_value = expr_values[node];
+		my_value.type = signature->proc.return_type;
+
+		my_value.call.is_proc_call = true;
+		my_value.call.proc_id = fn->fn.proc_id;
+		my_value.call.callee_signature = signature;
+		my_value.call.varargs = fn->fn.has_varargs;
+		my_value.call.varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
 
 		return true;
 	}
@@ -697,7 +1103,7 @@ namespace Glass
 		return get_type_at(value.value.s8);
 	}
 
-	bool type_check_pass(Front_End& f, Array<Flat_Node>& flat_ast, int scope_id, Expr_Val_Map& expr_values, int& index, Entity_Deps& deps, bool const_eval)
+	bool type_check_pass(Front_End& f, Array<Flat_Node>& flat_ast, int scope_id, Expr_Val_Map& expr_values, int& index, Entity_Deps& deps, bool const_eval, GS_Type* return_type = nullptr)
 	{
 		for (; index < flat_ast.count; index++)
 		{
@@ -767,7 +1173,7 @@ namespace Glass
 					my_value.type = f.Type_Ty;
 					my_value.value.s4 = get_type_index(get_type(ident_entity.enm.typename_id));
 				}
-				else if (ident_entity.kind == Entity_Function)
+				else if (ident_entity.kind == Entity_Function || ident_entity.kind == Entity_Poly_Function)
 				{
 					my_value.type = f.Type_Ty;
 					my_value.value.s4 = get_type_index(ident_entity.fn.signature);
@@ -832,7 +1238,7 @@ namespace Glass
 					try_promote(f, most_complete_type, rhs_value);
 				}
 
-				if (lhs_value.type != rhs_value.type) {
+				if (lhs_value.type != f.Any_Ty && lhs_value.type != rhs_value.type) {
 					push_error_scope(f, node, scope_id, FMT("type mismatch: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return {};
 				}
@@ -842,9 +1248,9 @@ namespace Glass
 				type = lhs_value.type;
 				auto type_flags = get_type_flags(type);
 
-				bool is_assign = op == Op_Assign;
+				bool is_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
 
-				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div;
+				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div || op == Op_BitAnd || op == Op_BitOr || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
 				bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater;
 
 				bool is_integer = !(type_flags & TN_Float_Type);
@@ -898,7 +1304,6 @@ namespace Glass
 						}
 						break;
 					case Op_Div:
-
 						if (is_integer)
 						{
 							if (is_signed)
@@ -911,8 +1316,17 @@ namespace Glass
 							value.f64 = lhs_value.value.f64 / rhs_value.value.f64;
 						}
 						break;
+					case Op_BitAnd:
+					{
+						value.s8 = lhs_value.value.s8 & rhs_value.value.s8;
+					}
+					break;
+					case Op_BitOr:
+					{
+						value.s8 = lhs_value.value.s8 | rhs_value.value.s8;
+					}
+					break;
 					case Op_Eq:
-
 						if (is_integer)
 						{
 							value.us1 = lhs_value.value.us8 == rhs_value.value.us8;
@@ -1026,9 +1440,14 @@ namespace Glass
 			break;
 			case Ast_Call:
 			{
-				if (!type_check_call(f, ref.reference, scope_id, expr_values, index)) {
+				bool suspend = false;
+
+				if (!type_check_call(f, ref.reference, scope_id, expr_values, index, deps, suspend)) {
 					return false;
 				}
+
+				if (suspend)
+					return true;
 			}
 			break;
 			case Ast_Variable:
@@ -1066,7 +1485,7 @@ namespace Glass
 
 						try_promote(f, entity.type, assignment);
 
-						if (entity.type != assignment.type)
+						if (entity.type != f.Any_Ty && entity.type != assignment.type)
 						{
 							push_error_scope(f, entity.syntax->var.type, scope_id, FMT("type mismatch in assignment '{}' = '{}'", print_type(entity.type), print_type(assignment.type)));
 							return false;
@@ -1152,6 +1571,13 @@ namespace Glass
 						my_value.member.is_ptr_access = true;
 					}
 
+					if (type->kind == Type_Array) {
+						type = f.Array_Ty;
+					}
+					else if (type->kind == Type_Dyn_Array) {
+						type = f.Array_Ty;
+					}
+
 					if (get_type_flags(type) & TN_Struct_Type)
 					{
 						int struct_entity_id = f.typename_to_struct.at(type->basic.type_name_id);
@@ -1173,6 +1599,7 @@ namespace Glass
 							return {};
 						}
 
+						my_value.member.struct_type = type;
 						my_value.type = member_entity.type;
 						my_value.value.s4 = member_entity.struct_mem.index;
 					}
@@ -1184,9 +1611,40 @@ namespace Glass
 				}
 			}
 			break;
-			case Ast_Cast:
+			case Ast_Array:
 			{
 				ASSERT(!const_eval);
+
+				Ast_Node_Binary& bin = node->bin;
+
+				Expr_Value& expr = expr_values[bin.lhs];
+				Expr_Value& index = expr_values[bin.rhs];
+
+				if (expr.type != f.string_Ty && expr.type->kind != Type_Pointer && expr.type->kind != Type_Array && expr.type->kind != Type_Dyn_Array)
+				{
+					push_error_scope(f, bin.lhs, scope_id, FMT("type '{}' does not support array subscript", print_type(expr.type)));
+					return false;
+				}
+
+				if (!(get_type_flags(index.type) & TN_Numeric_Type) || get_type_flags(index.type) & TN_Float_Type)
+				{
+					push_error_scope(f, bin.rhs, scope_id, FMT("expression must have numeric integer type instead it has: '{}'", print_type(index.type)));
+					return false;
+				}
+
+				if (expr.type == f.string_Ty)
+					my_value.type = f.u8_Ty;
+				else if (expr.type->kind == Type_Pointer)
+					my_value.type = expr.type->pointer.pointee;
+				else if (expr.type->kind == Type_Array)
+					my_value.type = expr.type->array.element_type;
+				else if (expr.type->kind == Type_Dyn_Array)
+					my_value.type = expr.type->dyn_array.element_type;
+			}
+			break;
+			case Ast_Cast:
+			{
+				//ASSERT(!const_eval);
 
 				Ast_Node_Binary& bin = node->bin;
 
@@ -1196,17 +1654,92 @@ namespace Glass
 				GS_Type* to_type = expr_get_type(f, scope_id, bin.lhs, expr_values[bin.lhs]);
 				GS_Type* from_type = expr.type;
 
+				u64 to_type_flags = get_type_flags(to_type);
+				u64 from_type_flags = get_type_flags(from_type);
+
 				bool to_is_pointer = to_type->kind == Type_Pointer;
 				bool from_is_pointer = from_type->kind == Type_Pointer;
 
-				if (to_is_pointer && from_is_pointer)
+				bool to_is_base = to_type_flags & TN_Base_Type;
+				bool from_is_base = from_type_flags & TN_Base_Type;
+
+				bool to_is_signed = !(to_type_flags & TN_Unsigned_Type);
+				bool from_is_signed = !(from_type_flags & TN_Unsigned_Type);
+
+				bool to_is_float = to_type_flags & TN_Float_Type;
+				bool from_is_float = from_type_flags & TN_Float_Type;
+
+				bool to_is_int = !to_is_float;
+				bool from_is_int = !from_is_float;
+
+				u64 to_size = to_type->size();
+				u64 from_size = from_type->size();
+
+				my_value.type = to_type;
+
+				if (to_type == f.bool_Ty && from_is_base)
 				{
-					my_value.type = to_type;
+					if (to_is_int)
+					{
+						my_value.cast_type = Il_Cast_IntTrunc;
+					}
+					else
+					{
+						my_value.cast_type = Il_Cast_Float2Int;
+					}
+				}
+				else if (to_is_int && from_is_int)
+				{
+					if (to_size >= from_size)
+					{
+						if (to_is_signed)
+							my_value.cast_type = Il_Cast_IntSExt;
+						else
+							my_value.cast_type = Il_Cast_IntZExt;
+					}
+					else
+					{
+						my_value.cast_type = Il_Cast_IntTrunc;
+					}
+				}
+				else if (to_is_float && from_is_float)
+				{
+					if (to_size >= from_size)
+					{
+						my_value.cast_type = Il_Cast_FloatExt;
+					}
+					else
+					{
+						my_value.cast_type = Il_Cast_FloatTrunc;
+					}
+				}
+				else if (to_is_pointer && from_is_pointer)
+				{
 					my_value.cast_type = Il_Cast_Ptr;
 				}
 				else
 				{
 					GS_ASSERT_UNIMPL();
+				}
+
+				if (const_eval)
+				{
+					switch (my_value.cast_type)
+					{
+					case Il_Cast_Ptr:
+					{
+						my_value.value = expr.value;
+					}
+					break;
+					case Il_Cast_IntSExt:
+					{
+						my_value.value = expr.value;
+					}
+					break;
+					default:
+						GS_ASSERT_UNIMPL();
+						break;
+					}
 				}
 			}
 			break;
@@ -1219,6 +1752,38 @@ namespace Glass
 				Expr_Value& expr = expr_values[un.expr];
 
 				my_value.type = expr.type->get_pointer();
+			}
+			break;
+			case Ast_DeRef:
+			{
+				ASSERT(!const_eval);
+
+				Ast_Node_Unary& un = node->un;
+				Expr_Value& expr = expr_values[un.expr];
+
+				if (expr.type->kind != Type_Pointer) {
+					push_error_scope(f, node->un.expr, scope_id, FMT("expression must have pointer type", print_type(expr.type)));
+					return false;
+				}
+
+				my_value.type = reduce_indirection(expr.type);
+			}
+			break;
+			case Ast_Not:
+			{
+				ASSERT(!const_eval);
+
+				Ast_Node_Unary& un = node->un;
+				Expr_Value& expr = expr_values[un.expr];
+
+				u64 type_flags = get_type_flags(expr.type);
+
+				if (expr.type != f.bool_Ty && (!(type_flags & TN_Numeric_Type) || type_flags & TN_Float_Type)) {
+					push_error_scope(f, node->un.expr, scope_id, FMT("expression must have bool or integer type", print_type(expr.type)));
+					return false;
+				}
+
+				my_value.type = f.bool_Ty;
 			}
 			break;
 			case Ast_Char:
@@ -1260,14 +1825,32 @@ namespace Glass
 				my_value.is_unsolid = true;
 			}
 			break;
+			case Ast_Null:
+			{
+				my_value.value.s8 = 0;
+				my_value.type = f.void_Ty->get_pointer();
+				my_value.is_unsolid = true;
+				my_value.is_unsolid_null = true;
+			}
+			break;
 			case Ast_If:
 			case Ast_While:
 			{
 				Expr_Value& expr = expr_values[node->cond.condition];
 
+				u64 expr_type_flags = get_type_flags(expr.type);
+
 				try_promote(f, f.bool_Ty, expr);
 
-				if (expr.type != f.bool_Ty) {
+				bool type_is_bool = expr.type == f.bool_Ty;
+
+				if (!type_is_bool && ((expr_type_flags & TN_Base_Type) && !(expr_type_flags & TN_Float_Type)) || expr.type->kind == Type_Pointer)
+				{
+					my_value.promote_to_bool = true;
+					type_is_bool = true;
+				}
+
+				if (!type_is_bool) {
 					push_error_scope(f, node->cond.condition, scope_id, FMT("expression must be of type 'bool': {}", print_type(expr.type)));
 					return false;
 				}
@@ -1295,7 +1878,7 @@ namespace Glass
 					else if (cond.type->kind == Type_Dyn_Array)
 						my_value._for.it_type = cond.type->dyn_array.element_type;
 					else if (cond.type == f.string_Ty)
-						my_value._for.it_type = f.c_str_Ty;
+						my_value._for.it_type = f.u8_Ty;
 
 					my_value._for.it_index_type = f.u64_Ty;
 				}
@@ -1334,6 +1917,36 @@ namespace Glass
 				my_value.type = f.TypeInfo_Ty->get_pointer();
 			}
 			break;
+			case Ast_Return:
+			{
+				if ((!return_type || return_type == f.void_Ty) && node->un.expr)
+				{
+					push_error_scope(f, node, scope_id, FMT("return value not expected"));
+					return false;
+				}
+
+				if (return_type != f.void_Ty && !node->un.expr)
+				{
+					push_error_scope(f, node, scope_id, FMT("return value expected"));
+					return false;
+				}
+
+				if (return_type != f.void_Ty)
+				{
+					Expr_Value& expr = expr_values[node->un.expr];
+
+					try_promote(f, return_type, expr);
+
+					if (expr.type != return_type) {
+						push_error_scope(f, node->un.expr, scope_id, FMT("return value type mismatch: (needed: '{}', given: '{}')", print_type(return_type), print_type(expr.type)));
+						return false;
+					}
+				}
+			}
+			break;
+			case Ast_Break:
+			case Ast_Continue:
+				break;
 			default:
 				GS_ASSERT_UNIMPL();
 				break;
@@ -1351,9 +1964,22 @@ namespace Glass
 		GS_Type* it_index_type;
 	};
 
-	bool code_gen_pass(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, bool lval = false);
+	struct Control_Flow_Ctx
+	{
+		Array<int> breaks;
+		Array<int> continues;
+	};
 
-	Iterator_Result iterator_code_gen(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, int before_condition_block, int condition_block, int after_body_block)
+	struct Code_Gen_Ctx
+	{
+		GS_Type* return_type;
+		int return_var_code_id;
+		Array<int> return_branches;
+	};
+
+	bool code_gen_pass(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, bool lval = false, Control_Flow_Ctx* cf_ctx = nullptr, Code_Gen_Ctx* ctx = nullptr);
+
+	Iterator_Result iterator_code_gen(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, int before_condition_block, int condition_block, int after_body_block, int body_block)
 	{
 		Expr_Value& my_value = expr_values[node];
 
@@ -1422,7 +2048,7 @@ namespace Glass
 				it_type = f.u8_Ty;
 			}
 
-			GS_Type* it_index_type = f.u64_Ty;
+			GS_Type* it_index_type = f.i64_Ty;
 
 			il_set_insert_point(proc, before_condition_block);
 
@@ -1439,7 +2065,7 @@ namespace Glass
 			if (expr.type->kind == Type_Array)
 				end = il_insert_constant(proc, (void*)expr.type->array.size, it_index_type);
 			else if (expr.type == f.string_Ty) {
-				Il_IDX sep = il_insert_sep(proc, f.Array_Ty, 0, il_insert_cast(proc, Il_Cast_Ptr, array_ty_ptr, string_ty_ptr, expr.code_id));
+				Il_IDX sep = il_insert_sep(proc, f.string_Ty, 0, il_insert_cast(proc, Il_Cast_Ptr, array_ty_ptr, string_ty_ptr, expr.code_id));
 				end = il_insert_load(proc, it_index_type, sep);
 			}
 			else
@@ -1448,6 +2074,12 @@ namespace Glass
 			}
 
 			Il_IDX it_index_load = il_insert_load(proc, it_index_type, it_index_alloca);
+
+			Il_IDX cmp_node_idx = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_Lesser, it_index_type, it_index_load, end);
+
+			il_set_insert_point(proc, body_block);
+
+			it_index_load = il_insert_load(proc, it_index_type, it_index_alloca);
 
 			Il_IDX array_ptr;
 
@@ -1464,10 +2096,8 @@ namespace Glass
 				array_ptr = il_insert_load(proc, it_type_pointer, il_insert_sep(proc, f.Array_Ty, 1, expr.code_id));
 			}
 
-			Il_IDX array_element_ptr = il_inser_aep(proc, it_type, array_ptr, it_index_load);
+			Il_IDX array_element_ptr = il_insert_aep(proc, it_type, array_ptr, it_index_load);
 			il_insert_store(proc, it_type, it_alloca, il_insert_load(proc, it_type, array_element_ptr));
-
-			Il_IDX cmp_node_idx = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_Lesser, it_index_type, it_index_load, end);
 
 			il_set_insert_point(proc, after_body_block);
 
@@ -1490,7 +2120,32 @@ namespace Glass
 		return {};
 	}
 
-	bool code_gen_pass(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, bool lval)
+	int convert_to_any(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc) {
+
+		Expr_Value& expr = expr_values[node];
+
+		int lvalue = expr.code_id;
+
+		if (!expr.lvalue)
+		{
+			int lvalue_alloca = il_insert_alloca(proc, expr.type);
+			il_insert_store(proc, expr.type, lvalue_alloca, expr.code_id);
+			lvalue = lvalue_alloca;
+		}
+
+		Il_IDX struct_members[2];
+
+		struct_members[0] = il_insert_constant(proc, (void*)get_type_index(expr.type), f.Type_Ty);
+		struct_members[1] = lvalue;
+
+		return il_insert_si(proc, f.Any_Ty, Array_View((Il_IDX*)struct_members, 2));
+	}
+
+	int convert_to_bool(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc) {
+		return 0;
+	}
+
+	bool code_gen_pass(Front_End& f, int scope_id, Ast_Node* node, Expr_Val_Map& expr_values, Il_Proc& proc, bool lval, Control_Flow_Ctx* cf_ctx, Code_Gen_Ctx* ctx)
 	{
 		Expr_Value& my_value = expr_values[node];
 
@@ -1550,6 +2205,7 @@ namespace Glass
 				string_code_id = il_insert_si(proc, type, Array_View((Il_IDX*)struct_members, 2));
 
 				if (lval) {
+					my_value.lvalue = true;
 					Il_IDX lvalue_alloca = il_insert_alloca(proc, type);
 					il_insert_store(proc, type, lvalue_alloca, string_code_id);
 					string_code_id = lvalue_alloca;
@@ -1562,41 +2218,167 @@ namespace Glass
 		case Ast_Call:
 		{
 			Ast_Node_Call& call = node->call;
-			Expr_Value& callee = expr_values[call.callee];
 
-			ASSERT(callee.referenced_entity);
+			GS_Type* signature = my_value.call.callee_signature;
 
-			Entity* fn = &get_entity(f, callee.referenced_entity);
-			int fn_id = callee.referenced_entity;
-			GS_Type* signature = fn->fn.signature;
+			bool varargs = my_value.call.varargs;
 
 			Array<int> arguments;
 			Array<GS_Type*> argument_types;
 			Array<GS_Type*> code_argument_types;
 
-			for (int i = 0; i < call.args.count; i++)
+			GS_Type* varargs_type = nullptr;
+
+			if (varargs)
+			{
+				varargs_type = signature->proc.params[signature->proc.params.count - 1];
+			}
+
+			int arg_count = call.args.count;
+
+			GS_Type* return_type = signature->proc.return_type;
+
+			bool is_aggr_return = is_type_aggr(return_type);
+
+			int return_alloca = -1;
+
+			if (is_aggr_return)
+			{
+				return_alloca = il_insert_alloca(proc, return_type);
+				Array_Add(code_argument_types, return_type->get_pointer());
+				Array_Add(arguments, return_alloca);
+				return_type = f.void_Ty;
+			}
+
+			if (varargs)
+			{
+				arg_count = signature->proc.params.count - 1;
+			}
+
+			for (int i = 0; i < arg_count; i++)
 			{
 				Ast_Node* argument = call.args[i];
 
 				Expr_Value& value = expr_values[argument];
 
-				code_gen_pass(f, scope_id, argument, expr_values, proc, is_type_aggr(value.type));
+				GS_Type* arg_type = value.type;
+				int arg_code_id;
+				bool is_lvalue;
+				bool is_any = false;
 
-				if (is_type_aggr(value.type)) {
-					Array_Add(code_argument_types, value.type->get_pointer());
-					Array_Add(arguments, value.code_id);
+				if (i < signature->proc.params.count) {
+
+					GS_Type* param_type = signature->proc.params[i];
+
+					if (param_type == f.Any_Ty && value.type != f.Any_Ty) {
+						is_any = true;
+						code_gen_pass(f, scope_id, argument, expr_values, proc, true);
+						int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
+
+						arg_type = f.Any_Ty;
+						arg_code_id = il_insert_alloca(proc, f.Any_Ty);
+						il_insert_store(proc, f.Any_Ty, arg_code_id, as_any_code_id);
+
+						is_lvalue = true;
+					}
+				}
+
+				if (!is_any)
+				{
+					code_gen_pass(f, scope_id, argument, expr_values, proc, is_type_aggr(value.type));
+					is_lvalue = value.lvalue;
+					arg_code_id = value.code_id;
+				}
+
+				if (is_type_aggr(arg_type)) {
+
+					ASSERT(is_lvalue);
+
+					Array_Add(code_argument_types, arg_type->get_pointer());
+					Array_Add(arguments, arg_code_id);
 				}
 				else
 				{
-					Array_Add(code_argument_types, value.type);
-					Array_Add(arguments, value.code_id);
+					if (is_lvalue) {
+						arg_code_id = il_insert_load(proc, arg_type, arg_code_id);
+					}
+
+					Array_Add(code_argument_types, arg_type);
+					Array_Add(arguments, arg_code_id);
 				}
 
-
-				Array_Add(argument_types, value.type);
+				Array_Add(argument_types, arg_type);
 			}
 
-			my_value.code_id = il_insert_call(proc, get_proc_type(signature->proc.return_type, code_argument_types), arguments, fn->fn.proc_id);
+			if (varargs)
+			{
+				Il_IDX struct_members[2];
+
+				int num_var_args = call.args.count - (signature->proc.params.count - 1);
+
+				Const_Union count_const;
+				count_const.us8 = num_var_args;
+
+				int data_code_id = -1;
+
+				if (num_var_args)
+				{
+					Array<Il_IDX> elements;
+
+					for (size_t i = (signature->proc.params.count - 1); i < num_var_args + signature->proc.params.count - 1; i++)
+					{
+						Ast_Node* argument = call.args[i];
+						Expr_Value& value = expr_values[argument];
+
+						if (varargs_type == f.Any_Ty && value.type != f.Any_Ty) {
+							code_gen_pass(f, scope_id, argument, expr_values, proc, true);
+							int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
+
+							Array_Add(elements, (Il_IDX)as_any_code_id);
+						}
+						else
+						{
+							code_gen_pass(f, scope_id, argument, expr_values, proc);
+							Array_Add(elements, (Il_IDX)value.code_id);
+						}
+					}
+
+					GS_Type* array_type = varargs_type->get_array(num_var_args);
+
+					int ai = il_insert_ai(proc, array_type, elements);
+					data_code_id = il_insert_alloca(proc, array_type);
+					il_insert_store(proc, array_type, data_code_id, ai);
+				}
+				else
+				{
+					data_code_id = il_insert_constant(proc, nullptr, f.void_Ty->get_pointer());
+				}
+
+				struct_members[0] = il_insert_constant(proc, count_const, f.u64_Ty);
+				struct_members[1] = data_code_id;
+
+				int array_code_id = il_insert_si(proc, f.Array_Ty, Array_View((Il_IDX*)struct_members, 2));
+
+				int lvalue_alloca = il_insert_alloca(proc, f.Array_Ty);
+				il_insert_store(proc, f.Array_Ty, lvalue_alloca, array_code_id);
+
+				Array_Add(code_argument_types, f.Array_Ty->get_pointer());
+				Array_Add(arguments, lvalue_alloca);
+			}
+
+			my_value.code_id = il_insert_call(proc, get_proc_type(return_type, code_argument_types), arguments, my_value.call.proc_id);
+
+			if (is_aggr_return)
+			{
+				my_value.code_id = return_alloca;
+
+				my_value.lvalue = lval;
+
+				if (!lval)
+				{
+					my_value.code_id = il_insert_load(proc, signature->proc.return_type, my_value.code_id);
+				}
+			}
 		}
 		break;
 		case Ast_Numeric:
@@ -1612,15 +2394,48 @@ namespace Glass
 			Expr_Value& lhs = expr_values[node->bin.lhs];
 			Expr_Value& rhs = expr_values[node->bin.rhs];
 
+			bool is_op_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
+
 			if (op == Op_Assign)
 			{
-				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
-				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
-
 				Expr_Value& lhs = expr_values[node->bin.lhs];
 				Expr_Value& rhs = expr_values[node->bin.rhs];
 
+				bool is_any_assign = lhs.type == f.Any_Ty && rhs.type != f.Any_Ty;
+
+				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
+				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc, is_any_assign);
+
+				if (is_any_assign)
+				{
+					rhs.code_id = convert_to_any(f, scope_id, node->bin.rhs, expr_values, proc);
+				}
+
 				il_insert_store(proc, my_value.type, lhs.code_id, rhs.code_id);
+			}
+			else if (is_op_assign)
+			{
+				Expr_Value& lhs = expr_values[node->bin.lhs];
+				Expr_Value& rhs = expr_values[node->bin.rhs];
+
+				code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc, true);
+				code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
+
+				Il_Node_Type op_type;
+
+				switch (op)
+				{
+				case Op_AddAssign: op_type = Il_Add; break;
+				case Op_SubAssign: op_type = Il_Sub; break;
+				case Op_MulAssign: op_type = Il_Mul; break;
+				case Op_DivAssign: op_type = Il_Div; break;
+				default:
+					GS_ASSERT_UNIMPL();
+					break;
+				}
+
+				int value_code_id = il_insert_math_op(proc, my_value.type, op_type, il_insert_load(proc, my_value.type, lhs.code_id), rhs.code_id);
+				il_insert_store(proc, my_value.type, lhs.code_id, value_code_id);
 			}
 			else if (my_value.is_unsolid) {
 				my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
@@ -1642,6 +2457,8 @@ namespace Glass
 					case Op_Sub: op_type = Il_Sub; break;
 					case Op_Mul: op_type = Il_Mul; break;
 					case Op_Div: op_type = Il_Div; break;
+					case Op_BitAnd: op_type = Il_Bit_And; break;
+					case Op_BitOr: op_type = Il_Bit_Or; break;
 					default:
 						GS_ASSERT_UNIMPL();
 						break;
@@ -1679,12 +2496,23 @@ namespace Glass
 			entity.var.code_id = il_insert_alloca(proc, entity.type);
 
 			if (node->var.assignment) {
-				code_gen_pass(f, scope_id, node->var.assignment, expr_values, proc);
+
 				Expr_Value& assignment = expr_values[node->var.assignment];
+
+				if (entity.type == f.Any_Ty && assignment.type != f.Any_Ty)
+				{
+					code_gen_pass(f, scope_id, node->var.assignment, expr_values, proc, true);
+
+					assignment.code_id = convert_to_any(f, scope_id, node->var.assignment, expr_values, proc);
+				}
+				else {
+					code_gen_pass(f, scope_id, node->var.assignment, expr_values, proc);
+				}
+
 				il_insert_store(proc, entity.type, entity.var.code_id, assignment.code_id);
 			}
 			else {
-				if (get_type_flags(entity.type) & TN_Struct_Type || entity.type->kind == Type_Array) {
+				if (get_type_flags(entity.type) & TN_Struct_Type || entity.type->kind == Type_Array || entity.type->kind == Type_Dyn_Array) {
 					il_insert_store(proc, entity.type, entity.var.code_id, il_insert_zero_init(proc, entity.type));
 				}
 				else
@@ -1709,6 +2537,10 @@ namespace Glass
 
 				if (!lval) {
 					my_value.code_id = il_insert_load(proc, my_value.type, my_value.code_id);
+				}
+				else
+				{
+					my_value.lvalue = true;
 				}
 			}
 			else if (entity.kind == Entity_Constant)
@@ -1736,27 +2568,84 @@ namespace Glass
 				Expr_Value& expr = expr_values[node->mem.expr];
 				code_gen_pass(f, scope_id, node->mem.expr, expr_values, proc, !my_value.member.is_ptr_access);
 
-				GS_Type* type = expr.type;
-
-				if (my_value.member.is_ptr_access)
-				{
-					type = expr.type->pointer.pointee;
-				}
+				GS_Type* type = my_value.member.struct_type;
 
 				int code_id = il_insert_sep(proc, type, my_value.value.s4, expr.code_id);
 
 				if (!lval) {
 					code_id = il_insert_load(proc, my_value.type, code_id);
 				}
+				else
+				{
+					my_value.lvalue = true;
+				}
 
 				my_value.code_id = code_id;
 			}
+		}
+		break;
+		case Ast_Array:
+		{
+			Ast_Node_Binary& bin = node->bin;
+
+			Expr_Value& expr = expr_values[bin.lhs];
+			Expr_Value& index = expr_values[bin.rhs];
+
+			code_gen_pass(f, scope_id, bin.lhs, expr_values, proc, expr.type->kind != Type_Pointer);
+			code_gen_pass(f, scope_id, bin.rhs, expr_values, proc);
+
+			int pointer_code_id = -1;
+
+			if (expr.type == f.string_Ty)
+			{
+				pointer_code_id = il_insert_load(proc, f.void_Ty->get_pointer(), il_insert_sep(proc, f.string_Ty, 1, expr.code_id));
+			}
+			else if (expr.type->kind == Type_Dyn_Array)
+			{
+				pointer_code_id = il_insert_load(proc, f.void_Ty->get_pointer(), il_insert_sep(proc, f.Array_Ty, 1, expr.code_id));
+			}
+			else
+			{
+				pointer_code_id = expr.code_id;
+			}
+
+			int aep = il_insert_aep(proc, my_value.type, pointer_code_id, index.code_id);
+
+			if (!lval)
+			{
+				aep = il_insert_load(proc, my_value.type, aep);
+			}
+
+			my_value.code_id = aep;
 		}
 		break;
 		case Ast_Ref:
 		{
 			code_gen_pass(f, scope_id, node->un.expr, expr_values, proc, true);
 			my_value.code_id = expr_values[node->un.expr].code_id;
+		}
+		break;
+		case Ast_DeRef:
+		{
+			code_gen_pass(f, scope_id, node->un.expr, expr_values, proc);
+
+			if (!lval)
+			{
+				my_value.code_id = il_insert_load(proc, my_value.type, expr_values[node->un.expr].code_id);
+			}
+			else
+			{
+				my_value.lvalue = true;
+				my_value.code_id = expr_values[node->un.expr].code_id;
+			}
+		}
+		break;
+		case Ast_Not:
+		{
+			code_gen_pass(f, scope_id, node->un.expr, expr_values, proc);
+			Expr_Value& expr = expr_values[node->un.expr];
+
+			my_value.code_id = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_Equal, expr.type, expr.code_id, il_insert_constant(proc, (void*)0, expr.type));
 		}
 		break;
 		case Ast_Cast:
@@ -1774,7 +2663,7 @@ namespace Glass
 			}
 			else
 			{
-				my_value.code_id = il_insert_cast(proc, expr.cast_type, to_type, from_type, expr.code_id);
+				my_value.code_id = il_insert_cast(proc, my_value.cast_type, to_type, from_type, expr.code_id);
 			}
 		}
 		break;
@@ -1785,41 +2674,44 @@ namespace Glass
 		{
 			for (size_t i = 0; i < node->scope.stmts.count; i++)
 			{
-				code_gen_pass(f, node->scope.scope_id, node->scope.stmts[i], expr_values, proc);
+				code_gen_pass(f, node->scope.scope_id, node->scope.stmts[i], expr_values, proc, false, cf_ctx, ctx);
 			}
 		}
 		break;
 		case Ast_If:
 		{
 			code_gen_pass(f, scope_id, node->cond.condition, expr_values, proc);
-
 			Expr_Value& condition = expr_values[node->cond.condition];
+
+			if (my_value.promote_to_bool)
+			{
+				condition.code_id = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, condition.type, condition.code_id, il_insert_constant(proc, nullptr, condition.type));
+			}
 
 			Il_IDX saved_insert_point = proc.insertion_point;
 
 			Il_IDX else_block_idx = -1;
 
 			Il_IDX body_block_idx = il_insert_block(proc, String_Make("then"));
-			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc);
+			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc, false, cf_ctx, ctx);
 
 			Il_IDX after_body_insert_point = proc.insertion_point;
 
-			/*
-			if (as_if->Else) {
-				else_block_idx = Il_Insert_Block(proc, String_Make("else"));
-				if (!Statement_CodeGen(as_if->Else->statement, scope_id, proc)) return {};
-			}*/
+			if (node->cond._else) {
+				else_block_idx = il_insert_block(proc, String_Make("else"));
+				code_gen_pass(f, scope_id, node->cond._else, expr_values, proc, false, cf_ctx, ctx);
+			}
 
 			Il_IDX cont_block_idx = il_insert_block(proc, String_Make("after_if"));
 
 			il_set_insert_point(proc, saved_insert_point);
 
-			/*if (as_if->Else) {
-				il_insert_cbr(proc, Data.bool_Ty, condition_result.code_node_id, body_block_idx, else_block_idx);
+			if (node->cond._else) {
+				il_insert_cbr(proc, f.bool_Ty, condition.code_id, body_block_idx, else_block_idx);
 			}
-			else {*/
-			il_insert_cbr(proc, f.bool_Ty, condition.code_id, body_block_idx, cont_block_idx);
-			//}
+			else {
+				il_insert_cbr(proc, f.bool_Ty, condition.code_id, body_block_idx, cont_block_idx);
+			}
 
 			il_set_insert_point(proc, after_body_insert_point);
 			il_insert_br(proc, cont_block_idx);
@@ -1833,11 +2725,16 @@ namespace Glass
 
 			Il_IDX cond_block_idx = il_insert_block(proc, String_Make("cond"));
 
-			code_gen_pass(f, scope_id, node->cond.condition, expr_values, proc);
+			code_gen_pass(f, scope_id, node->cond.condition, expr_values, proc, false, nullptr, ctx);
 			Expr_Value& condition = expr_values[node->cond.condition];
 
+			if (my_value.promote_to_bool)
+			{
+				condition.code_id = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_NotEqual, condition.type, condition.code_id, il_insert_constant(proc, nullptr, condition.type));
+			}
+
 			Il_IDX body_block_idx = il_insert_block(proc, String_Make("body"));
-			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc);
+			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc, false, nullptr, ctx);
 
 			il_insert_br(proc, cond_block_idx);
 
@@ -1855,13 +2752,13 @@ namespace Glass
 
 			Il_IDX cond_block_idx = il_insert_block(proc, String_Make("condition"));
 			Il_IDX body_block_idx = il_insert_block(proc, String_Make("body"));
-			Il_IDX loop_bottom_block_idx = il_insert_block(proc, String_Make("dummmy"));
+			Il_IDX loop_bottom_block_idx = il_insert_block(proc, String_Make("dummy"));
 
 			Expr_Value& condition = expr_values[node->cond.condition];
 
 			il_set_insert_point(proc, saved_insert_point);
 
-			Iterator_Result condition_result = iterator_code_gen(f, scope_id, node->cond.condition, expr_values, proc, saved_insert_point, cond_block_idx, loop_bottom_block_idx);
+			Iterator_Result condition_result = iterator_code_gen(f, scope_id, node->cond.condition, expr_values, proc, saved_insert_point, cond_block_idx, loop_bottom_block_idx, body_block_idx);
 
 			il_set_insert_point(proc, body_block_idx);
 
@@ -1871,7 +2768,8 @@ namespace Glass
 			it.var.code_id = condition_result.it_code_id;
 			it_index.var.code_id = condition_result.it_index_code_id;
 
-			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc);
+			Control_Flow_Ctx cf_ctx;
+			code_gen_pass(f, scope_id, node->cond.body, expr_values, proc, false, &cf_ctx, ctx);
 
 			Il_Block& dummy = proc.blocks[loop_bottom_block_idx];
 			loop_bottom_block_idx = il_insert_block(proc, String_Make("loop_bottom"));
@@ -1884,6 +2782,16 @@ namespace Glass
 
 			Il_IDX cont_block_idx = il_insert_block(proc, String_Make("after_loop"));
 
+			for (size_t i = 0; i < cf_ctx.breaks.count; i++)
+			{
+				proc.instruction_storage[cf_ctx.breaks[i]].br.block_idx = cont_block_idx;
+			}
+
+			for (size_t i = 0; i < cf_ctx.continues.count; i++)
+			{
+				proc.instruction_storage[cf_ctx.continues[i]].br.block_idx = loop_bottom_block_idx;
+			}
+
 			il_set_insert_point(proc, cond_block_idx);
 			il_insert_cbr(proc, f.bool_Ty, condition.code_id, body_block_idx, cont_block_idx);
 
@@ -1893,13 +2801,48 @@ namespace Glass
 		case Ast_Type_Info:
 		{
 			code_gen_pass(f, scope_id, node->un.expr, expr_values, proc);
-			my_value.code_id = il_inser_aep(proc, f.typeinfo_entry, il_insert_global_address(proc, f.typeinfo_table_global), expr_values[node->un.expr].code_id);
+			my_value.code_id = il_insert_aep(proc, f.typeinfo_entry, il_insert_global_address(proc, f.typeinfo_table_global), expr_values[node->un.expr].code_id);
 		}
 		break;
 		case Ast_Pointer:
 		case Ast_Array_Type:
 		{
 			my_value.code_id = il_insert_constant(proc, my_value.value, f.Type_Ty);
+		}
+		break;
+		case Ast_Break:
+		{
+			Array_Add(cf_ctx->breaks, (int)il_insert_br(proc, -1));
+		}
+		break;
+		case Ast_Continue:
+		{
+			Array_Add(cf_ctx->continues, (int)il_insert_br(proc, -1));
+		}
+		break;
+		case Ast_Return:
+		{
+			if (ctx->return_type != f.void_Ty)
+			{
+				code_gen_pass(f, scope_id, node->un.expr, expr_values, proc);
+				Expr_Value& expr = expr_values[node->un.expr];
+
+				if (is_type_aggr(ctx->return_type))
+				{
+					il_insert_store(proc, ctx->return_type, il_insert_load(proc, ctx->return_type->get_pointer(), ctx->return_var_code_id), expr.code_id);
+				}
+				else
+				{
+					il_insert_store(proc, ctx->return_type, ctx->return_var_code_id, expr.code_id);
+				}
+			}
+
+			Array_Add(ctx->return_branches, (int)il_insert_br(proc, -1));
+		}
+		break;
+		case Ast_Null:
+		{
+			my_value.code_id = il_insert_constant(proc, nullptr, my_value.type);
 		}
 		break;
 		default:
@@ -2003,6 +2946,11 @@ namespace Glass
 				}
 
 				entity.type = get_type_at(type.value.s8);
+
+				if (stmt->var.is_varargs)
+				{
+					entity.type = entity.type->get_dynarray();
+				}
 			}
 
 			entity.flags = Flag_Complete;
@@ -2097,15 +3045,43 @@ namespace Glass
 		break;
 		case Entity_Enum_Member:
 		{
-			if (entity.enum_mem.previous_member)
+			if (entity.syntax->type == Ast_Variable)
 			{
-				Entity& previous_member = get_entity(f, entity.enum_mem.previous_member);
-				entity.enum_mem.value.s8 = previous_member.enum_mem.value.s8 + 1;
+				Expr_Val_Map& expr_values = *(Expr_Val_Map*)&entity.expr_values;
+
+				bool success = type_check_pass(f, entity.flat_syntax, scope_id, expr_values, entity.progress, entity.deps, true);
+
+				if (!success)
+					return false;
+
+				if (entity.progress < entity.flat_syntax.count - 1) {
+					return true;
+				}
+
+				Expr_Value value = expr_values[entity.syntax->var.assignment];
+
+				u64 assign_flags = get_type_flags(value.type);
+
+				if (!(assign_flags & TN_Numeric_Type) || assign_flags & TN_Float_Type)
+				{
+					push_error_scope(f, entity.syntax->var.assignment, scope_id, FMT("expression must have numeric integer type instead it has: '{}'", print_type(value.type)));
+					return false;
+				}
+
+				entity.enum_mem.value = value.value;
 			}
 			else
 			{
-				entity.enum_mem.value.s8 = 0;
-				//GS_ASSERT_UNIMPL();
+				if (entity.enum_mem.previous_member)
+				{
+					Entity& previous_member = get_entity(f, entity.enum_mem.previous_member);
+					entity.enum_mem.value.s8 = previous_member.enum_mem.value.s8 + 1;
+				}
+				else
+				{
+					entity.enum_mem.value.s8 = 0;
+					//GS_ASSERT_UNIMPL();
+				}
 			}
 
 			entity.type = get_entity(f, entity.enum_mem.enum_entity_id).enm.type;
@@ -2164,6 +3140,7 @@ namespace Glass
 					}
 
 					entity.fn.return_type = get_type_at(checked_return.value.s4);
+
 				}
 				else
 				{
@@ -2172,6 +3149,13 @@ namespace Glass
 
 				Array<GS_Type*> param_types;
 				Array<GS_Type*> code_param_types;
+
+				GS_Type* code_retun_type = entity.fn.return_type;
+
+				if (is_type_aggr(entity.fn.return_type) && entity.fn.return_type != f.void_Ty) {
+					Array_Add(code_param_types, entity.fn.return_type->get_pointer());
+					code_retun_type = f.void_Ty;
+				}
 
 				for (size_t i = 0; i < entity.fn.parameters.count; i++)
 				{
@@ -2191,7 +3175,7 @@ namespace Glass
 
 				entity.fn.signature = get_proc_type(entity.fn.return_type, param_types);
 
-				GS_Type* code_signature = get_proc_type(entity.fn.return_type, code_param_types);
+				GS_Type* code_signature = get_proc_type(code_retun_type, code_param_types);
 
 				if (entity.fn.foreign) {
 					entity.fn.proc_id = il_insert_external_proc(f.program, entity.name->str, code_signature, -1, entity.fn.c_varargs);
@@ -2210,7 +3194,9 @@ namespace Glass
 
 			if (!entity.fn.foreign)
 			{
-				bool success = type_check_pass(f, entity.flat_syntax, entity.fn.scope_id, entity.expr_values, entity.progress, entity.deps, false);
+				GS_Type* return_type = entity.fn.return_type;
+
+				bool success = type_check_pass(f, entity.flat_syntax, entity.fn.scope_id, entity.expr_values, entity.progress, entity.deps, false, return_type);
 
 				if (!success)
 					return false;
@@ -2221,6 +3207,23 @@ namespace Glass
 
 				Il_Proc& proc = f.program.procedures[entity.fn.proc_id];
 
+				bool aggr_return = false;
+
+				if (return_type != f.void_Ty)
+				{
+					aggr_return = is_type_aggr(return_type);
+
+					if (aggr_return)
+					{
+						entity.fn.return_var_id = il_insert_alloca(proc, return_type->get_pointer());
+						il_insert_store(proc, return_type->get_pointer(), entity.fn.return_var_id, proc.parameters[0]);
+					}
+					else
+					{
+						entity.fn.return_var_id = il_insert_alloca(proc, return_type);
+					}
+				}
+
 				for (size_t i = 0; i < entity.fn.parameters.count; i++)
 				{
 					int parameter_id = entity.fn.parameters[i];
@@ -2228,7 +3231,7 @@ namespace Glass
 
 					GS_Type* code_type = parameter.type;
 
-					int input_id = proc.parameters[i];
+					int input_id = proc.parameters[i + (int)aggr_return];
 					int alloca_id = 0;
 
 					if (is_type_aggr(parameter.type))
@@ -2256,14 +3259,32 @@ namespace Glass
 					parameter.var.code_id = alloca_id;
 				}
 
+				Code_Gen_Ctx ctx = {};
+				ctx.return_type = return_type;
+				ctx.return_var_code_id = entity.fn.return_var_id;
+
 				for (size_t i = 0; i < stmt->fn.body.stmts.count; i++)
 				{
-					if (!code_gen_pass(f, entity.fn.scope_id, stmt->fn.body.stmts[i], entity.expr_values, proc)) {
+					if (!code_gen_pass(f, entity.fn.scope_id, stmt->fn.body.stmts[i], entity.expr_values, proc, false, nullptr, &ctx)) {
 						return false;
 					}
 				}
 
-				il_insert_ret(proc, f.void_Ty, -1);
+				int return_block_id = il_insert_block(proc, String_Make("return_block"));
+
+				if (aggr_return || return_type == f.void_Ty)
+				{
+					il_insert_ret(proc, f.void_Ty, -1);
+				}
+				else
+				{
+					il_insert_ret(proc, return_type, il_insert_load(proc, return_type, entity.fn.return_var_id));
+				}
+
+				for (size_t i = 0; i < ctx.return_branches.count; i++)
+				{
+					proc.instruction_storage[ctx.return_branches[i]].br.block_idx = return_block_id;
+				}
 			}
 
 			entity.flags = Flag_Complete;
@@ -2367,15 +3388,16 @@ namespace Glass
 
 			if (!std::filesystem::exists(file_path)) {
 
-				fs_path relative = std::filesystem::relative(file_path, search_path);
+				search_path.remove_filename();
+				search_path /= file_path;
 
-				if (!std::filesystem::exists(relative))
+				if (!std::filesystem::exists(search_path))
 				{
 					push_error_scope(f, stmt, scope_id, FMT("file not found!: {}", file_path.string()));
 					return false;
 				}
 
-				file_path = relative;
+				file_path = search_path;
 			}
 
 			if (!frontend_do_load(f, file_path, search_path)) {
@@ -2517,6 +3539,7 @@ namespace Glass
 
 		f.keyword_Array = get_atom("Array");
 		f.keyword_string = get_atom("string");
+		f.keyword_Any = get_atom("Any");
 		f.keyword_TypeInfo = get_atom("TypeInfo");
 
 		f.Type_Ty = insert_base_type_entity(f, "Type", TN_Base_Type, 8, 8);
@@ -2537,7 +3560,7 @@ namespace Glass
 		f.f32_Ty = insert_base_type_entity(f, "f32", TN_Numeric_Type | TN_Base_Type | TN_Float_Type, 4, 4);
 		f.f64_Ty = insert_base_type_entity(f, "f64", TN_Numeric_Type | TN_Base_Type | TN_Float_Type, 8, 8);
 
-		f.int_Ty = insert_base_type_alias_entity(f, "int", f.i32_Ty->basic.type_name_id);
+		f.int_Ty = insert_base_type_alias_entity(f, "int", f.i64_Ty->basic.type_name_id);
 		f.float_Ty = insert_base_type_alias_entity(f, "float", f.f32_Ty->basic.type_name_id);
 
 		get_ts().void_Ty = f.void_Ty;
@@ -2755,15 +3778,15 @@ namespace Glass
 			auto type_flags = get_type_flags(entry_type);
 
 			if (type_flags & TN_Base_Type) {
-				type_info_flags &= TEF_BASE_TYPE;
+				type_info_flags |= TEF_BASE_TYPE;
 			}
 
 			if (type_flags & TN_Float_Type) {
-				type_info_flags &= TEF_FLOAT;
+				type_info_flags |= TEF_FLOAT;
 			}
 
 			if (type_flags & ~TN_Unsigned_Type) {
-				type_info_flags &= TEF_SIGNED;
+				type_info_flags |= TEF_SIGNED;
 			}
 
 			if (entry_type->kind == Type_Basic) {
@@ -2803,6 +3826,13 @@ namespace Glass
 				//u64	SIZE/Alignment
 				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
 				Array_Add(table_initializer, il_make_const((void*)*(u64*)&size_alignemnt, get_type_index(f.i64_Ty)));
+			}
+
+			if (type_info_kind == TEK_NUMERIC)
+			{
+				u32 size_in_bits = type_info_size * 8;
+				Array_Add(te_member_values, (Il_IDX)table_initializer.count);
+				Array_Add(table_initializer, il_make_const((void*)*(u64*)&size_in_bits, get_type_index(f.i64_Ty)));
 			}
 
 			if (type_info_kind == TEK_STRUCT) {
@@ -2874,7 +3904,7 @@ namespace Glass
 			Array_Add(table_initializer, Il_Make_Struct_Init(get_type_index(te), te_member_values));
 		}
 
-		Array_Add(table_initializer, Il_Make_Array_Init(get_type_index(table_array_ty), table_array_values));
+		Array_Add(table_initializer, il_make_array_init(get_type_index(table_array_ty), table_array_values));
 
 		Il_Global& table_global = f.program.globals[f.typeinfo_table_global];
 		table_global.initializer_storage = table_initializer;
@@ -2882,7 +3912,7 @@ namespace Glass
 		table_global.type = table_array_ty;
 
 		auto members_array_ty = te->get_array(members_array_size);
-		Array_Add(members_array_initializer, Il_Make_Array_Init(get_type_index(members_array_ty), members_array_values));
+		Array_Add(members_array_initializer, il_make_array_init(get_type_index(members_array_ty), members_array_values));
 
 		Il_Global& members_array_global = f.program.globals[f.typeinfo_member_array_global];
 		members_array_global.type = members_array_ty;

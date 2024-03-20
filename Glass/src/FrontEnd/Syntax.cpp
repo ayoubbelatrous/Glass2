@@ -16,10 +16,6 @@ namespace Glass
 	String_Atom* keyword_enum;
 	String_Atom* keyword_fn;
 	String_Atom* keyword_return;
-	String_Atom* keyword_break;
-	String_Atom* keyword_null;
-	String_Atom* keyword_true;
-	String_Atom* keyword_false;
 	String_Atom* keyword_c_varargs;
 	String_Atom* keyword_foreign;
 	String_Atom* keyword_library;
@@ -28,6 +24,12 @@ namespace Glass
 	String_Atom* keyword_cast;
 	String_Atom* keyword_char;
 	String_Atom* keyword_type_info;
+
+	String_Atom* keyword_null;
+	String_Atom* keyword_true;
+	String_Atom* keyword_false;
+	String_Atom* keyword_break;
+	String_Atom* keyword_continue;
 
 	void parser_init()
 	{
@@ -41,10 +43,6 @@ namespace Glass
 		keyword_enum = get_atom(String_Make("enum"));
 		keyword_fn = get_atom(String_Make("fn"));
 		keyword_return = get_atom(String_Make("return"));
-		keyword_break = get_atom(String_Make("break"));
-		keyword_null = get_atom(String_Make("null"));
-		keyword_true = get_atom(String_Make("true"));
-		keyword_false = get_atom(String_Make("false"));
 		keyword_c_varargs = get_atom(String_Make("c_varargs"));
 		keyword_foreign = get_atom(String_Make("foreign"));
 		keyword_library = get_atom(String_Make("library"));
@@ -53,6 +51,12 @@ namespace Glass
 		keyword_cast = get_atom(String_Make("cast"));
 		keyword_char = get_atom(String_Make("char"));
 		keyword_type_info = get_atom(String_Make("type_info"));
+
+		keyword_null = get_atom(String_Make("null"));
+		keyword_true = get_atom(String_Make("true"));
+		keyword_false = get_atom(String_Make("false"));
+		keyword_break = get_atom(String_Make("break"));
+		keyword_continue = get_atom(String_Make("continue"));
 	}
 
 	inline static bool begins_with_alpha_alnum(const std::string_view& token)
@@ -309,6 +313,8 @@ namespace Glass
 						type = Tk_Enum;
 					if (tok.name == keyword_if)
 						type = Tk_If;
+					if (tok.name == keyword_else)
+						type = Tk_Else;
 					if (tok.name == keyword_while)
 						type = Tk_While;
 					if (tok.name == keyword_for)
@@ -317,6 +323,16 @@ namespace Glass
 						type = Tk_Cast;
 					if (tok.name == keyword_type_info)
 						type = Tk_Type_Info;
+					if (tok.name == keyword_true)
+						type = Tk_True;
+					if (tok.name == keyword_false)
+						type = Tk_False;
+					if (tok.name == keyword_null)
+						type = Tk_Null;
+					if (tok.name == keyword_break)
+						type = Tk_Break;
+					if (tok.name == keyword_continue)
+						type = Tk_Continue;
 				}
 
 				tok.type = type;
@@ -679,7 +695,14 @@ namespace Glass
 			lit->type = Ast_Numeric;
 			lit->token = tk;
 
-			lit->num.integer = std::stoll(tk.name->str.data, nullptr, 16);
+			try
+			{
+				lit->num.integer = std::stoll(tk.name->str.data, nullptr, 16);
+			}
+			catch (std::out_of_range)
+			{
+				lit->num.integer = -1;
+			}
 
 			return lit;
 		}
@@ -774,6 +797,11 @@ namespace Glass
 			int i = 1;
 			while (current(s, i).type != Tk_EndOfFile)
 			{
+				if (current(s, i).type == Tk_SemiColon)
+				{
+					break;
+				}
+
 				if (current(s, i).type == Tk_CloseParen && current(s, i + 1).type == Tk_Arrow)
 				{
 					func_type = true;
@@ -975,6 +1003,25 @@ namespace Glass
 			}
 
 			return type_info;
+		}
+		else if (tk.type == Tk_Null || tk.type == Tk_True || tk.type == Tk_False)
+		{
+			Tk tk = consume(s);
+
+			Ast_Node_Type node_type;
+
+			if (tk.type == Tk_Null)
+				node_type = Ast_Null;
+			if (tk.type == Tk_True)
+				node_type = Ast_True;
+			if (tk.type == Tk_False)
+				node_type = Ast_False;
+
+			Ast_Node* keyword = allocate_node();
+			keyword->type = node_type;
+			keyword->token = tk;
+
+			return keyword;
 		}
 
 		return nullptr;
@@ -1390,6 +1437,12 @@ namespace Glass
 				return nullptr;
 			}
 
+			if (current(s).type == Tk_Range)
+			{
+				param->var.is_varargs = true;
+				consume(s);
+			}
+
 			if (current(s).type == Tk_CloseParen)
 			{
 				break;
@@ -1553,7 +1606,9 @@ namespace Glass
 
 		Ast_Node* condition = parse_expr(s);
 
-		if (s.error || !condition) {
+		if (s.error) return nullptr;
+
+		if (!condition) {
 			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected expression"));
 			s.error = true;
 			return nullptr;
@@ -1593,10 +1648,29 @@ namespace Glass
 
 		Ast_Node* body = parse_statement(s);
 
-		if (s.error || !body) {
-			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected statement or expression"));
+		if (s.error) return nullptr;
+
+		if (!body) {
+			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected statement"));
 			s.error = true;
 			return nullptr;
+		}
+
+		if (cnd_node->type == Ast_If && current(s).type == Tk_Else)
+		{
+			consume(s);
+
+			Ast_Node* _else = parse_statement(s);
+
+			if (s.error) return nullptr;
+
+			if (!_else) {
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected statement"));
+				s.error = true;
+				return nullptr;
+			}
+
+			cnd_node->cond._else = _else;
 		}
 
 		cnd_node->cond.body = body;
@@ -1707,6 +1781,24 @@ namespace Glass
 			return scope;
 		}
 
+		if (current(s).type == Tk_Break)
+		{
+			Ast_Node* keyword = allocate_node();
+			keyword->type = Ast_Break;
+			keyword->token = consume(s);
+
+			return keyword;
+		}
+
+		if (current(s).type == Tk_Continue)
+		{
+			Ast_Node* keyword = allocate_node();
+			keyword->type = Ast_Continue;
+			keyword->token = consume(s);
+
+			return keyword;
+		}
+
 		auto expr = parse_expr(s);
 
 		if (expr && current(s).type == Tk_Identifier)
@@ -1769,18 +1861,74 @@ namespace Glass
 	{
 		switch (stmt->type)
 		{
+		case Ast_Function:
+		{
+			Ast_Node* new_fn = allocate_node();
+			*new_fn = *stmt;
+
+			new_fn->fn.parameters = {};
+			new_fn->fn.body = {};
+
+			for (size_t i = 0; i < stmt->fn.parameters.count; i++)
+			{
+				Ast_Node* parameter = stmt->fn.parameters[i];
+				Array_Add(new_fn->fn.parameters, copy_statement(parameter));
+			}
+
+			for (size_t i = 0; i < stmt->fn.body.stmts.count; i++)
+			{
+				Ast_Node* s = stmt->fn.body.stmts[i];
+				Array_Add(new_fn->fn.body.stmts, copy_statement(s));
+			}
+
+			return new_fn;
+		}
+		break;
+		case Ast_If:
+		case Ast_While:
+		case Ast_For:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			new_stmt->cond.condition = copy_statement(stmt->cond.condition);
+			new_stmt->cond.body = copy_statement(stmt->cond.body);
+
+			if (stmt->cond._else)
+			{
+				new_stmt->cond._else = copy_statement(stmt->cond._else);
+			}
+
+			return new_stmt;
+		}
+		break;
+		case Ast_Scope:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			new_stmt->scope.stmts = {};
+
+			for (size_t i = 0; i < stmt->scope.stmts.count; i++)
+			{
+				Ast_Node* s = stmt->scope.stmts[i];
+				Array_Add(new_stmt->scope.stmts, copy_statement(s));
+			}
+
+			return new_stmt;
+		}
+		break;
 		case Ast_Variable:
 		{
-			Ast_Node* new_var = allocate_node();
-			*new_var = *stmt;
-
-			if (stmt->var.assignment)
-				new_var->var.assignment = copy_statement(stmt->var.assignment);
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
 
 			if (stmt->var.type)
-				new_var->var.type = copy_statement(stmt->var.type);
+				new_stmt->var.type = copy_statement(stmt->var.type);
+			if (stmt->var.assignment)
+				new_stmt->var.assignment = copy_statement(stmt->var.assignment);
 
-			return new_var;
+			return new_stmt;
 		}
 		break;
 		case Ast_Array_Type:
@@ -1804,6 +1952,63 @@ namespace Glass
 
 			return new_stmt;
 		}
+		break;
+		case Ast_Pointer:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+			new_stmt->un.expr = copy_statement(stmt->un.expr);
+
+			return new_stmt;
+		}
+		break;
+		case Ast_Binary:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			new_stmt->bin.lhs = copy_statement(stmt->bin.lhs);
+			new_stmt->bin.rhs = copy_statement(stmt->bin.rhs);
+
+			return new_stmt;
+		}
+		break;
+		case Ast_Member:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			new_stmt->mem.expr = copy_statement(stmt->mem.expr);
+
+			return new_stmt;
+		}
+		break;
+		case Ast_Null:
+		case Ast_String:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+			return new_stmt;
+		}
+		break;
+		case Ast_Call:
+		{
+			Ast_Node* new_stmt = allocate_node();
+			*new_stmt = *stmt;
+
+			new_stmt->call.callee = copy_statement(stmt->call.callee);
+
+
+			new_stmt->call.args = {};
+
+			for (size_t i = 0; i < stmt->call.args.count; i++)
+			{
+				Array_Add(new_stmt->call.args, copy_statement(stmt->call.args[i]));
+			}
+
+			return new_stmt;
+		}
+		break;
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -1812,4 +2017,43 @@ namespace Glass
 		return nullptr;
 	}
 
+	void unpoly_statement(Ast_Node* stmt)
+	{
+		switch (stmt->type)
+		{
+		case Ast_Variable:
+		{
+			if (stmt->var.type)
+				unpoly_statement(stmt->var.type);
+			if (stmt->var.assignment)
+				unpoly_statement(stmt->var.type);
+		}
+		break;
+		case Ast_Pointer:
+		{
+			unpoly_statement(stmt->un.expr);
+		}
+		break;
+		case Ast_Array_Type:
+		{
+			unpoly_statement(stmt->array_type.elem);
+
+			if (!stmt->array_type.dynamic)
+				unpoly_statement(stmt->array_type.size);
+		}
+		break;
+		case Ast_Poly:
+		{
+			Tk name = stmt->poly.name;
+			stmt->type = Ast_Ident;
+			stmt->token = name;
+		}
+		break;
+		case Ast_Ident:
+			break;
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+	}
 }

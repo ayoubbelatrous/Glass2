@@ -486,11 +486,11 @@ namespace Glass
 		return si_node;
 	}
 
-	inline Il_Node Il_Make_Array_Init(Type_IDX struct_type_index, Array<Il_IDX> element_values) {
+	inline Il_Node il_make_array_init(Type_IDX array_type_idx, Array<Il_IDX> element_values) {
 
 		Il_Node ai_node = { 0 };
 		ai_node.node_type = Il_Array_Initializer;
-		ai_node.type_idx = struct_type_index;
+		ai_node.type_idx = array_type_idx;
 		ai_node.ai.element_count = element_values.count;
 
 		ai_node.ai.element_values = (Il_IDX*)malloc(element_values.count * sizeof(Il_IDX));
@@ -778,6 +778,11 @@ namespace Glass
 		return il_proc_insert(proc, si_node);
 	}
 
+	inline Il_IDX il_insert_ai(Il_Proc& proc, GS_Type* array_type, Array<Il_IDX> members_values) {
+		Il_Node ai_node = il_make_array_init(get_type_index(array_type), members_values);
+		return il_proc_insert(proc, ai_node);
+	}
+
 	inline Il_IDX il_insert_string(Il_Proc& proc, GS_Type* a_pointer_type, String string) {
 		ASSERT(a_pointer_type->kind == Type_Pointer);
 		Il_Node string_node = Il_Make_String(string, (Il_IDX)get_type_index(a_pointer_type));
@@ -822,7 +827,7 @@ namespace Glass
 		return il_proc_insert(proc, proc_addr_node);
 	}
 
-	inline Il_IDX il_inser_aep(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
+	inline Il_IDX il_insert_aep(Il_Proc& proc, GS_Type* type, Il_IDX ptr_node_idx, Il_IDX index_node_idx) {
 		Il_Node aep_node = Il_Make_AEP((Type_IDX)get_type_index(type), ptr_node_idx, index_node_idx);
 		return il_proc_insert(proc, aep_node);
 	}

@@ -20,6 +20,7 @@ namespace Glass
 	void parser_init();
 
 	Ast_Node* copy_statement(Ast_Node* stmt);
+	void unpoly_statement(Ast_Node* stmt);
 
 	Ast_Node* parse_string(Front_End& f, String file_path, String source, bool& success);
 }

@@ -207,6 +207,8 @@ namespace Glass
 
 					llvm::Value* alloca = LLVMC_CreateAlloca(lc, llvm_Ty);
 
+					//	lc.llvm_builder->CreateMemSet(alloca, llvm::ConstantInt::get(lc.llvm_i8, 0), type_size, {});
+
 					auto members_value_nodes_ptr = node.si.members_value_nodes;
 
 					if (node.si.member_count > SI_SMALL_COUNT) {
@@ -217,6 +219,24 @@ namespace Glass
 					{
 						auto member = lc.llvm_builder->CreateStructGEP(llvm_Ty, alloca, i);
 						lc.llvm_builder->CreateStore(regv[members_value_nodes_ptr[i]], member);
+					}
+
+					regv[idx] = lc.llvm_builder->CreateLoad(llvm_Ty, alloca);
+				}
+				break;
+				case Il_Array_Initializer:
+				{
+					auto llvm_Ty = to_llvm(lc, type);
+					llvm::Value* alloca = LLVMC_CreateAlloca(lc, llvm_Ty);
+
+					//lc.llvm_builder->CreateMemSet(alloca, llvm::ConstantInt::get(lc.llvm_i8, 0), type_size, {});
+
+					auto llvm_elem_Ty = to_llvm(lc, type->array.element_type);
+
+					for (size_t i = 0; i < node.ai.element_count; i++)
+					{
+						auto element = lc.llvm_builder->CreateGEP(llvm_elem_Ty, alloca, llvm::ConstantInt::get(lc.llvm_i64, i));
+						lc.llvm_builder->CreateStore(regv[node.ai.element_values[i]], element);
 					}
 
 					regv[idx] = lc.llvm_builder->CreateLoad(llvm_Ty, alloca);
@@ -721,7 +741,7 @@ namespace Glass
 		auto features = "";
 
 		llvm::TargetOptions opt;
-		opt.EnableFastISel = true;
+		//opt.EnableFastISel = true;
 		auto target_machine = target->createTargetMachine(
 			target_triple, CPU, features, opt, llvm::Reloc::PIC_, {}, llvm::CodeGenOpt::None);
 
@@ -791,7 +811,7 @@ namespace Glass
 		lc.type_to_llvm[get_ts().f32_Ty] = lc.llvm_float;
 		lc.type_to_llvm[get_ts().f64_Ty] = lc.llvm_double;
 
-		lc.type_to_llvm[get_ts().int_Ty] = lc.llvm_i32;
+		lc.type_to_llvm[get_ts().int_Ty] = lc.llvm_i64;
 		lc.type_to_llvm[get_ts().float_Ty] = lc.llvm_float;
 		lc.type_to_llvm[get_ts().void_Ty] = lc.llvm_void;
 

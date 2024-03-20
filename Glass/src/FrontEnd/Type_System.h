@@ -158,6 +158,8 @@ namespace Glass
 
 	u64 get_type_alignment(GS_Type* type);
 
+	GS_Type* reduce_indirection(GS_Type* type);
+
 	bool is_type_aggr(GS_Type* type);
 
 	GS_Type* get_type(Type_Name_ID type_name_id);

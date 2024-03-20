@@ -147,8 +147,16 @@ namespace Glass
 		return TypeSystem_Get_Type_Alignment(global_type_system, type);
 	}
 
+	GS_Type* reduce_indirection(GS_Type* type)
+	{
+		return TypeSystem_Reduce_Indirection(global_type_system, type);
+	}
+
 	bool is_type_aggr(GS_Type* type)
 	{
+		if (type == get_ts().void_Ty)
+			return false;
+
 		if (type->kind == Type_Array || type->kind == Type_Dyn_Array)
 		{
 			return true;

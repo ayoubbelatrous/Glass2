@@ -21,6 +21,9 @@ namespace Glass
 		Op_Mul = Tk_Star,
 		Op_Div = Tk_Slash,
 
+		Op_BitAnd = Tk_Ampersand,
+		Op_BitOr = Tk_Pipe,
+
 		Op_AddAssign = Tk_PlusAssign,
 		Op_SubAssign = Tk_MinusAssign,
 		Op_MulAssign = Tk_StarAssign,
@@ -58,6 +61,8 @@ namespace Glass
 		case Op_NotEq: return String_Make("!=");
 		case Op_Assign: return String_Make("=");
 		case Op_Range: return String_Make("..");
+		case Op_BitAnd: return String_Make("&");
+		case Op_BitOr: return String_Make("|");
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -140,7 +145,11 @@ namespace Glass
 		int referenced_entity;
 		bool is_unsolid;
 		bool is_unsolid_float;
+		bool is_unsolid_null;
 		int code_id;
+		bool lvalue;
+
+		bool promote_to_bool;
 
 		union
 		{
@@ -157,7 +166,17 @@ namespace Glass
 			{
 				bool is_constant;
 				bool is_ptr_access;
+				GS_Type* struct_type;
 			} member;
+
+			struct Checked_Call
+			{
+				bool is_proc_call;
+				int proc_id;
+				GS_Type* callee_signature;
+				bool varargs;
+				GS_Type* varargs_type;
+			} call;
 		};
 	};
 
@@ -185,9 +204,12 @@ namespace Glass
 		int proc_id;
 		GS_Type* signature;
 		GS_Type* return_type;
+		int return_var_id;
 		bool c_varargs;
 		int foreign;
 		Array<int> parameters;
+		bool has_varargs;
+		int var_arg_parameter;
 		bool header_complete;
 		int return_ast_count;
 	};
@@ -199,10 +221,18 @@ namespace Glass
 		int			 parameter_index;
 	};
 
+	struct Poly_Instance
+	{
+		Array_UI<std::tuple<String_Atom*, GS_Type*>> overloads;
+		int entity_id;
+	};
+
 	struct Entity_Poly_Func
 	{
-		Array<Poly_Decl> declarations;
-		Array<Ast_Node*> parameters_syntax;
+		Array_UI<Poly_Decl> poly_declarations;
+		Array_UI<Poly_Instance> instances;
+		bool has_varargs;
+		int parameter_count;
 	};
 
 	struct Entity_Strct
@@ -247,6 +277,7 @@ namespace Glass
 		int code_id;
 		GS_Type* code_type;
 		bool big_parameter;
+		bool parameter;
 	};
 
 	struct Entity
@@ -356,9 +387,11 @@ namespace Glass
 
 		GS_Type* Array_Ty;
 		GS_Type* string_Ty;
+		GS_Type* Any_Ty;
 		String_Atom* keyword_Array;
 		String_Atom* keyword_string;
 		String_Atom* keyword_TypeInfo;
+		String_Atom* keyword_Any;
 
 		int typeinfo_member_array_global;
 		int typeinfo_table_global;

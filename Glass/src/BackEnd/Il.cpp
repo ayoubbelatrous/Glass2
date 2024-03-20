@@ -215,6 +215,20 @@ namespace Glass
 					stream << "}\n";
 				}
 				break;
+				case Il_Array_Initializer:
+				{
+					stream << "AI " << print_type_index(node.type_idx).data << " [";
+
+					ASSERT(node.si.member_count < SI_SMALL_COUNT);
+
+					for (size_t i = 0; i < node.ai.element_count; i++)
+					{
+						stream << " $" << node.ai.element_values[i];
+					}
+
+					stream << "]\n";
+				}
+				break;
 				case Il_StructElementPtr:
 				{
 					stream << "sep " << print_type_index(node.type_idx).data << "." << node.element_ptr.element_idx << " $" << node.element_ptr.ptr_node_idx << "\n";

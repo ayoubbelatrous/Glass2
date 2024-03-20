@@ -69,11 +69,14 @@ namespace Glass
 		Tk_Type_Info,
 
 		Tk_Return,
-		Tk_Break,
 
 		Tk_Null,
+
 		Tk_True,
 		Tk_False,
+
+		Tk_Break,
+		Tk_Continue,
 	};
 
 	struct Tk
@@ -117,6 +120,14 @@ namespace Glass
 		Ast_Cast,
 		Ast_Type_Info,
 		Ast_Char,
+
+		Ast_Null,
+
+		Ast_True,
+		Ast_False,
+
+		Ast_Break,
+		Ast_Continue,
 	};
 
 	enum Ast_Flags : u64
@@ -132,6 +143,7 @@ namespace Glass
 		Ast_Node* type;
 		Ast_Node* assignment;
 		bool is_constant;
+		bool is_varargs;
 		int entity_id;
 	};
 
@@ -214,6 +226,7 @@ namespace Glass
 	{
 		Ast_Node* condition;
 		Ast_Node* body;
+		Ast_Node* _else;
 		Ast_Node* named_iterator;
 		Ast_Node* named_index;
 		int scope_id;
