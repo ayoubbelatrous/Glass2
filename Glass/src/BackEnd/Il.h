@@ -763,7 +763,7 @@ namespace Glass
 		return il_proc_insert(proc, call_node);
 	}
 
-	inline Il_IDX Il_Insert_Call_Ptr(Il_Proc& proc, GS_Type* signature, Array<int> arguments, Il_IDX ptr_node_idx) {
+	inline Il_IDX il_insert_call_ptr(Il_Proc& proc, GS_Type* signature, Array<int> arguments, Il_IDX ptr_node_idx) {
 		Il_Node call_ptr_node = Il_Make_Call_Ptr((Il_IDX)get_type_index(signature->proc.return_type), arguments, ptr_node_idx, (Il_IDX)get_type_index(signature));
 		return il_proc_insert(proc, call_ptr_node);
 	}
@@ -822,7 +822,7 @@ namespace Glass
 		return il_proc_insert(proc, ga_node);
 	}
 
-	inline Il_IDX Il_Insert_Proc_Address(Il_Proc& proc, Il_IDX proc_idx) {
+	inline Il_IDX il_insert_proc_address(Il_Proc& proc, Il_IDX proc_idx) {
 		Il_Node proc_addr_node = Il_Make_Proc_Address(proc_idx, (Type_IDX)get_type_index(proc.program->procedures[proc_idx].signature));
 		return il_proc_insert(proc, proc_addr_node);
 	}

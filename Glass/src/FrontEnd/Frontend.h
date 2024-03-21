@@ -37,6 +37,9 @@ namespace Glass
 		Op_Assign = Tk_Assign,
 
 		Op_Range = Tk_Range,
+
+		Op_And = Tk_And,
+		Op_Or = Tk_Or,
 	};
 
 	inline Tk_Operator tk_to_operator(Tk_Type type) {
@@ -59,6 +62,8 @@ namespace Glass
 		case Op_DivAssign: return String_Make("/=");
 		case Op_Eq: return String_Make("==");
 		case Op_NotEq: return String_Make("!=");
+		case Op_Lesser: return String_Make("<");
+		case Op_Greater: return String_Make(">");
 		case Op_Assign: return String_Make("=");
 		case Op_Range: return String_Make("..");
 		case Op_BitAnd: return String_Make("&");

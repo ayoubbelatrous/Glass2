@@ -337,6 +337,7 @@ namespace Glass
 		case Ast_Ref:
 		case Ast_DeRef:
 		case Ast_Not:
+		case Ast_Neg:
 		{
 			flatten_syntax(&node->un.expr, flat_ast, scope_id);
 			Array_Add(flat_ast, { reference, scope_id });
@@ -356,6 +357,18 @@ namespace Glass
 			{
 				flatten_syntax(&node->scope.stmts[i], flat_ast, node->scope.scope_id);
 			}
+		}
+		break;
+		case Ast_Func_Type:
+		{
+			for (size_t i = 0; i < node->func_type.params.count; i++)
+			{
+				flatten_syntax(&node->func_type.params[i], flat_ast, scope_id);
+			}
+
+			flatten_syntax(&node->func_type.return_type, flat_ast, scope_id);
+
+			Array_Add(flat_ast, { reference, scope_id });
 		}
 		break;
 		case Ast_If:
@@ -464,6 +477,16 @@ namespace Glass
 		case Ast_Array_Type:
 		{
 			get_poly_declarations(node->array_type.elem, parameter_index, decls);
+		}
+		break;
+		case Ast_Func_Type:
+		{
+			for (size_t i = 0; i < node->func_type.params.count; i++)
+			{
+				get_poly_declarations(node->func_type.params[i], parameter_index, decls);
+			}
+
+			get_poly_declarations(node->func_type.return_type, parameter_index, decls);
 		}
 		break;
 		case Ast_Pointer:
@@ -587,7 +610,21 @@ namespace Glass
 			}
 			else
 			{
-				GS_ASSERT_UNIMPL();
+				if (!already_decalared_error()) {
+					return false;
+				}
+
+				Entity global_variable = make_entity(Entity_Variable, stmt->token.name, stmt);
+
+				if (stmt->var.type)
+					flatten_syntax(&stmt->var.type, global_variable.flat_syntax, scope_id);
+
+				if (stmt->var.assignment)
+					flatten_syntax(&stmt->var.assignment, global_variable.flat_syntax, scope_id);
+
+				global_variable.var.global = true;
+
+				insert_entity(f, global_variable, scope_id);
 			}
 		}
 		break;
@@ -1116,33 +1153,62 @@ namespace Glass
 
 		Expr_Value& callee = expr_values[call.callee];
 
-		ASSERT(callee.referenced_entity);
-
-		Entity* fn = &get_entity(f, callee.referenced_entity);
-
-		if (fn->kind == Entity_Poly_Function)
-		{
-			return type_check_poly_call(f, reference, scope_id, expr_values, index, deps, suspend);
-		}
-
-		int fn_id = callee.referenced_entity;
-		GS_Type* signature = fn->fn.signature;
+		GS_Type* signature = nullptr;
 
 		bool c_varargs = false;
 		bool varargs = false;
 
-		if (fn)
-		{
-			c_varargs = fn->fn.c_varargs;
-			varargs = fn->fn.has_varargs;
-		}
-
 		GS_Type* varargs_type = nullptr;
 
-		if (varargs)
+		Expr_Value& my_value = expr_values[node];
+
+		if (callee.referenced_entity)
 		{
-			varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
+			Entity* fn = &get_entity(f, callee.referenced_entity);
+
+			if (fn->kind == Entity_Poly_Function)
+			{
+				return type_check_poly_call(f, reference, scope_id, expr_values, index, deps, suspend);
+			}
+			else if (fn->kind == Entity_Function)
+			{
+				signature = fn->fn.signature;
+
+				c_varargs = fn->fn.c_varargs;
+				varargs = fn->fn.has_varargs;
+
+				if (varargs)
+				{
+					varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
+				}
+
+				my_value.call.is_proc_call = true;
+				my_value.call.proc_id = fn->fn.proc_id;
+
+				my_value.call.varargs = varargs;
+
+				if (my_value.call.varargs)
+					my_value.call.varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
+			}
+			else
+			{
+				signature = callee.type;
+				fn = nullptr;
+			}
 		}
+		else
+		{
+			signature = callee.type;
+		}
+
+		if (signature->kind != Type_Proc)
+		{
+			push_error_scope(f, node, scope_id, FMT("type must be function type: '{}'", print_type(signature)));
+			return {};
+		}
+
+		my_value.call.callee_signature = signature;
+		my_value.type = signature->proc.return_type;
 
 		if (call.args.count < signature->proc.params.count - (int)varargs)
 		{
@@ -1182,17 +1248,6 @@ namespace Glass
 				}
 			}
 		}
-
-		Expr_Value& my_value = expr_values[node];
-		my_value.type = signature->proc.return_type;
-
-		my_value.call.is_proc_call = true;
-		my_value.call.proc_id = fn->fn.proc_id;
-		my_value.call.callee_signature = signature;
-		my_value.call.varargs = fn->fn.has_varargs;
-
-		if (my_value.call.varargs)
-			my_value.call.varargs_type = signature->proc.params[fn->fn.parameters.count - 1]->dyn_array.element_type;
 
 		return true;
 	}
@@ -1235,7 +1290,7 @@ namespace Glass
 
 			if (overload.op.op == op)
 			{
-				if (lhs_value.type == overload.op.parameters[0] && rhs_value.type == overload.op.parameters[0]) {
+				if (lhs_value.type == overload.op.parameters[0] && rhs_value.type == overload.op.parameters[1]) {
 					most_suitable_overload = possible_overload;
 				}
 			}
@@ -1344,8 +1399,8 @@ namespace Glass
 				}
 				else if (ident_entity.kind == Entity_Function || ident_entity.kind == Entity_Poly_Function)
 				{
-					my_value.type = f.Type_Ty;
-					my_value.value.s4 = get_type_index(ident_entity.fn.signature);
+					my_value.type = ident_entity.fn.signature;
+					my_value.value.s4 = 0;
 				}
 				else
 				{
@@ -1376,6 +1431,11 @@ namespace Glass
 
 				Tk_Operator op = tk_to_operator(node->token.type);
 
+				bool is_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
+
+				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div || op == Op_BitAnd || op == Op_BitOr || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
+				bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater || op == Op_And || op == Op_Or;
+
 				GS_Type* type = nullptr;
 
 				Expr_Value& lhs_value = expr_values[node->bin.lhs];
@@ -1383,34 +1443,43 @@ namespace Glass
 
 				GS_Type* most_complete_type = nullptr;
 
-				if (lhs_value.is_unsolid) {
-					if (lhs_value.is_unsolid_float)
+				if (op == Op_And || op == Op_Or)
+				{
+					try_promote(f, f.bool_Ty, lhs_value);
+					try_promote(f, f.bool_Ty, rhs_value);
+				}
+				else
+				{
+
+					if (lhs_value.is_unsolid) {
+						if (lhs_value.is_unsolid_float)
+							most_complete_type = lhs_value.type;
+					}
+					else
+					{
 						most_complete_type = lhs_value.type;
-				}
-				else
-				{
-					most_complete_type = lhs_value.type;
-				}
+					}
 
-				if (rhs_value.is_unsolid) {
-					if (rhs_value.is_unsolid_float)
+					if (rhs_value.is_unsolid) {
+						if (rhs_value.is_unsolid_float)
+							most_complete_type = rhs_value.type;
+					}
+					else
+					{
 						most_complete_type = rhs_value.type;
-				}
-				else
-				{
-					most_complete_type = rhs_value.type;
-				}
+					}
 
-				if (most_complete_type)
-				{
-					try_promote(f, most_complete_type, lhs_value);
-					try_promote(f, most_complete_type, rhs_value);
+					if (most_complete_type)
+					{
+						try_promote(f, most_complete_type, lhs_value);
+						try_promote(f, most_complete_type, rhs_value);
+					}
 				}
 
 				bool lhs_is_overloadable = lhs_value.type->kind == Type_Basic && !(get_type_flags(lhs_value.type) & TN_Base_Type);
 				bool rhs_is_overloadable = rhs_value.type->kind == Type_Basic && !(get_type_flags(rhs_value.type) & TN_Base_Type);
 
-				if (rhs_is_overloadable || lhs_is_overloadable)
+				if ((rhs_is_overloadable || lhs_is_overloadable) && op != Op_Assign)
 				{
 					bool suspend = false;
 
@@ -1426,20 +1495,30 @@ namespace Glass
 					continue;
 				}
 
-				if (lhs_value.type != f.Any_Ty && lhs_value.type != rhs_value.type) {
+				if (!(op == Op_And || op == Op_Or) && lhs_value.type != f.Any_Ty && lhs_value.type != rhs_value.type) {
 					push_error_scope(f, node, scope_id, FMT("type mismatch: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return {};
+				}
+
+				if (op == Op_And || op == Op_Or)
+				{
+					if (lhs_value.type != f.bool_Ty)
+					{
+						push_error_scope(f, node->bin.lhs, scope_id, FMT("expected type to be bool", print_type(lhs_value.type)));
+						return {};
+					}
+
+					if (rhs_value.type != f.bool_Ty)
+					{
+						push_error_scope(f, node->bin.rhs, scope_id, FMT("expected type to be bool", print_type(lhs_value.type)));
+						return {};
+					}
 				}
 
 				bool is_range = op == Op_Range;
 
 				type = lhs_value.type;
 				auto type_flags = get_type_flags(type);
-
-				bool is_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
-
-				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div || op == Op_BitAnd || op == Op_BitOr || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
-				bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater;
 
 				bool is_integer = !(type_flags & TN_Float_Type);
 				bool is_signed = !(type_flags & TN_Unsigned_Type);
@@ -1451,7 +1530,7 @@ namespace Glass
 					return false;
 				}
 
-				if (comparative_op && !is_base) {
+				if (comparative_op && !is_base && op != Op_Assign) {
 					push_error_scope(f, node, scope_id, FMT("no operator overloaded for types: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return false;
 				}
@@ -1560,6 +1639,12 @@ namespace Glass
 							value.us1 = lhs_value.value.f64 > rhs_value.value.f64;
 						}
 						break;
+					case Op_And:
+						value.us1 = lhs_value.value.us8 && rhs_value.value.us8;
+						break;
+					case Op_Or:
+						value.us1 = lhs_value.value.us8 || rhs_value.value.us8;
+						break;
 					default:
 						GS_ASSERT_UNIMPL();
 						break;
@@ -1596,6 +1681,7 @@ namespace Glass
 			break;
 			case Ast_Array_Type:
 			{
+
 				Expr_Value& elem = expr_values[node->array_type.elem];
 
 				if (elem.type != f.Type_Ty) {
@@ -1604,6 +1690,12 @@ namespace Glass
 				}
 
 				if (node->array_type.dynamic) {
+
+					if (!(get_entity(f, f.Array_entity_id).flags & Flag_Complete)) {
+						insert_dep(f, f.Array_entity_id, deps);
+						return true;
+					}
+
 					my_value.value.s4 = get_type_index(get_type_at(elem.value.s4)->get_dynarray());
 				}
 				else {
@@ -1623,6 +1715,34 @@ namespace Glass
 					my_value.value.s4 = get_type_index(get_type_at(elem.value.s4)->get_array(size.value.s8));
 				}
 
+				my_value.type = f.Type_Ty;
+			}
+			break;
+			case Ast_Func_Type:
+			{
+				Expr_Value& ret = expr_values[node->func_type.return_type];
+
+				if (ret.type != f.Type_Ty) {
+					push_error_scope(f, node->func_type.return_type, scope_id, FMT("expression must be of type 'Type': {}", print_type(ret.type)));
+					return {};
+				}
+
+				Array<GS_Type*> parameters;
+
+				for (size_t i = 0; i < node->func_type.params.count; i++)
+				{
+					Ast_Node* parameter = node->func_type.params[i];
+					Expr_Value& param = expr_values[node->func_type.params[i]];
+
+					if (param.type != f.Type_Ty) {
+						push_error_scope(f, parameter, scope_id, FMT("expression must be of type 'Type': {}", print_type(ret.type)));
+						return {};
+					}
+
+					Array_Add(parameters, get_type_at(param.value.s4));
+				}
+
+				my_value.value.s4 = get_type_index(get_proc_type(get_type_at(ret.value.s4), parameters));
 				my_value.type = f.Type_Ty;
 			}
 			break;
@@ -1730,7 +1850,12 @@ namespace Glass
 						return false;
 					}
 
-					int member = find_entity(f, mem.member.name, search_scope_id);
+					int member = 0;
+
+					Scope& search_scope = get_scope(f, search_scope_id);
+					auto it = search_scope.name_to_entity.find(mem.member.name);
+					if (it != search_scope.name_to_entity.end())
+						member = it->second;
 
 					if (!member)
 					{
@@ -1746,6 +1871,12 @@ namespace Glass
 					{
 						my_value.value = member_entity.enum_mem.value;
 						my_value.type = member_entity.type;
+					}
+					break;
+					case Entity_Struct:
+					{
+						my_value.type = f.Type_Ty;
+						my_value.value.s4 = get_type_index(get_type(member_entity._struct.typename_id));
 					}
 					break;
 					default:
@@ -1907,13 +2038,18 @@ namespace Glass
 						my_value.cast_type = Il_Cast_FloatTrunc;
 					}
 				}
+				else if (to_is_float && from_is_int)
+				{
+					my_value.cast_type = Il_Cast_Int2Float;
+				}
 				else if (to_is_pointer && from_is_pointer)
 				{
 					my_value.cast_type = Il_Cast_Ptr;
 				}
 				else
 				{
-					GS_ASSERT_UNIMPL();
+					push_error_scope(f, node->un.expr, scope_id, FMT("invalid cast: cast({}) {}", print_type(to_type), print_type(from_type)));
+					return false;
 				}
 
 				if (const_eval)
@@ -1980,6 +2116,34 @@ namespace Glass
 				my_value.type = f.bool_Ty;
 			}
 			break;
+			case Ast_Neg:
+			{
+				ASSERT(!const_eval);
+
+				Ast_Node_Unary& un = node->un;
+				Expr_Value& expr = expr_values[un.expr];
+
+				u64 type_flags = get_type_flags(expr.type);
+
+				if (!(type_flags & TN_Numeric_Type)) {
+					push_error_scope(f, node->un.expr, scope_id, FMT("expression must have numeric type", print_type(expr.type)));
+					return false;
+				}
+
+				if (type_flags & TN_Float_Type)
+				{
+					my_value.value.f64 = -expr.value.f64;
+				}
+				else
+				{
+					my_value.value.s8 = -expr.value.s8;
+				}
+
+				my_value.is_unsolid = expr.is_unsolid;
+				my_value.is_unsolid_float = expr.is_unsolid_float;
+				my_value.type = expr.type;
+			}
+			break;
 			case Ast_Char:
 			{
 				std::string processed_literal;
@@ -2025,6 +2189,20 @@ namespace Glass
 				my_value.type = f.void_Ty->get_pointer();
 				my_value.is_unsolid = true;
 				my_value.is_unsolid_null = true;
+			}
+			break;
+			case Ast_True:
+			{
+				my_value.value.s8 = 1;
+				my_value.type = f.bool_Ty;
+				my_value.is_unsolid = true;
+			}
+			break;
+			case Ast_False:
+			{
+				my_value.value.s8 = 0;
+				my_value.type = f.bool_Ty;
+				my_value.is_unsolid = true;
 			}
 			break;
 			case Ast_If:
@@ -2430,6 +2608,11 @@ namespace Glass
 		{
 			Ast_Node_Call& call = node->call;
 
+			if (!my_value.call.is_proc_call)
+			{
+				code_gen_pass(f, scope_id, call.callee, expr_values, proc);
+			}
+
 			GS_Type* signature = my_value.call.callee_signature;
 
 			bool varargs = my_value.call.varargs;
@@ -2572,7 +2755,14 @@ namespace Glass
 				Array_Add(arguments, lvalue_alloca);
 			}
 
-			my_value.code_id = il_insert_call(proc, get_proc_type(return_type, code_argument_types), arguments, my_value.call.proc_id);
+			if (my_value.call.is_proc_call)
+			{
+				my_value.code_id = il_insert_call(proc, get_proc_type(return_type, code_argument_types), arguments, my_value.call.proc_id);
+			}
+			else
+			{
+				my_value.code_id = il_insert_call_ptr(proc, get_proc_type(return_type, code_argument_types), arguments, expr_values[call.callee].code_id);
+			}
 
 			if (is_aggr_return)
 			{
@@ -2624,27 +2814,48 @@ namespace Glass
 					return_type = my_value.type;
 				}
 
-				Array_Add(arguments, lhs.code_id);
-				Array_Add(arguments, rhs.code_id);
-
 				if (is_type_aggr(lhs.type))
 				{
 					ASSERT(lhs.lvalue);
+
+					if (lhs.lvalue)
+					{
+						Array_Add(arguments, lhs.code_id);
+					}
+					else
+					{
+						int lvalue = il_insert_alloca(proc, lhs.type);
+						il_insert_store(proc, lhs.type, lvalue, lhs.code_id);
+						Array_Add(arguments, lvalue);
+					}
+
 					Array_Add(param_types, lhs.type->get_pointer());
 				}
 				else
 				{
 					Array_Add(param_types, lhs.type);
+					Array_Add(arguments, lhs.code_id);
 				}
 
 				if (is_type_aggr(rhs.type))
 				{
-					ASSERT(rhs.lvalue);
+					if (rhs.lvalue)
+					{
+						Array_Add(arguments, rhs.code_id);
+					}
+					else
+					{
+						int lvalue = il_insert_alloca(proc, rhs.type);
+						il_insert_store(proc, rhs.type, lvalue, rhs.code_id);
+						Array_Add(arguments, lvalue);
+					}
+
 					Array_Add(param_types, rhs.type->get_pointer());
 				}
 				else
 				{
 					Array_Add(param_types, lhs.type);
+					Array_Add(arguments, rhs.code_id);
 				}
 
 				my_value.code_id = il_insert_call(proc, get_proc_type(return_type, param_types), arguments, my_value.bin.proc_idx);
@@ -2712,7 +2923,7 @@ namespace Glass
 				}
 				else
 				{
-					bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater;
+					bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater || op == Op_And || op == Op_Or;
 
 					code_gen_pass(f, scope_id, node->bin.lhs, expr_values, proc);
 					code_gen_pass(f, scope_id, node->bin.rhs, expr_values, proc);
@@ -2746,6 +2957,8 @@ namespace Glass
 						case Op_NotEq: comp_type = Il_Cmp_NotEqual; break;
 						case Op_Lesser: comp_type = Il_Cmp_Lesser; break;
 						case Op_Greater: comp_type = Il_Cmp_Greater; break;
+						case Op_And: comp_type = Il_Cmp_And; break;
+						case Op_Or: comp_type = Il_Cmp_Or; break;
 						default:
 							GS_ASSERT_UNIMPL();
 							break;
@@ -2801,6 +3014,11 @@ namespace Glass
 			{
 				my_value.code_id = entity.var.code_id;
 
+				if (entity.var.global)
+				{
+					my_value.code_id = il_insert_global_address(proc, my_value.code_id);
+				}
+
 				if (entity.var.big_parameter)
 				{
 					my_value.code_id = il_insert_load(proc, my_value.type->get_pointer(), my_value.code_id);
@@ -2821,6 +3039,10 @@ namespace Glass
 			else if (entity.kind == Entity_Enum || entity.kind == Entity_Struct || entity.kind == Entity_TypeName)
 			{
 				my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
+			}
+			else if (entity.kind == Entity_Function)
+			{
+				my_value.code_id = il_insert_proc_address(proc, entity.fn.proc_id);
 			}
 			else
 			{
@@ -2886,6 +3108,10 @@ namespace Glass
 			{
 				aep = il_insert_load(proc, my_value.type, aep);
 			}
+			else
+			{
+				my_value.lvalue = true;
+			}
 
 			my_value.code_id = aep;
 		}
@@ -2917,6 +3143,21 @@ namespace Glass
 			Expr_Value& expr = expr_values[node->un.expr];
 
 			my_value.code_id = il_insert_compare(proc, Il_Value_Cmp, Il_Cmp_Equal, expr.type, expr.code_id, il_insert_constant(proc, (void*)0, expr.type));
+		}
+		break;
+		case Ast_Neg:
+		{
+			code_gen_pass(f, scope_id, node->un.expr, expr_values, proc);
+			Expr_Value& expr = expr_values[node->un.expr];
+
+			if (my_value.is_unsolid)
+			{
+				my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
+			}
+			else
+			{
+				my_value.code_id = il_insert_math_op(proc, my_value.type, Il_Sub, il_insert_constant(proc, (void*)0, my_value.type), expr.code_id);
+			}
 		}
 		break;
 		case Ast_Cast:
@@ -3112,6 +3353,8 @@ namespace Glass
 		}
 		break;
 		case Ast_Null:
+		case Ast_True:
+		case Ast_False:
 		{
 			my_value.code_id = il_insert_constant(proc, nullptr, my_value.type);
 		}
@@ -3259,47 +3502,119 @@ namespace Glass
 		break;
 		case Entity_Variable:
 		{
-			Array<Flat_Node>& flat_ast = entity.flat_syntax;
+			if (entity.var.global) {
 
-			Expr_Val_Map& expr_values = *(Expr_Val_Map*)&entity.expr_values;
+				Array<Flat_Node>& flat_ast = entity.flat_syntax;
+				Expr_Val_Map& expr_values = *(Expr_Val_Map*)&entity.expr_values;
 
-			if (entity.progress)
-			{
-				GS_CORE_TRACE("variable '{}' resume eval: progress: {}", entity.name->str, entity.progress);
-			}
-
-			bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
-
-			if (!success)
-				return false;
-
-			if (entity.progress <= flat_ast.count - 1) {
-				return true;
-			}
-
-			if (entity.syntax->var.type)
-			{
-				Expr_Value type = expr_values[entity.syntax->var.type];
-
-				if (type.type != f.Type_Ty)
+				if (entity.progress)
 				{
-					push_error_scope(f, entity.syntax->var.type, scope_id, FMT("expected expression to be a type"));
+					GS_CORE_TRACE("global variable '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+				}
+
+				bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
+
+				if (!success)
 					return false;
+
+				if (entity.progress <= flat_ast.count - 1) {
+					return true;
 				}
 
-				entity.type = get_type_at(type.value.s8);
-
-				if (stmt->var.is_varargs)
+				if (entity.syntax->var.type)
 				{
-					entity.type = entity.type->get_dynarray();
+					Expr_Value& type_expr = expr_values[entity.syntax->var.type];
+
+					GS_Type* type = expr_get_type(f, scope_id, entity.syntax->var.type, type_expr);
+
+					if (!type)
+						return nullptr;
+
+					entity.type = type;
 				}
+
+				if (entity.syntax->var.assignment)
+				{
+					Expr_Value& value = expr_values[entity.syntax->var.assignment];
+
+					if (!entity.type) {
+						entity.type = value.type;
+					}
+					else
+					{
+						try_promote(f, entity.type, value);
+
+						if (entity.type != value.type) {
+							push_error_scope(f, entity.syntax->var.type, scope_id, FMT("type mismatch in assignment '{}' = '{}'", print_type(entity.type), print_type(value.type)));
+							return false;
+						}
+					}
+				}
+
+				Il_Global global;
+				global.initializer = -1;
+				global.type = entity.type;
+				global.name = entity.name->str;
+				global.external = false;
+
+				entity.var.code_id = il_insert_global(f.program, global);
+
+				if (entity.syntax->var.assignment)
+				{
+					Expr_Value& value = expr_values[entity.syntax->var.assignment];
+					Array_Add(global.initializer_storage, il_make_const(value.value, get_type_index(entity.type)));
+					global.initializer = 0;
+				}
+
+				entity.flags = Flag_Complete;
+
+				DBG(
+					GS_CORE_TRACE("global variable {}: type: {}", entity.name->str, print_type(entity.type));
+				);
 			}
+			else
+			{
+				Array<Flat_Node>& flat_ast = entity.flat_syntax;
+				Expr_Val_Map& expr_values = *(Expr_Val_Map*)&entity.expr_values;
 
-			entity.flags = Flag_Complete;
+				if (entity.progress)
+				{
+					GS_CORE_TRACE("variable '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+				}
 
-			DBG(
-				GS_CORE_TRACE("variable {}: type: {}", entity.name->str, print_type(entity.type));
-			);
+				bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
+
+				if (!success)
+					return false;
+
+				if (entity.progress <= flat_ast.count - 1) {
+					return true;
+				}
+
+				if (entity.syntax->var.type)
+				{
+					Expr_Value type = expr_values[entity.syntax->var.type];
+
+					if (type.type != f.Type_Ty)
+					{
+						push_error_scope(f, entity.syntax->var.type, scope_id, FMT("expected expression to be a type"));
+						return false;
+					}
+
+					entity.type = get_type_at(type.value.s8);
+
+					if (stmt->var.is_varargs)
+					{
+						entity.type = entity.type->get_dynarray();
+					}
+				}
+
+				entity.flags = Flag_Complete;
+
+				DBG(
+					GS_CORE_TRACE("variable {}: type: {}", entity.name->str, print_type(entity.type));
+				);
+			}
 		}
 		break;
 		case Entity_Struct_Member:
