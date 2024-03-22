@@ -102,6 +102,9 @@ namespace Glass
 				case Il_Bit_Or:
 					stream << "or " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
 					break;
+				case Il_Mod:
+					stream << "mod " << print_type_index(node.type_idx).data << " $" << node.math_op.left_node_idx << " $" << node.math_op.right_node_idx << "\n";
+					break;
 				case Il_Value_Cmp:
 				{
 					stream << "cmp ";

@@ -1606,6 +1606,88 @@ namespace Glass
 		_struct->type = Ast_Struct;
 		_struct->token = consume(s);
 
+		if (current(s).type == Tk_OpenParen)
+		{
+			_struct->_struct.has_param_list = true;
+
+			if (!expected(s, Tk_OpenParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '('"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+
+			bool expecting_param = false;
+
+			while (true)
+			{
+				if (current(s).type == Tk_CloseParen || current(s).type == Tk_EndOfFile)
+				{
+					if (expecting_param)
+					{
+						frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected parameter declaration"));
+						s.error = true;
+						return nullptr;
+					}
+					break;
+				}
+
+				Ast_Node* param = parse_statement(s, false);
+
+				Array_Add(_struct->_struct.parameters, param);
+
+				if (!param)
+				{
+					frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected function parameter declaration"));
+					s.error = true;
+					return nullptr;
+				}
+
+				if (param->type != Ast_Variable || param->var.is_constant)
+				{
+					frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected function parameter to be a variable declaration"));
+					s.error = true;
+					return nullptr;
+				}
+
+				if (current(s).type == Tk_Range)
+				{
+					param->var.is_varargs = true;
+					consume(s);
+				}
+
+				if (current(s).type == Tk_CloseParen)
+				{
+					break;
+				}
+				else
+				{
+					if (current(s).type == Tk_Comma)
+					{
+						expecting_param = true;
+						consume(s);
+					}
+					else
+					{
+						frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected ','"));
+						s.error = true;
+						return nullptr;
+					}
+				}
+			}
+
+			if (!expected(s, Tk_CloseParen))
+			{
+				frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected ')'"));
+				s.error = true;
+				return nullptr;
+			}
+
+			consume(s);
+		}
+
 		if (!expected(s, Tk_OpenCurly))
 		{
 			frontend_push_error(*s.f, current(s), s.file_path, String_Make("expected '{'"));
@@ -1952,6 +2034,29 @@ namespace Glass
 			return new_fn;
 		}
 		break;
+		case Ast_Struct:
+		{
+			Ast_Node* new_struct = allocate_node();
+			*new_struct = *stmt;
+
+			new_struct->_struct.parameters = {};
+			new_struct->_struct.body = {};
+
+			for (size_t i = 0; i < stmt->_struct.parameters.count; i++)
+			{
+				Ast_Node* parameter = stmt->_struct.parameters[i];
+				Array_Add(new_struct->_struct.parameters, copy_statement(parameter));
+			}
+
+			for (size_t i = 0; i < stmt->_struct.body.stmts.count; i++)
+			{
+				Ast_Node* s = stmt->_struct.body.stmts[i];
+				Array_Add(new_struct->_struct.body.stmts, copy_statement(s));
+			}
+
+			return new_struct;
+		}
+		break;
 		case Ast_If:
 		case Ast_While:
 		case Ast_For:
@@ -2136,6 +2241,14 @@ namespace Glass
 			Tk name = stmt->poly.name;
 			stmt->type = Ast_Ident;
 			stmt->token = name;
+		}
+		break;
+		case Ast_Call:
+		{
+			for (size_t i = 0; i < stmt->call.args.count; i++)
+			{
+				unpoly_statement(stmt->call.args[i]);
+			}
 		}
 		break;
 		case Ast_Ident:

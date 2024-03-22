@@ -206,6 +206,8 @@ namespace Glass
 	struct Ast_Node_Struct
 	{
 		Ast_Node_Scope		body;
+		Array_UI<Ast_Node*> parameters;
+		bool				has_param_list;
 	};
 
 	struct Ast_Node_Enum

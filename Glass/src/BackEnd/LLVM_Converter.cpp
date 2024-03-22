@@ -377,6 +377,14 @@ namespace Glass
 							regv[idx] = lc.llvm_builder->CreateSDiv(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
 				}
 				break;
+				case Il_Mod:
+				{
+					if (type_flags & TN_Unsigned_Type)
+						regv[idx] = lc.llvm_builder->CreateURem(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
+					else
+						regv[idx] = lc.llvm_builder->CreateSRem(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
+				}
+				break;
 				case Il_Bit_And:
 					regv[idx] = lc.llvm_builder->CreateAnd(regv[node.math_op.left_node_idx], regv[node.math_op.right_node_idx]);
 					break;
@@ -534,6 +542,14 @@ namespace Glass
 						else if (node.cast.cast_type == Il_Cast_IntTrunc) {
 							regv[idx] = lc.llvm_builder->CreateTrunc(regv[node.cast.castee_node_idx], llvm_Ty);
 							cast_ops = llvm::Instruction::CastOps::Trunc;
+						}
+						else if (node.cast.cast_type == Il_Cast_Int2Ptr) {
+							regv[idx] = lc.llvm_builder->CreateIntToPtr(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::IntToPtr;
+						}
+						else if (node.cast.cast_type == Il_Cast_Ptr2Int) {
+							regv[idx] = lc.llvm_builder->CreatePtrToInt(regv[node.cast.castee_node_idx], llvm_Ty);
+							cast_ops = llvm::Instruction::CastOps::PtrToInt;
 						}
 						else {
 							GS_ASSERT_UNIMPL();

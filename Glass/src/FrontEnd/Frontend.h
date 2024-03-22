@@ -20,6 +20,7 @@ namespace Glass
 		Op_Sub = Tk_Minus,
 		Op_Mul = Tk_Star,
 		Op_Div = Tk_Slash,
+		Op_Mod = Tk_Modulo,
 
 		Op_BitAnd = Tk_Ampersand,
 		Op_BitOr = Tk_Pipe,
@@ -68,6 +69,7 @@ namespace Glass
 		case Op_Range: return String_Make("..");
 		case Op_BitAnd: return String_Make("&");
 		case Op_BitOr: return String_Make("|");
+		case Op_Mod: return String_Make("%");
 		default:
 			GS_ASSERT_UNIMPL();
 			break;
@@ -103,6 +105,7 @@ namespace Glass
 		Entity_Function,
 		Entity_Poly_Function,
 		Entity_Struct,
+		Entity_Poly_Struct,
 		Entity_Struct_Member,
 		Entity_Enum,
 		Entity_Enum_Member,
@@ -149,6 +152,7 @@ namespace Glass
 		GS_Type* type;
 		Const_Union value;
 		int referenced_entity;
+		bool is_constant;
 		bool is_unsolid;
 		bool is_unsolid_float;
 		bool is_unsolid_null;
@@ -182,6 +186,7 @@ namespace Glass
 				GS_Type* callee_signature;
 				bool varargs;
 				GS_Type* varargs_type;
+				bool is_poly_struct;
 			} call;
 
 			struct Checked_Bin
@@ -255,10 +260,31 @@ namespace Glass
 		int parameter_count;
 	};
 
+	struct Parameter_Pair
+	{
+		GS_Type* type;
+		String_Atom* name;
+	};
+
 	struct Entity_Strct
 	{
 		int scope_id;
 		int typename_id;
+		int instance_of;
+		int instance_id;
+	};
+
+	struct Poly_Struct_Instance
+	{
+		Array<Const_Union> overloads;
+		int entity_id;
+	};
+
+	struct Entity_Poly_Strct
+	{
+		Array<int> parameter_ids;
+		Array<Parameter_Pair> parameters;
+		Array<Poly_Struct_Instance> instances;
 	};
 
 	struct Entity_Enm
@@ -325,6 +351,7 @@ namespace Glass
 			Entity_Func			fn;
 			Entity_Poly_Func	poly_fn;
 			Entity_Strct		_struct;
+			Entity_Poly_Strct	poly_struct;
 			Entity_Enm			enm;
 			Entity_Strct_Member struct_mem;
 			Entity_Enm_Member   enum_mem;

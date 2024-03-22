@@ -489,6 +489,16 @@ namespace Glass
 			get_poly_declarations(node->func_type.return_type, parameter_index, decls);
 		}
 		break;
+		case Ast_Call:
+		{
+			for (size_t i = 0; i < node->call.args.count; i++)
+			{
+				get_poly_declarations(node->call.args[i], parameter_index, decls);
+			}
+
+			get_poly_declarations(node->call.callee, parameter_index, decls);
+		}
+		break;
 		case Ast_Pointer:
 		{
 			get_poly_declarations(node->un.expr, parameter_index, decls);
@@ -500,6 +510,7 @@ namespace Glass
 		}
 		break;
 		case Ast_Ident:
+		case Ast_Numeric:
 			break;
 		default:
 			GS_ASSERT_UNIMPL();
@@ -634,51 +645,87 @@ namespace Glass
 				return false;
 			}
 
-			int entity_id = insert_entity(f, make_entity(Entity_Struct, stmt->token.name, stmt), scope_id);
-			int struct_scope_id = insert_scope(f, Scope_Struct, scope_id, file_id, entity_id, nullptr);
-
-			Entity& struct_entity = get_entity(f, entity_id);
-
-			Type_Name tn = {};
-			tn.flags = TN_Struct_Type;
-			tn.name = stmt->token.name->str;
-
-			struct_entity._struct.typename_id = insert_typename(tn);
-			struct_entity._struct.scope_id = struct_scope_id;
-
-			if (stmt->token.name == f.keyword_string) {
-				f.string_Ty = get_type(struct_entity._struct.typename_id);
-				f.string_entity_id = entity_id;
-			}
-
-			if (stmt->token.name == f.keyword_Array) {
-				f.Array_Ty = get_type(struct_entity._struct.typename_id);
-				f.Array_entity_id = entity_id;
-			}
-
-			if (stmt->token.name == f.keyword_TypeInfo) {
-				f.TypeInfo_Ty = get_type(struct_entity._struct.typename_id);
-				f.TypeInfo_entity_id = entity_id;
-			}
-
-			if (stmt->token.name == f.keyword_Any) {
-				f.Any_Ty = get_type(struct_entity._struct.typename_id);
-			}
-
-			for (size_t i = 0; i < stmt->_struct.body.stmts.count; i++)
+			if (stmt->_struct.has_param_list)
 			{
-				prewalk_stmt(f, stmt->_struct.body.stmts[i], struct_scope_id, file_id);
+				int entity_id = insert_entity(f, make_entity(Entity_Poly_Struct, stmt->token.name, stmt), scope_id);
+				Entity& entity = get_entity(f, entity_id);
+
+				int param_scope_id = insert_scope(f, Scope_Struct, scope_id, file_id, entity_id, nullptr);
+
+				for (size_t i = 0; i < stmt->_struct.parameters.count; i++)
+				{
+					Ast_Node* parameter = stmt->_struct.parameters[i];
+
+					int previous_declaration = find_entity(f, parameter->token.name, param_scope_id);
+
+					if (previous_declaration)
+					{
+						push_error_scope(f, parameter, scope_id, FMT("already declared: '{}'", parameter->token.name->str));
+						return false;
+					}
+
+					int param_entity_id = insert_entity(f, make_entity(Entity_Variable, parameter->token.name, parameter), param_scope_id);
+					Entity& param_entity = get_entity(f, param_entity_id);
+
+					if (parameter->var.type)
+					{
+						flatten_syntax(&parameter->var.type, param_entity.flat_syntax, param_scope_id);
+					}
+
+					param_entity.var.parameter = true;
+
+					insert_dep(f, param_entity_id, entity.deps);
+					Array_Add(entity.poly_struct.parameter_ids, param_entity_id);
+				}
 			}
-
-			Scope& my_scope = get_scope(f, struct_scope_id);
-
-			for (size_t i = 0; i < my_scope.entities.count; i++)
+			else
 			{
-				int member_entity_id = my_scope.entities[i];
-				Entity& member_entity = get_entity(f, member_entity_id);
+				int entity_id = insert_entity(f, make_entity(Entity_Struct, stmt->token.name, stmt), scope_id);
+				int struct_scope_id = insert_scope(f, Scope_Struct, scope_id, file_id, entity_id, nullptr);
 
-				if (member_entity.kind == Entity_Struct_Member) {
-					insert_dep(f, member_entity_id, struct_entity.deps);
+				Entity& struct_entity = get_entity(f, entity_id);
+
+				Type_Name tn = {};
+				tn.flags = TN_Struct_Type;
+				tn.name = stmt->token.name->str;
+
+				struct_entity._struct.typename_id = insert_typename(tn);
+				struct_entity._struct.scope_id = struct_scope_id;
+
+				if (stmt->token.name == f.keyword_string) {
+					f.string_Ty = get_type(struct_entity._struct.typename_id);
+					f.string_entity_id = entity_id;
+				}
+
+				if (stmt->token.name == f.keyword_Array) {
+					f.Array_Ty = get_type(struct_entity._struct.typename_id);
+					f.Array_entity_id = entity_id;
+				}
+
+				if (stmt->token.name == f.keyword_TypeInfo) {
+					f.TypeInfo_Ty = get_type(struct_entity._struct.typename_id);
+					f.TypeInfo_entity_id = entity_id;
+				}
+
+				if (stmt->token.name == f.keyword_Any) {
+					f.Any_Ty = get_type(struct_entity._struct.typename_id);
+				}
+
+				for (size_t i = 0; i < stmt->_struct.body.stmts.count; i++)
+				{
+					prewalk_stmt(f, stmt->_struct.body.stmts[i], struct_scope_id, file_id);
+				}
+
+				Scope& my_scope = get_scope(f, struct_scope_id);
+
+				for (size_t i = 0; i < my_scope.entities.count; i++)
+				{
+					int member_entity_id = my_scope.entities[i];
+					Entity& member_entity = get_entity(f, member_entity_id);
+
+					if (member_entity.kind == Entity_Struct_Member) {
+						insert_dep(f, member_entity_id, struct_entity.deps);
+					}
 				}
 			}
 		}
@@ -901,6 +948,120 @@ namespace Glass
 		return true;
 	}
 
+	GS_Type* match_poly_decl(Front_End& f, int scope_id, Ast_Node* argument, String_Atom* declaration_name, Ast_Node* syntax, GS_Type* type)
+	{
+		switch (syntax->type)
+		{
+		case Ast_Poly:
+		{
+			if (syntax->poly.name.name == declaration_name)
+			{
+				return type;
+			}
+		}
+		break;
+		case Ast_Pointer:
+		{
+			if (type->kind != Type_Pointer)
+			{
+				push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' mismatching levels of indirection", declaration_name->str));
+				return {};
+			}
+
+			return match_poly_decl(f, scope_id, argument, declaration_name, syntax->un.expr, reduce_indirection(type));
+		}
+		break;
+		case Ast_Array_Type:
+		{
+			if (syntax->array_type.dynamic)
+			{
+				if (type->kind != Type_Dyn_Array)
+				{
+					push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' needed [..]", declaration_name->str));
+					return {};
+				}
+
+				return match_poly_decl(f, scope_id, argument, declaration_name, syntax->array_type.elem, type->dyn_array.element_type);
+			}
+			else
+			{
+				GS_ASSERT_UNIMPL();
+			}
+		}
+		break;
+		case Ast_Call:
+		{
+			bool invalid_shape = false;
+
+			if (type->kind != Type_Basic)
+			{
+				invalid_shape = true;
+			}
+
+			Entity* paramed_struct = nullptr;
+			Poly_Struct_Instance* instance = nullptr;
+
+			if (!invalid_shape)
+			{
+				auto it = f.typename_to_struct.find(type->basic.type_name_id);
+
+				if (it == f.typename_to_struct.end())
+				{
+					invalid_shape = true;
+				}
+
+				if (!invalid_shape)
+				{
+					Entity& entity = get_entity(f, it->second);
+
+					if (entity._struct.instance_of)
+					{
+						paramed_struct = &get_entity(f, entity._struct.instance_of);
+						instance = &paramed_struct->poly_struct.instances[entity._struct.instance_id];
+					}
+					else
+					{
+						invalid_shape = true;
+					}
+				}
+			}
+
+			if (invalid_shape)
+			{
+				push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' needed parameterized struct", declaration_name->str));
+				return false;
+			}
+
+			if (syntax->call.args.count != paramed_struct->poly_struct.parameters.count)
+			{
+				push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' mismatching number of parameters", declaration_name->str));
+				return {};
+			}
+
+			for (size_t i = 0; i < syntax->call.args.count; i++)
+			{
+				Ast_Node* param_argument = syntax->call.args[i];
+				GS_Type* parameter_type_value = get_type_at(instance->overloads[i].s4);
+
+				GS_Type* result = match_poly_decl(f, scope_id, argument, declaration_name, param_argument, parameter_type_value);
+
+				if (result)
+				{
+					return result;
+				}
+			}
+		}
+		break;
+		case Ast_Ident:
+			break;
+		default:
+			GS_ASSERT_UNIMPL();
+			break;
+		}
+
+		return nullptr;
+	}
+
 	bool type_check_poly_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend)
 	{
 		Ast_Node* node = *reference;
@@ -939,65 +1100,14 @@ namespace Glass
 			Ast_Node* argument = call.args[declaration.parameter_index];
 			Expr_Value& arg = expr_values[argument];
 
-			Ast_Node* type_syntax = parameter->var.type;
-			GS_Type* match = arg.type;
+			GS_Type* solution = match_poly_decl(f, scope_id, argument, declaration.name, parameter->var.type, arg.type);
 
-			bool solved = false;
-			while (!solved)
-			{
-				switch (type_syntax->type)
-				{
-				case Ast_Poly:
-				{
-					if (type_syntax->poly.name.name == declaration.name)
-					{
-						solved = true;
-					}
-				}
-				break;
-				case Ast_Pointer:
-				{
-					if (match->kind != Type_Pointer)
-					{
-						push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' mismatching levels of indirection", declaration.name->str));
-						return {};
-					}
+			if (!solution)
+				return false;
 
-					match = reduce_indirection(match);
+			GS_CORE_TRACE("solved poly declaration: '{}' -> '{}'", declaration.name->str, print_type(solution));
 
-					type_syntax = type_syntax->un.expr;
-				}
-				break;
-				case Ast_Array_Type:
-				{
-					if (type_syntax->array_type.dynamic)
-					{
-						if (match->kind != Type_Dyn_Array)
-						{
-							push_error_scope(f, argument, scope_id, FMT("failed to solve polymorphic declaration: '{}' needed [..]", declaration.name->str));
-							return {};
-						}
-
-						match = match->dyn_array.element_type;
-						type_syntax = type_syntax->array_type.elem;
-					}
-					else
-					{
-						GS_ASSERT_UNIMPL();
-					}
-				}
-				break;
-				case Ast_Ident:
-					break;
-				default:
-					GS_ASSERT_UNIMPL();
-					break;
-				}
-			}
-
-			GS_CORE_TRACE("solved poly declaration: '{}' -> '{}'", declaration.name->str, print_type(match));
-
-			overloads[declaration.name] = match;
+			overloads[declaration.name] = solution;
 		}
 
 		int cache_entity_id = 0;
@@ -1040,7 +1150,7 @@ namespace Glass
 
 			syntax->token.name = get_atom(mangled_name);
 
-			int phony_scope = insert_scope(f, Scope_Function, find_filescope_parent(f, scope_id), fn.file_id, 0, nullptr);
+			int phony_scope = insert_scope(f, Scope_Function, find_filescope_parent(f, fn.scope_id), fn.file_id, 0, nullptr);
 
 			for (auto& o : overloads)
 			{
@@ -1327,6 +1437,137 @@ namespace Glass
 		return true;
 	}
 
+	bool type_check_paramed_struct(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend)
+	{
+		Ast_Node* node = *reference;
+		Expr_Value& my_value = expr_values[node];
+
+		Entity& entity = get_entity(f, expr_values[node->call.callee].referenced_entity);
+		Ast_Node_Call& call = node->call;
+
+		if (call.args.count < entity.poly_struct.parameters.count)
+		{
+			push_error_scope(f, node, scope_id, FMT("too few arguments for polymorphic struct: (needed: {}, given: {})", entity.poly_struct.parameters.count, call.args.count));
+			return {};
+		}
+
+		if (call.args.count > entity.poly_struct.parameters.count)
+		{
+			push_error_scope(f, node->call.args[node->call.args.count - 1], scope_id, FMT("too many arguments for polymorphic struct: (needed: {}, given: {})", entity.poly_struct.parameters.count, call.args.count));
+			return {};
+		}
+
+		Array<Const_Union> overloads;
+
+		for (size_t i = 0; i < entity.poly_struct.parameters.count; i++)
+		{
+			auto& parameter = entity.poly_struct.parameters[i];
+			Ast_Node* argument = node->call.args[i];
+			auto& value = expr_values[argument];
+
+			if (parameter.type != value.type) {
+				push_error_scope(f, argument, scope_id, FMT("type mismatch: (needed: {}, given: {})", print_type(parameter.type), print_type(value.type)));
+				return false;
+			}
+
+			Array_Add(overloads, value.value);
+		}
+
+		int cached_polymorph = 0;
+
+		for (size_t i = 0; i < entity.poly_struct.instances.count; i++)
+		{
+			auto& possible_instance = entity.poly_struct.instances[i];
+
+			bool equal = true;
+
+			for (size_t i = 0; i < overloads.count; i++)
+			{
+				if (possible_instance.overloads[i].s8 != overloads[i].s8)
+				{
+					equal = false;
+					break;
+				}
+			}
+
+			if (equal)
+				cached_polymorph = possible_instance.entity_id;
+		}
+
+		if (!cached_polymorph)
+		{
+			int phony_scope = insert_scope(f, Scope_Function, find_filescope_parent(f, entity.scope_id), entity.file_id, 0, nullptr);
+
+			std::string std_mangled_name;
+			std_mangled_name = entity.name->str.data;
+			std_mangled_name += '(';
+
+			for (size_t i = 0; i < overloads.count; i++)
+			{
+				auto& overload = overloads[i];
+				auto& parameter = entity.poly_struct.parameters[i];
+
+				Entity& constant = get_entity(f, insert_entity(f, make_entity(Entity_Constant, parameter.name, nullptr), phony_scope));
+				constant.cnst.value = overload;
+				constant.type = parameter.type;
+				constant.flags = Flag_Complete;
+
+				if (parameter.type == f.Type_Ty)
+					std_mangled_name += print_type(get_type_at(overload.s4)).data;
+				else
+					std_mangled_name += std::to_string(overload.us8);
+
+				if (i != overloads.count - 1)
+					std_mangled_name += ", ";
+			}
+
+			std_mangled_name += ')';
+
+			Ast_Node* new_syntax = copy_statement(entity.syntax);
+			new_syntax->_struct.has_param_list = false;
+			new_syntax->token.name = get_atom(std_mangled_name);
+
+			if (!prewalk_stmt(f, new_syntax, phony_scope, entity.file_id)) {
+				return false;
+			}
+
+			int polymorphed_id = find_entity(f, get_atom(std_mangled_name), phony_scope);
+			ASSERT(polymorphed_id);
+
+			Entity& polymorphed = get_entity(f, polymorphed_id);
+			polymorphed._struct.instance_of = expr_values[node->call.callee].referenced_entity;
+
+			Poly_Struct_Instance  new_instance = {};
+			new_instance.entity_id = polymorphed_id;
+			new_instance.overloads = overloads;
+
+			polymorphed._struct.instance_id = entity.poly_struct.instances.count;
+			Array_Add(entity.poly_struct.instances, new_instance);
+
+			insert_dep(f, polymorphed_id, deps);
+
+			suspend = true;
+
+			return true;
+		}
+
+		Entity& instance = get_entity(f, cached_polymorph);
+
+		if (!(instance.flags & Flag_Complete))
+		{
+			insert_dep(f, cached_polymorph, deps);
+			suspend = true;
+			return true;
+		}
+
+		my_value.type = f.Type_Ty;
+		my_value.referenced_entity = cached_polymorph;
+		my_value.call.is_poly_struct = true;
+		my_value.value.s4 = get_type_index(get_type(instance._struct.typename_id));
+
+		return true;
+	}
+
 	bool type_check_pass(Front_End& f, Array<Flat_Node>& flat_ast, int scope_id, Expr_Val_Map& expr_values, int& index, Entity_Deps& deps, bool const_eval, GS_Type* return_type = nullptr)
 	{
 		for (; index < flat_ast.count; index++)
@@ -1381,30 +1622,35 @@ namespace Glass
 				{
 					my_value.type = ident_entity.type;
 					my_value.value = ident_entity.cnst.value;
+					my_value.is_constant = true;
 				}
 				else if (ident_entity.kind == Entity_TypeName)
 				{
 					my_value.type = f.Type_Ty;
 					my_value.value.s4 = get_type_index(get_type(ident_entity.tn.type_name_id));
+					my_value.is_constant = true;
 				}
 				else if (ident_entity.kind == Entity_Struct)
 				{
 					my_value.type = f.Type_Ty;
 					my_value.value.s4 = get_type_index(get_type(ident_entity._struct.typename_id));
+					my_value.is_constant = true;
 				}
 				else if (ident_entity.kind == Entity_Enum)
 				{
 					my_value.type = f.Type_Ty;
 					my_value.value.s4 = get_type_index(get_type(ident_entity.enm.typename_id));
+					my_value.is_constant = true;
 				}
 				else if (ident_entity.kind == Entity_Function || ident_entity.kind == Entity_Poly_Function)
 				{
 					my_value.type = ident_entity.fn.signature;
 					my_value.value.s4 = 0;
+					my_value.is_constant = true;
 				}
-				else
+				else if (ident_entity.kind == Entity_Poly_Struct)
 				{
-					GS_ASSERT_UNIMPL();
+					my_value.is_constant = true;
 				}
 			}
 			break;
@@ -1433,7 +1679,7 @@ namespace Glass
 
 				bool is_assign = op == Op_Assign || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
 
-				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div || op == Op_BitAnd || op == Op_BitOr || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
+				bool numeric_op = op == Op_Add || op == Op_Sub || op == Op_Mul || op == Op_Div || op == Op_Mod || op == Op_BitAnd || op == Op_BitOr || op == Op_AddAssign || op == Op_SubAssign || op == Op_MulAssign || op == Op_DivAssign;
 				bool comparative_op = op == Op_Eq || op == Op_NotEq || op == Op_Lesser || op == Op_Greater || op == Op_And || op == Op_Or;
 
 				GS_Type* type = nullptr;
@@ -1443,14 +1689,17 @@ namespace Glass
 
 				GS_Type* most_complete_type = nullptr;
 
-				if (op == Op_And || op == Op_Or)
+				if (is_assign)
+				{
+					try_promote(f, lhs_value.type, rhs_value);
+				}
+				else if (op == Op_And || op == Op_Or)
 				{
 					try_promote(f, f.bool_Ty, lhs_value);
 					try_promote(f, f.bool_Ty, rhs_value);
 				}
 				else
 				{
-
 					if (lhs_value.is_unsolid) {
 						if (lhs_value.is_unsolid_float)
 							most_complete_type = lhs_value.type;
@@ -1530,16 +1779,25 @@ namespace Glass
 					return false;
 				}
 
+				if (op == Op_Mod && !is_integer) {
+					push_error_scope(f, node, scope_id, FMT("types must be integer: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
+					return false;
+				}
+
 				if (comparative_op && !is_base && op != Op_Assign) {
 					push_error_scope(f, node, scope_id, FMT("no operator overloaded for types: '{}' {} '{}'", print_type(lhs_value.type), operator_to_str(op), print_type(rhs_value.type)));
 					return false;
 				}
 
+				bool evaluate = (lhs_value.is_unsolid || lhs_value.is_constant) && (rhs_value.is_unsolid || rhs_value.is_constant);
+
 				if (is_assign || is_range)
 				{
 				}
-				else
+				else if (evaluate)
 				{
+					my_value.is_constant = true;
+
 					switch (op)
 					{
 					case Op_Add:
@@ -1588,6 +1846,9 @@ namespace Glass
 						{
 							value.f64 = lhs_value.value.f64 / rhs_value.value.f64;
 						}
+						break;
+					case Op_Mod:
+						value.us8 = lhs_value.value.us8 % rhs_value.value.us8;
 						break;
 					case Op_BitAnd:
 					{
@@ -1756,8 +2017,17 @@ namespace Glass
 			{
 				bool suspend = false;
 
-				if (!type_check_call(f, ref.reference, scope_id, expr_values, index, deps, suspend)) {
-					return false;
+				if (expr_values[node->call.callee].referenced_entity && get_entity(f, expr_values[node->call.callee].referenced_entity).kind == Entity_Poly_Struct)
+				{
+					if (!type_check_paramed_struct(f, ref.reference, scope_id, expr_values, index, deps, suspend)) {
+						return false;
+					}
+				}
+				else
+				{
+					if (!type_check_call(f, ref.reference, scope_id, expr_values, index, deps, suspend)) {
+						return false;
+					}
 				}
 
 				if (suspend)
@@ -1871,12 +2141,14 @@ namespace Glass
 					{
 						my_value.value = member_entity.enum_mem.value;
 						my_value.type = member_entity.type;
+						my_value.is_constant = true;
 					}
 					break;
 					case Entity_Struct:
 					{
 						my_value.type = f.Type_Ty;
 						my_value.value.s4 = get_type_index(get_type(member_entity._struct.typename_id));
+						my_value.is_constant = true;
 					}
 					break;
 					default:
@@ -2002,7 +2274,15 @@ namespace Glass
 
 				my_value.type = to_type;
 
-				if (to_type == f.bool_Ty && from_is_base)
+				if (from_is_pointer && to_is_int)
+				{
+					my_value.cast_type = Il_Cast_Ptr2Int;
+				}
+				else if (from_is_int && to_is_pointer)
+				{
+					my_value.cast_type = Il_Cast_Int2Ptr;
+				}
+				else if (to_type == f.bool_Ty && from_is_base)
 				{
 					if (to_is_int)
 					{
@@ -2062,6 +2342,12 @@ namespace Glass
 					}
 					break;
 					case Il_Cast_IntSExt:
+					{
+						my_value.value = expr.value;
+					}
+					break;
+					case Il_Cast_Int2Ptr:
+					case Il_Cast_Ptr2Int:
 					{
 						my_value.value = expr.value;
 					}
@@ -2608,171 +2894,178 @@ namespace Glass
 		{
 			Ast_Node_Call& call = node->call;
 
-			if (!my_value.call.is_proc_call)
+			if (my_value.call.is_poly_struct)
 			{
-				code_gen_pass(f, scope_id, call.callee, expr_values, proc);
-			}
-
-			GS_Type* signature = my_value.call.callee_signature;
-
-			bool varargs = my_value.call.varargs;
-
-			Array<int> arguments;
-			Array<GS_Type*> argument_types;
-			Array<GS_Type*> code_argument_types;
-
-			GS_Type* varargs_type = my_value.call.varargs_type;
-
-			int arg_count = call.args.count;
-
-			GS_Type* return_type = signature->proc.return_type;
-
-			bool is_aggr_return = is_type_aggr(return_type);
-
-			int return_alloca = -1;
-
-			if (is_aggr_return)
-			{
-				return_alloca = il_insert_alloca(proc, return_type);
-				Array_Add(code_argument_types, return_type->get_pointer());
-				Array_Add(arguments, return_alloca);
-				return_type = f.void_Ty;
-			}
-
-			if (varargs)
-			{
-				arg_count = signature->proc.params.count - 1;
-			}
-
-			for (int i = 0; i < arg_count; i++)
-			{
-				Ast_Node* argument = call.args[i];
-
-				Expr_Value& value = expr_values[argument];
-
-				GS_Type* arg_type = value.type;
-				int arg_code_id;
-				bool is_lvalue;
-				bool is_any = false;
-
-				if (i < signature->proc.params.count) {
-
-					GS_Type* param_type = signature->proc.params[i];
-
-					if (param_type == f.Any_Ty && value.type != f.Any_Ty) {
-						is_any = true;
-						code_gen_pass(f, scope_id, argument, expr_values, proc, true);
-						int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
-
-						arg_type = f.Any_Ty;
-						arg_code_id = il_insert_alloca(proc, f.Any_Ty);
-						il_insert_store(proc, f.Any_Ty, arg_code_id, as_any_code_id);
-
-						is_lvalue = true;
-					}
-				}
-
-				if (!is_any)
-				{
-					code_gen_pass(f, scope_id, argument, expr_values, proc, is_type_aggr(value.type));
-					is_lvalue = value.lvalue;
-					arg_code_id = value.code_id;
-				}
-
-				if (is_type_aggr(arg_type)) {
-
-					ASSERT(is_lvalue);
-
-					Array_Add(code_argument_types, arg_type->get_pointer());
-					Array_Add(arguments, arg_code_id);
-				}
-				else
-				{
-					if (is_lvalue) {
-						arg_code_id = il_insert_load(proc, arg_type, arg_code_id);
-					}
-
-					Array_Add(code_argument_types, arg_type);
-					Array_Add(arguments, arg_code_id);
-				}
-
-				Array_Add(argument_types, arg_type);
-			}
-
-			if (varargs)
-			{
-				Il_IDX struct_members[2];
-
-				int num_var_args = call.args.count - (signature->proc.params.count - 1);
-
-				Const_Union count_const;
-				count_const.us8 = num_var_args;
-
-				int data_code_id = -1;
-
-				if (num_var_args)
-				{
-					Array<Il_IDX> elements;
-
-					for (size_t i = (signature->proc.params.count - 1); i < num_var_args + signature->proc.params.count - 1; i++)
-					{
-						Ast_Node* argument = call.args[i];
-						Expr_Value& value = expr_values[argument];
-
-						if (varargs_type == f.Any_Ty && value.type != f.Any_Ty) {
-							code_gen_pass(f, scope_id, argument, expr_values, proc, true);
-							int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
-
-							Array_Add(elements, (Il_IDX)as_any_code_id);
-						}
-						else
-						{
-							code_gen_pass(f, scope_id, argument, expr_values, proc);
-							Array_Add(elements, (Il_IDX)value.code_id);
-						}
-					}
-
-					GS_Type* array_type = varargs_type->get_array(num_var_args);
-
-					int ai = il_insert_ai(proc, array_type, elements);
-					data_code_id = il_insert_alloca(proc, array_type);
-					il_insert_store(proc, array_type, data_code_id, ai);
-				}
-				else
-				{
-					data_code_id = il_insert_constant(proc, nullptr, f.void_Ty->get_pointer());
-				}
-
-				struct_members[0] = il_insert_constant(proc, count_const, f.u64_Ty);
-				struct_members[1] = data_code_id;
-
-				int array_code_id = il_insert_si(proc, f.Array_Ty, Array_View((Il_IDX*)struct_members, 2));
-
-				int lvalue_alloca = il_insert_alloca(proc, f.Array_Ty);
-				il_insert_store(proc, f.Array_Ty, lvalue_alloca, array_code_id);
-
-				Array_Add(code_argument_types, f.Array_Ty->get_pointer());
-				Array_Add(arguments, lvalue_alloca);
-			}
-
-			if (my_value.call.is_proc_call)
-			{
-				my_value.code_id = il_insert_call(proc, get_proc_type(return_type, code_argument_types), arguments, my_value.call.proc_id);
+				my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
 			}
 			else
 			{
-				my_value.code_id = il_insert_call_ptr(proc, get_proc_type(return_type, code_argument_types), arguments, expr_values[call.callee].code_id);
-			}
-
-			if (is_aggr_return)
-			{
-				my_value.code_id = return_alloca;
-
-				my_value.lvalue = lval;
-
-				if (!lval)
+				if (!my_value.call.is_proc_call)
 				{
-					my_value.code_id = il_insert_load(proc, signature->proc.return_type, my_value.code_id);
+					code_gen_pass(f, scope_id, call.callee, expr_values, proc);
+				}
+
+				GS_Type* signature = my_value.call.callee_signature;
+
+				bool varargs = my_value.call.varargs;
+
+				Array<int> arguments;
+				Array<GS_Type*> argument_types;
+				Array<GS_Type*> code_argument_types;
+
+				GS_Type* varargs_type = my_value.call.varargs_type;
+
+				int arg_count = call.args.count;
+
+				GS_Type* return_type = signature->proc.return_type;
+
+				bool is_aggr_return = is_type_aggr(return_type);
+
+				int return_alloca = -1;
+
+				if (is_aggr_return)
+				{
+					return_alloca = il_insert_alloca(proc, return_type);
+					Array_Add(code_argument_types, return_type->get_pointer());
+					Array_Add(arguments, return_alloca);
+					return_type = f.void_Ty;
+				}
+
+				if (varargs)
+				{
+					arg_count = signature->proc.params.count - 1;
+				}
+
+				for (int i = 0; i < arg_count; i++)
+				{
+					Ast_Node* argument = call.args[i];
+
+					Expr_Value& value = expr_values[argument];
+
+					GS_Type* arg_type = value.type;
+					int arg_code_id;
+					bool is_lvalue;
+					bool is_any = false;
+
+					if (i < signature->proc.params.count) {
+
+						GS_Type* param_type = signature->proc.params[i];
+
+						if (param_type == f.Any_Ty && value.type != f.Any_Ty) {
+							is_any = true;
+							code_gen_pass(f, scope_id, argument, expr_values, proc, true);
+							int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
+
+							arg_type = f.Any_Ty;
+							arg_code_id = il_insert_alloca(proc, f.Any_Ty);
+							il_insert_store(proc, f.Any_Ty, arg_code_id, as_any_code_id);
+
+							is_lvalue = true;
+						}
+					}
+
+					if (!is_any)
+					{
+						code_gen_pass(f, scope_id, argument, expr_values, proc, is_type_aggr(value.type));
+						is_lvalue = value.lvalue;
+						arg_code_id = value.code_id;
+					}
+
+					if (is_type_aggr(arg_type)) {
+
+						ASSERT(is_lvalue);
+
+						Array_Add(code_argument_types, arg_type->get_pointer());
+						Array_Add(arguments, arg_code_id);
+					}
+					else
+					{
+						if (is_lvalue) {
+							arg_code_id = il_insert_load(proc, arg_type, arg_code_id);
+						}
+
+						Array_Add(code_argument_types, arg_type);
+						Array_Add(arguments, arg_code_id);
+					}
+
+					Array_Add(argument_types, arg_type);
+				}
+
+				if (varargs)
+				{
+					Il_IDX struct_members[2];
+
+					int num_var_args = call.args.count - (signature->proc.params.count - 1);
+
+					Const_Union count_const;
+					count_const.us8 = num_var_args;
+
+					int data_code_id = -1;
+
+					if (num_var_args)
+					{
+						Array<Il_IDX> elements;
+
+						for (size_t i = (signature->proc.params.count - 1); i < num_var_args + signature->proc.params.count - 1; i++)
+						{
+							Ast_Node* argument = call.args[i];
+							Expr_Value& value = expr_values[argument];
+
+							if (varargs_type == f.Any_Ty && value.type != f.Any_Ty) {
+								code_gen_pass(f, scope_id, argument, expr_values, proc, true);
+								int as_any_code_id = convert_to_any(f, scope_id, argument, expr_values, proc);
+
+								Array_Add(elements, (Il_IDX)as_any_code_id);
+							}
+							else
+							{
+								code_gen_pass(f, scope_id, argument, expr_values, proc);
+								Array_Add(elements, (Il_IDX)value.code_id);
+							}
+						}
+
+						GS_Type* array_type = varargs_type->get_array(num_var_args);
+
+						int ai = il_insert_ai(proc, array_type, elements);
+						data_code_id = il_insert_alloca(proc, array_type);
+						il_insert_store(proc, array_type, data_code_id, ai);
+					}
+					else
+					{
+						data_code_id = il_insert_constant(proc, nullptr, f.void_Ty->get_pointer());
+					}
+
+					struct_members[0] = il_insert_constant(proc, count_const, f.u64_Ty);
+					struct_members[1] = data_code_id;
+
+					int array_code_id = il_insert_si(proc, f.Array_Ty, Array_View((Il_IDX*)struct_members, 2));
+
+					int lvalue_alloca = il_insert_alloca(proc, f.Array_Ty);
+					il_insert_store(proc, f.Array_Ty, lvalue_alloca, array_code_id);
+
+					Array_Add(code_argument_types, f.Array_Ty->get_pointer());
+					Array_Add(arguments, lvalue_alloca);
+				}
+
+				if (my_value.call.is_proc_call)
+				{
+					my_value.code_id = il_insert_call(proc, get_proc_type(return_type, code_argument_types), arguments, my_value.call.proc_id);
+				}
+				else
+				{
+					my_value.code_id = il_insert_call_ptr(proc, get_proc_type(return_type, code_argument_types), arguments, expr_values[call.callee].code_id);
+				}
+
+				if (is_aggr_return)
+				{
+					my_value.code_id = return_alloca;
+
+					my_value.lvalue = lval;
+
+					if (!lval)
+					{
+						my_value.code_id = il_insert_load(proc, signature->proc.return_type, my_value.code_id);
+					}
 				}
 			}
 		}
@@ -2940,6 +3233,7 @@ namespace Glass
 						case Op_Div: op_type = Il_Div; break;
 						case Op_BitAnd: op_type = Il_Bit_And; break;
 						case Op_BitOr: op_type = Il_Bit_Or; break;
+						case Op_Mod: op_type = Il_Mod; break;
 						default:
 							GS_ASSERT_UNIMPL();
 							break;
@@ -3742,6 +4036,18 @@ namespace Glass
 			}
 
 			entity.type = get_entity(f, entity.enum_mem.enum_entity_id).enm.type;
+
+			entity.flags = Flag_Complete;
+		}
+		break;
+		case Entity_Poly_Struct:
+		{
+			for (size_t i = 0; i < entity.poly_struct.parameter_ids.count; i++)
+			{
+				int param_entity_id = entity.poly_struct.parameter_ids[i];
+				Entity& param = get_entity(f, param_entity_id);
+				Array_Add(entity.poly_struct.parameters, { param.type, param.name });
+			}
 
 			entity.flags = Flag_Complete;
 		}
