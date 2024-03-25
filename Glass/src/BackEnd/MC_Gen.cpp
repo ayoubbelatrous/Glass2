@@ -111,7 +111,7 @@ namespace Glass
 				case Il_Proc_Address:
 					break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}
@@ -263,7 +263,7 @@ namespace Glass
 					Emit_MovSS(g.code, Make_Reg_Disp(RBP, -stack_sz), Make_Reg(reg));
 				else if (vd.type_size == 8)
 					Emit_MovSD(g.code, Make_Reg_Disp(RBP, -stack_sz), Make_Reg(reg));
-				else GS_ASSERT_UNIMPL();
+				else ASSERT_UNIMPL();
 
 				vd.desc_type = ValD_Spill;
 				vd.offset = -stack_sz;
@@ -348,7 +348,7 @@ namespace Glass
 						Emit_MovSD(g.code, Make_Reg(dest), Make_Reg_Disp(RBP, vd.offset));
 					else if (vd.type_size == 4)
 						Emit_MovSS(g.code, Make_Reg(dest), Make_Reg_Disp(RBP, vd.offset));
-					else GS_ASSERT_UNIMPL();
+					else ASSERT_UNIMPL();
 				}
 				else {
 					Emit_Mov(g.code, Make_Reg(dest), Make_Reg_Disp(RBP, vd.offset), 64);
@@ -368,7 +368,7 @@ namespace Glass
 						Emit_MovSD(g.code, Make_Reg(dest), Make_Reg(vd.reg_idx));
 					else if (vd.type_size == 4)
 						Emit_MovSS(g.code, Make_Reg(dest), Make_Reg(vd.reg_idx));
-					else GS_ASSERT_UNIMPL();
+					else ASSERT_UNIMPL();
 				}
 				else {
 					Emit_Mov(g.code, Make_Reg(dest), Make_Reg(vd.reg_idx), 64);
@@ -556,7 +556,7 @@ namespace Glass
 						u64 member_type_size = get_type_size(_struct.members[i]);
 
 						if (member_type_size > 8)
-							GS_ASSERT_UNIMPL();
+							ASSERT_UNIMPL();
 
 						as_input(node.si.members_value_nodes[i], tmp_reg, type_size);
 						Emit_Mov(g.code, Make_Reg_Disp(RBP, (-stack_sz) + offset), Make_Reg(tmp_reg), member_type_size * 8);
@@ -1116,7 +1116,7 @@ namespace Glass
 						Emit_SetNE(g.code, Make_Reg(lhs_gpr));
 						break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 
@@ -1190,7 +1190,7 @@ namespace Glass
 					}
 					break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 
@@ -1198,7 +1198,7 @@ namespace Glass
 				}
 				break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}
@@ -1838,7 +1838,7 @@ namespace Glass
 							disp = -get_vreg(node.store.ptr_node_idx)->stack_slot;
 						}
 
-						else GS_ASSERT_UNIMPL();
+						else ASSERT_UNIMPL();
 
 						u64 remainder = type_size;
 						u64 pointer = 0;
@@ -2158,7 +2158,7 @@ namespace Glass
 					case Il_Cmp_Equal: op_code = Inst_SETE; break;
 					case Il_Cmp_NotEqual: op_code = Inst_SETNE; break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 
@@ -2607,7 +2607,7 @@ namespace Glass
 
 				if (!found_free)
 				{
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 
@@ -2706,7 +2706,7 @@ namespace Glass
 				case Inst_JE: offset = Emit_JE(g.code, 0); break;
 				case Inst_JNE: offset = Emit_JNE(g.code, 0); break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 
@@ -2727,7 +2727,7 @@ namespace Glass
 				case Inst_SETL: Emit_SetL(g.code, op); break;
 				case Inst_SETG: Emit_SetG(g.code, op); break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}
@@ -2879,7 +2879,7 @@ namespace Glass
 					}
 					else
 					{
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 				}
 				break;
@@ -2894,7 +2894,7 @@ namespace Glass
 					}
 					else
 					{
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 				}
 				break;
@@ -2909,7 +2909,7 @@ namespace Glass
 					}
 					else
 					{
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 				}
 				break;
@@ -2924,7 +2924,7 @@ namespace Glass
 					}
 					else
 					{
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 				}
 				break;
@@ -2939,7 +2939,7 @@ namespace Glass
 					}
 					else
 					{
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 				}
 				break;
@@ -2954,7 +2954,7 @@ namespace Glass
 				}
 				break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 
@@ -3025,7 +3025,7 @@ namespace Glass
 			return node.constant.as;
 		}
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 	}

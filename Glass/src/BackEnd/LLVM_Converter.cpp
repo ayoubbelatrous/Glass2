@@ -43,7 +43,7 @@ namespace Glass
 					lc.type_to_llvm[ty] = lc.llvm_i64;
 					break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 
@@ -89,7 +89,7 @@ namespace Glass
 			return lc.llvm_Array;
 		}
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -394,6 +394,7 @@ namespace Glass
 				case Il_Value_Cmp:
 				{
 					bool un_signed_type = type_flags & TN_Unsigned_Type;
+					bool float_type = type_flags & TN_Float_Type;
 
 					llvm::Value* result = nullptr;
 
@@ -410,28 +411,48 @@ namespace Glass
 							result = lc.llvm_builder->CreateAnd(lhs, rhs);
 					}
 					else {
-
 						llvm::CmpInst::Predicate cmp_inst;
 
-						if (node.cmp_op.compare_type == Il_Cmp_Equal)
-							cmp_inst = llvm::CmpInst::ICMP_EQ;
-						else if (node.cmp_op.compare_type == Il_Cmp_NotEqual)
-							cmp_inst = llvm::CmpInst::ICMP_NE;
-						else if (node.cmp_op.compare_type == Il_Cmp_Greater)
-							if (un_signed_type)
-								cmp_inst = llvm::CmpInst::ICMP_UGT;
-							else
-								cmp_inst = llvm::CmpInst::ICMP_SGT;
-						else if (node.cmp_op.compare_type == Il_Cmp_Lesser)
-							if (un_signed_type)
-								cmp_inst = llvm::CmpInst::ICMP_ULT;
-							else
-								cmp_inst = llvm::CmpInst::ICMP_SLT;
-						else {
-							GS_ASSERT_UNIMPL();
-						}
+						if (float_type)
+						{
+							if (node.cmp_op.compare_type == Il_Cmp_Equal)
+								cmp_inst = llvm::CmpInst::FCMP_OEQ;
+							else if (node.cmp_op.compare_type == Il_Cmp_NotEqual)
+								cmp_inst = llvm::CmpInst::FCMP_ONE;
+							else if (node.cmp_op.compare_type == Il_Cmp_Greater)
+								cmp_inst = llvm::CmpInst::FCMP_OGT;
+							else if (node.cmp_op.compare_type == Il_Cmp_Lesser)
+								cmp_inst = llvm::CmpInst::FCMP_OLT;
+							else {
+								ASSERT_UNIMPL();
+							}
 
-						result = lc.llvm_builder->CreateCmp(cmp_inst, lhs, rhs);
+							result = lc.llvm_builder->CreateFCmp(cmp_inst, lhs, rhs);
+						}
+						else
+						{
+							llvm::CmpInst::Predicate cmp_inst;
+
+							if (node.cmp_op.compare_type == Il_Cmp_Equal)
+								cmp_inst = llvm::CmpInst::ICMP_EQ;
+							else if (node.cmp_op.compare_type == Il_Cmp_NotEqual)
+								cmp_inst = llvm::CmpInst::ICMP_NE;
+							else if (node.cmp_op.compare_type == Il_Cmp_Greater)
+								if (un_signed_type)
+									cmp_inst = llvm::CmpInst::ICMP_UGT;
+								else
+									cmp_inst = llvm::CmpInst::ICMP_SGT;
+							else if (node.cmp_op.compare_type == Il_Cmp_Lesser)
+								if (un_signed_type)
+									cmp_inst = llvm::CmpInst::ICMP_ULT;
+								else
+									cmp_inst = llvm::CmpInst::ICMP_SLT;
+							else {
+								ASSERT_UNIMPL();
+							}
+
+							result = lc.llvm_builder->CreateCmp(cmp_inst, lhs, rhs);
+						}
 					}
 
 					regv[idx] = lc.llvm_builder->CreateZExt(result, lc.llvm_i8);
@@ -552,12 +573,12 @@ namespace Glass
 							cast_ops = llvm::Instruction::CastOps::PtrToInt;
 						}
 						else {
-							GS_ASSERT_UNIMPL();
+							ASSERT_UNIMPL();
 						}
 					}
 					break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}
@@ -583,7 +604,7 @@ namespace Glass
 				return llvm::ConstantFP::get(to_llvm(lc, type), node.constant.as.f64);
 			}
 			if (type_flags & TN_Struct_Type) {
-				GS_ASSERT_UNIMPL();
+				ASSERT_UNIMPL();
 			}
 			else {
 				if (node.constant.as.ptr == 0 && type_flags & TN_Pointer_Type) {
@@ -663,13 +684,13 @@ namespace Glass
 			}
 			break;
 			default:
-				GS_ASSERT_UNIMPL();
+				ASSERT_UNIMPL();
 				break;
 			}
 		}
 		break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 

@@ -4,6 +4,8 @@
 #include "FrontEnd/FrontEnd.h"
 #include "Base/Allocator.h"
 
+int num_lines_processed;
+
 namespace Glass
 {
 	String_Atom* keyword_and;
@@ -525,6 +527,8 @@ namespace Glass
 		createEOFToken();
 
 		success = true;
+
+		num_lines_processed += line;
 
 		return tokens;
 	}
@@ -2204,7 +2208,7 @@ namespace Glass
 		}
 		break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -2254,7 +2258,7 @@ namespace Glass
 		case Ast_Ident:
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 	}

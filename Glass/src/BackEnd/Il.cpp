@@ -116,7 +116,7 @@ namespace Glass
 					else if (node.cmp_op.compare_type == Il_Cmp_Lesser) stream << "lesser ";
 					else if (node.cmp_op.compare_type == Il_Cmp_And) stream << "and ";
 					else if (node.cmp_op.compare_type == Il_Cmp_Or) stream << "or ";
-					else GS_ASSERT_UNIMPL();
+					else ASSERT_UNIMPL();
 					stream << print_type_index(node.type_idx).data << " $" << node.cmp_op.left_node_idx << " $" << node.cmp_op.right_node_idx << "\n";
 				}
 				break;
@@ -253,7 +253,7 @@ namespace Glass
 				}
 				break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}
@@ -290,7 +290,7 @@ namespace Glass
 			return node.constant.as;
 		}
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 	}
@@ -631,7 +631,7 @@ namespace Glass
 					else if (node.cmp_op.compare_type == Il_Cmp_Or) {
 						register_buffer[i].s1 = register_buffer[node.cmp_op.left_node_idx].s8 || register_buffer[node.cmp_op.right_node_idx].s8;
 					}
-					else { GS_ASSERT_UNIMPL(); }
+					else { ASSERT_UNIMPL(); }
 				}
 				break;
 				case Il_Ret: {
@@ -729,7 +729,7 @@ namespace Glass
 				}
 				break;
 				default:
-					GS_ASSERT_UNIMPL();
+					ASSERT_UNIMPL();
 					break;
 				}
 			}

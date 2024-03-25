@@ -100,6 +100,19 @@ namespace Glass
 	}
 
 	template<typename E>
+	Array<E> Make_Array(const std::initializer_list<E>& initializer) {
+
+		Array<E> arr = {};
+
+		for (const auto& e : initializer)
+		{
+			Array_Add(arr, e);
+		}
+
+		return arr;
+	}
+
+	template<typename E>
 	Array<E> Array_From_Vec(const std::vector<E>& vec) {
 
 		Array<E> arr = {};

@@ -499,7 +499,7 @@ namespace Glass
 
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 

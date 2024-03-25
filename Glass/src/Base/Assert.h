@@ -9,6 +9,6 @@
 
 #define GS_ASSERT(...) GS_EXPAND_MACRO( GS_INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(_, __VA_ARGS__) )
 #define GS_CORE_ASSERT(...) GS_EXPAND_MACRO( GS_INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(_CORE_, __VA_ARGS__) )
-#define GS_ASSERT_UNIMPL() GS_CORE_ASSERT(nullptr,"un-implemented!")
+#define ASSERT_UNIMPL() GS_CORE_ASSERT(nullptr,"un-implemented!")
 #define ASSERT(...) GS_EXPAND_MACRO( GS_INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(_CORE_, __VA_ARGS__) )
 

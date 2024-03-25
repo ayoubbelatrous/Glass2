@@ -12,6 +12,33 @@
 
 namespace Glass
 {
+	class Timer
+	{
+	public:
+		Timer()
+		{
+			Reset();
+		}
+
+		void Timer::Reset()
+		{
+			m_Start = std::chrono::high_resolution_clock::now();
+		}
+
+		float Timer::Elapsed()
+		{
+			return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - m_Start).count() * 0.001f * 0.001f * 0.001f;
+		}
+
+		float Timer::ElapsedMillis()
+		{
+			return Elapsed() * 1000.0f;
+		}
+
+	private:
+		std::chrono::time_point<std::chrono::high_resolution_clock> m_Start;
+	};
+
 	enum Tk_Operator
 	{
 		Op_Invalid,
@@ -71,7 +98,7 @@ namespace Glass
 		case Op_BitOr: return String_Make("|");
 		case Op_Mod: return String_Make("%");
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -152,14 +179,14 @@ namespace Glass
 		GS_Type* type;
 		Const_Union value;
 		int referenced_entity;
-		bool is_constant;
-		bool is_unsolid;
-		bool is_unsolid_float;
-		bool is_unsolid_null;
 		int code_id;
-		bool lvalue;
 
-		bool promote_to_bool;
+		bool is_constant : 1;
+		bool is_unsolid : 1;
+		bool is_unsolid_float : 1;
+		bool is_unsolid_null : 1;
+		bool lvalue : 1;
+		bool promote_to_bool : 1;
 
 		union
 		{
@@ -372,6 +399,12 @@ namespace Glass
 		Scope_Enum,
 	};
 
+	struct Entity_List
+	{
+		int entity_id;
+		Array<int> entities;
+	};
+
 	struct Scope
 	{
 		Scope_Type type;
@@ -381,7 +414,7 @@ namespace Glass
 		int entity_id;
 		Array<int> children;
 		Array<int> entities;
-		std::unordered_map<String_Atom*, int> name_to_entity;
+		std::unordered_map<String_Atom*, Entity_List> name_to_entity;
 	};
 
 	struct Comp_File

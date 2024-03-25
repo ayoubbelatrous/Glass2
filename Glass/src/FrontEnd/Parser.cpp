@@ -1580,7 +1580,7 @@ namespace Glass
 	Parser::Parser(const CompilerFile& file)
 		:Tokens(file.GetTokens())
 	{
-		GS_ASSERT_UNIMPL();
+		ASSERT_UNIMPL();
 	}
 
 	Parser::Parser(const fs_path& path, std::vector<Token>& tokens)

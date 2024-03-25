@@ -2,33 +2,220 @@
 
 #include "BackEnd/Machine.h"
 #include "BackEnd/COFF.h"
+#include "Base/Allocator.h"
 
 namespace Glass
 {
-	Il_Program testprogram;
+	LinearAllocator ir_allocator = LinearAllocator(1024 * 1024 * 10);
+
+	struct IlIR_Converter
+	{
+		std::unordered_map<int, IR_Proc*> proc_lookup;
+		std::unordered_map<int, IR_Inst*> inst_lookup;
+		std::unordered_map<int, IR_Block*> block_lookup;
+	};
+
+	IR_Proc* ir_make_proc(String name, bool external)
+	{
+		IR_Proc proc = {};
+		proc.name = String_Copy(name);
+		proc.external = external;
+
+		return ir_allocator.Allocate(proc);
+	}
+
+	IR_Block* ir_insert_block(IR_Proc* proc)
+	{
+		auto new_block = ir_allocator.Allocate(IR_Block{ });
+		Array_Add(proc->blocks, new_block);
+		proc->insertion_point = new_block;
+		return new_block;
+	}
+
+	template<typename T>
+	T* get_ext(IR_Inst* inst)
+	{
+		return (T*)(&inst->ops);
+	}
+
+	template<typename T>
+	IR_Inst* ir_insert_inst_ext(IR_Proc* proc, IR_Inst_Type inst_type, Data_Type dt, T extra)
+	{
+		IR_Inst* inst = (IR_Inst*)ir_allocator.Allocate_Bytes(sizeof(IR_Inst) + sizeof(T));
+		inst->type = inst_type;
+		inst->dt = dt;
+
+		T* ext = get_ext<T>(inst);
+		*ext = extra;
+
+		Array_Add(proc->insertion_point->instructions, inst);
+
+		return inst;
+	}
+
+	IR_Inst* ir_insert_inst(IR_Proc* proc, IR_Inst_Type inst_type, Data_Type dt, Array<IR_Inst*> ops)
+	{
+		IR_Inst* inst = (IR_Inst*)ir_allocator.Allocate_Bytes(sizeof(IR_Inst) + (ops.count * sizeof(IR_Inst*)));
+		inst->type = inst_type;
+		inst->dt = dt;
+		inst->op_count = ops.count;
+
+		memcpy(&inst->ops, ops.data, ops.count * sizeof(IR_Inst*));
+
+		Array_Add(proc->insertion_point->instructions, inst);
+
+		return inst;
+	}
+
+	Data_Type to_ir_type(GS_Type* type)
+	{
+		Data_Type dt = {};
+		dt.size = type->size();
+		dt.align = get_type_alignment(type);
+
+		switch (type->kind)
+		{
+		case Type_Basic:
+		{
+			u64 flags = get_type_flags(type);
+
+			if (flags & TN_Float_Type)
+			{
+				dt.kind = DT_KIND_FLOAT;
+			}
+			else if (flags & TN_Struct_Type)
+			{
+				dt.kind = DT_KIND_STRUCT;
+			}
+			else
+			{
+				dt.kind = DT_KIND_INTEGER;
+			}
+		}
+		break;
+		case Type_Pointer:
+		{
+			dt.kind = DT_KIND_POINTER;
+		}
+		break;
+		default:
+			ASSERT_UNIMPL();
+			break;
+		}
+
+		if (type == get_ts().void_Ty)
+		{
+			dt.kind = DT_KIND_VOID;
+		}
+
+		return dt;
+	}
+
+	IR_Program il_to_ir_program(Il_Program& il_program)
+	{
+		IlIR_Converter ct;
+		IR_Program program = {};
+
+		for (int i = 0; i < il_program.procedures.count; i++)
+		{
+			Il_Proc& il_proc = il_program.procedures[i];
+			IR_Proc* ir_proc = ir_make_proc(il_proc.proc_name, il_proc.external);
+
+			Array_Add(program.procs, ir_proc);
+			ct.proc_lookup[i] = ir_proc;
+		}
+
+		for (int i = 0; i < il_program.procedures.count; i++)
+		{
+			Il_Proc& il_proc = il_program.procedures[i];
+			IR_Proc* ir_proc = ct.proc_lookup[i];
+
+			ct.block_lookup.clear();
+			ct.inst_lookup.clear();
+
+			for (int block_id = 0; block_id < il_proc.blocks.count; block_id++)
+			{
+				Il_Block& block = il_proc.blocks[block_id];
+
+				IR_Block* ir_block = ir_insert_block(ir_proc);
+				ct.block_lookup[block_id] = ir_block;
+
+				for (size_t i = 0; i < block.instructions.count; i++)
+				{
+					int id = block.instructions[i];
+					Il_Node& node = il_proc.instruction_storage[id];
+
+					GS_Type* type = get_type_at(node.type_idx);
+
+					IR_Inst* ir_inst = nullptr;
+
+					switch (node.node_type)
+					{
+					case Il_Store:
+					{
+						IR_Inst_Alloca aloca;
+						aloca.type = to_ir_type(get_type_at(node.aloca.type_idx));
+						ir_inst = ir_insert_inst(ir_proc, IR_STORE, to_ir_type(type), Make_Array({ ct.inst_lookup[node.store.value_node_idx],ct.inst_lookup[node.store.ptr_node_idx] }));
+					}
+					break;
+					case Il_Alloca:
+					{
+						IR_Inst_Alloca aloca;
+						aloca.type = to_ir_type(get_type_at(node.aloca.type_idx));
+						ir_inst = ir_insert_inst_ext(ir_proc, IR_ALLOCA, to_ir_type(type), aloca);
+					}
+					break;
+					case Il_Param:
+					{
+						IR_Inst_Param param;
+						param.index = node.param.index;
+						ir_inst = ir_insert_inst_ext(ir_proc, IR_PARAM, to_ir_type(type), param);
+					}
+					break;
+					case Il_Ret:
+					{
+						if (get_ts().void_Ty == type)
+						{
+							ir_inst = ir_insert_inst(ir_proc, IR_RET, to_ir_type(type), {});
+						}
+						else
+						{
+							ASSERT_UNIMPL();
+						}
+					}
+					break;
+					default:
+						ASSERT_UNIMPL();
+						break;
+					}
+
+					ASSERT(ir_inst);
+					ct.inst_lookup[id] = ir_inst;
+				}
+			}
+		}
+
+		return program;
+	}
 
 	void code_generator_init(Machine_Gen& g, Il_Program& p, String output)
 	{
 		g.output_path = output;
-
-		Il_Program_Init(testprogram);
-		int test_proc = il_insert_proc(testprogram, String_Make("main"), get_proc_type(get_ts().void_Ty, {}));
-
-		g.p = &testprogram;
+		g.p = il_to_ir_program(p);
 	}
 
 	void pre_decl_proc_symobls(Machine_Gen& g)
 	{
-		for (size_t i = 0; i < g.p->procedures.count; i++)
+		for (size_t i = 0; i < g.p.procs.count; i++)
 		{
-			Il_Proc& proc = g.p->procedures[i];
-			g.proc_to_symbol[i] = (u32)g.symbols.count;
+			IR_Proc* proc = g.p.procs[i];
+			g.proc_to_symbol[proc] = (u32)g.symbols.count;
 
 			MC_Symbol symbol = { 0 };
-			symbol.symbol_name = String_Copy(proc.proc_name);
+			symbol.symbol_name = String_Copy(proc->name);
 			symbol.value = 0;
 
-			if (proc.external) {
+			if (proc->external) {
 				symbol.section_value = 0;
 			}
 			else {
@@ -39,9 +226,50 @@ namespace Glass
 		}
 	}
 
+	void proc_code_gen(Machine_Gen& g, Gen_Context& ctx, IR_Proc* proc)
+	{
+		for (int i = 0; i < proc->blocks.count; i++)
+		{
+			IR_Block* block = proc->blocks[i];
+
+			for (int i = 0; i < block->instructions.count; i++)
+			{
+				IR_Inst* node = block->instructions[i];
+
+				switch (node->type)
+				{
+				case IR_RET:
+				{
+					if (node->dt.kind == DT_KIND_VOID)
+					{
+					}
+					else {
+						ASSERT_UNIMPL();
+					}
+				}
+				break;
+				default:
+					ASSERT_UNIMPL();
+					break;
+				}
+			}
+		}
+	}
+
 	void code_generator_run(Machine_Gen& g)
 	{
 		pre_decl_proc_symobls(g);
+
+		for (size_t i = 0; i < g.p.procs.count; i++)
+		{
+			IR_Proc* proc = g.p.procs[i];
+
+			if (!proc->external) {
+				Gen_Context ctx = {};
+				proc_code_gen(g, ctx, proc);
+			}
+		}
+
 		generate_output(g);
 	}
 

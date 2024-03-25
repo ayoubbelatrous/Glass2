@@ -627,7 +627,7 @@ namespace Glass
 	inline Il_Node Il_Make_Math_Op(Il_Node_Type math_op_node_type, Type_IDX type_index, Il_IDX left, Il_IDX right) {
 
 		if (math_op_node_type != Il_Add && math_op_node_type != Il_Sub && math_op_node_type != Il_Mul && math_op_node_type != Il_Div && math_op_node_type != Il_Bit_And && math_op_node_type != Il_Bit_Or && math_op_node_type != Il_Mod) {
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 		}
 
 		Il_Node math_op_node = { 0 };

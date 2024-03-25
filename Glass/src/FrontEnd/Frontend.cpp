@@ -10,6 +10,8 @@
 
 #define DBG(x) 
 
+extern int num_lines_processed;
+
 namespace Glass
 {
 	void frontend_push_error(Front_End& f, String error)
@@ -30,7 +32,6 @@ namespace Glass
 
 		if (token.type == Tk_NumericLiteral || token.type == Tk_HexLiteral)
 		{
-
 		}
 
 		auto error_message = FMT("{}:{}:{}: {}", file_path, loc.line, loc.column, error);
@@ -98,7 +99,22 @@ namespace Glass
 		{
 			Scope& parent_scope = f.scopes[scope_id];
 			Array_Add(parent_scope.entities, entity_id);
-			parent_scope.name_to_entity[entity.name] = entity_id;
+
+			Entity_List& entity_list = parent_scope.name_to_entity[entity.name];
+
+			if (entity_list.entity_id)
+			{
+				if (entity_list.entities.count == 0)
+				{
+					Array_Add(entity_list.entities, entity_list.entity_id);
+				}
+
+				Array_Add(entity_list.entities, entity_id);
+			}
+			else
+			{
+				entity_list.entity_id = entity_id;
+			}
 		}
 
 		Array_Add(f.entities, entity);
@@ -118,7 +134,7 @@ namespace Glass
 		auto it = scope.name_to_entity.find(name);
 
 		if (it != scope.name_to_entity.end())
-			return it->second;
+			return it->second.entity_id;
 
 		if (scope.parent)
 		{
@@ -154,7 +170,17 @@ namespace Glass
 
 		if (it != scope.name_to_entity.end())
 		{
-			Array_Add(entities, it->second);
+			if (it->second.entities.count > 1)
+			{
+				for (size_t i = 0; i < it->second.entities.count; i++)
+				{
+					Array_Add(entities, it->second.entities[i]);
+				}
+			}
+			else
+			{
+				Array_Add(entities, it->second.entity_id);
+			}
 		}
 
 		if (scope.parent)
@@ -406,7 +432,7 @@ namespace Glass
 		case Ast_Struct:
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 	}
@@ -463,7 +489,50 @@ namespace Glass
 		}
 
 		return false;
-	};
+	}
+
+	int can_promote(Front_End& f, GS_Type* to_type, Expr_Value& expr_value)
+	{
+		u64 type_flags = get_type_flags(to_type);
+		bool is_float = type_flags & TN_Float_Type;
+
+		if (to_type == expr_value.type)
+			return 1;
+
+		if (expr_value.is_unsolid_null && to_type->kind == Type_Pointer)
+		{
+			return 2;
+		}
+		else if (to_type == f.Any_Ty)
+		{
+			return 5;
+		}
+		else
+		{
+			if (expr_value.is_unsolid && !expr_value.is_unsolid_float && to_type == f.bool_Ty)
+			{
+				return 2;
+			}
+
+			if (expr_value.is_unsolid && expr_value.type == f.string_Ty) {
+
+				static GS_Type* cstr_type = f.u8_Ty->get_pointer();
+
+				if (to_type == cstr_type) {
+					return 2;
+				}
+			}
+			else if (expr_value.is_unsolid && (type_flags & TN_Numeric_Type)) {
+
+				if (!(!is_float && expr_value.is_unsolid_float))
+				{
+					return 2;
+				}
+			}
+		}
+
+		return 0;
+	}
 
 	void get_poly_declarations(Ast_Node* node, int parameter_index, Array<Poly_Decl>& decls)
 	{
@@ -513,7 +582,7 @@ namespace Glass
 		case Ast_Numeric:
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 	}
@@ -564,7 +633,11 @@ namespace Glass
 			}
 			else if (!stmt->var.is_constant && current_scope_type == Scope_Struct) {
 
-				if (!already_decalared_error()) {
+				int previous_declaration = get_scope(f, scope_id).name_to_entity[stmt->token.name].entity_id;
+
+				if (previous_declaration)
+				{
+					push_error_scope(f, stmt, scope_id, FMT("already declared: '{}'", stmt->token.name->str));
 					return false;
 				}
 
@@ -806,9 +879,9 @@ namespace Glass
 		break;
 		case Ast_Function:
 		{
-			if (!already_decalared_error()) {
-				return false;
-			}
+			//if (!already_decalared_error()) {
+			//	return false;
+			//}
 
 			Array<Poly_Decl> poly_decls;
 
@@ -941,7 +1014,7 @@ namespace Glass
 		case Ast_Return:
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -985,7 +1058,7 @@ namespace Glass
 			}
 			else
 			{
-				GS_ASSERT_UNIMPL();
+				ASSERT_UNIMPL();
 			}
 		}
 		break;
@@ -1055,7 +1128,7 @@ namespace Glass
 		case Ast_Ident:
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -1105,7 +1178,7 @@ namespace Glass
 			if (!solution)
 				return false;
 
-			GS_CORE_TRACE("solved poly declaration: '{}' -> '{}'", declaration.name->str, print_type(solution));
+			DBG(GS_CORE_TRACE("solved poly declaration: '{}' -> '{}'", declaration.name->str, print_type(solution)));
 
 			overloads[declaration.name] = solution;
 		}
@@ -1256,7 +1329,126 @@ namespace Glass
 		return false;
 	}
 
-	bool type_check_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend)
+	bool type_check_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend, bool ignore_overloads = false);
+
+	bool type_check_overloaded_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend, Array<int> possible_overloads)
+	{
+		Ast_Node* node = *reference;
+		Ast_Node_Call& call = node->call;
+
+		Expr_Value& callee = expr_values[call.callee];
+
+		int most_suitable_overload = 0;
+		int conversion_factor = 0;
+
+		for (size_t i = 0; i < possible_overloads.count; i++)
+		{
+			int possible_overload = possible_overloads[i];
+			Entity& overload = get_entity(f, possible_overload);
+
+			if (overload.kind == Entity_Poly_Function)
+			{
+				ASSERT_UNIMPL();
+			}
+			else if (overload.kind == Entity_Function)
+			{
+				if (!overload.fn.header_complete)
+				{
+					continue;
+				}
+
+				if (overload.fn.has_varargs)
+				{
+					ASSERT_UNIMPL();
+				}
+
+				if (call.args.count != overload.fn.parameters.count)
+				{
+					continue;
+				}
+
+				bool matches = true;
+
+				int this_conversion_factor = 0;
+
+				for (size_t i = 0; i < call.args.count; i++)
+				{
+					Ast_Node* argument = call.args[i];
+					Expr_Value& value = expr_values[argument];
+
+					GS_Type* param_type = overload.fn.signature->proc.params[i];
+
+					if (value.type != param_type)
+					{
+						int factor = can_promote(f, param_type, value);
+
+						if (factor)
+						{
+							this_conversion_factor += factor - 1;
+						}
+						else
+						{
+							matches = false;
+							break;
+						}
+					}
+				}
+
+				if (matches)
+				{
+					if (most_suitable_overload)
+					{
+						if (this_conversion_factor < conversion_factor)
+						{
+							conversion_factor = this_conversion_factor;
+							most_suitable_overload = possible_overload;
+						}
+					}
+					else
+					{
+						conversion_factor = this_conversion_factor;
+						most_suitable_overload = possible_overload;
+					}
+				}
+			}
+		}
+
+		if (!most_suitable_overload)
+		{
+			for (size_t i = 0; i < possible_overloads.count; i++)
+			{
+				int possible_overload = possible_overloads[i];
+				Entity& overload = get_entity(f, possible_overload);
+
+				if (overload.kind == Entity_Poly_Function)
+				{
+					ASSERT_UNIMPL();
+				}
+				else if (overload.kind == Entity_Function)
+				{
+					if (!(overload.fn.header_complete))
+					{
+						insert_dep(f, possible_overload, deps);
+						suspend = true;
+						return true;
+					}
+				}
+			}
+		}
+
+		if (!most_suitable_overload)
+		{
+			//ASSERT_UNIMPL();
+			push_error_scope(f, node, scope_id, FMT("no overloaded function '{}' found that could accept arguments", get_entity(f, callee.referenced_entity).name->str));
+			return false;
+		}
+
+		callee.referenced_entity = most_suitable_overload;
+
+		return type_check_call(f, reference, scope_id, expr_values, index, deps, suspend, true);
+	}
+
+	bool type_check_call(Front_End& f, Ast_Node** reference, int scope_id, Expr_Val_Map& expr_values, int index, Entity_Deps& deps, bool& suspend, bool ignore_overloads)
 	{
 		Ast_Node* node = *reference;
 		Ast_Node_Call& call = node->call;
@@ -1275,6 +1467,14 @@ namespace Glass
 		if (callee.referenced_entity)
 		{
 			Entity* fn = &get_entity(f, callee.referenced_entity);
+
+			Array<int> possible_overloads = {};
+			possible_overloads = find_entities(f, fn->name, scope_id);
+
+			if (possible_overloads.count > 1 && !ignore_overloads)
+			{
+				return type_check_overloaded_call(f, reference, scope_id, expr_values, index, deps, suspend, possible_overloads);
+			}
 
 			if (fn->kind == Entity_Poly_Function)
 			{
@@ -1907,7 +2107,7 @@ namespace Glass
 						value.us1 = lhs_value.value.us8 || rhs_value.value.us8;
 						break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 				}
@@ -2125,7 +2325,7 @@ namespace Glass
 					Scope& search_scope = get_scope(f, search_scope_id);
 					auto it = search_scope.name_to_entity.find(mem.member.name);
 					if (it != search_scope.name_to_entity.end())
-						member = it->second;
+						member = it->second.entity_id;
 
 					if (!member)
 					{
@@ -2151,8 +2351,16 @@ namespace Glass
 						my_value.is_constant = true;
 					}
 					break;
+					case Entity_Function:
+					case Entity_Poly_Function:
+					{
+						my_value.type = member_entity.fn.signature;
+						my_value.value.s4 = 0;
+						my_value.is_constant = true;
+					}
+					break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 					}
 
 					my_value.referenced_entity = member;
@@ -2232,7 +2440,7 @@ namespace Glass
 				if (expr.type == f.string_Ty)
 					my_value.type = f.u8_Ty;
 				else if (expr.type->kind == Type_Pointer)
-					my_value.type = expr.type->pointer.pointee;
+					my_value.type = reduce_indirection(expr.type);
 				else if (expr.type->kind == Type_Array)
 					my_value.type = expr.type->array.element_type;
 				else if (expr.type->kind == Type_Dyn_Array)
@@ -2353,7 +2561,7 @@ namespace Glass
 					}
 					break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 				}
@@ -2623,7 +2831,7 @@ namespace Glass
 			case Ast_Continue:
 				break;
 			default:
-				GS_ASSERT_UNIMPL();
+				ASSERT_UNIMPL();
 				break;
 			}
 		}
@@ -3204,7 +3412,7 @@ namespace Glass
 					case Op_MulAssign: op_type = Il_Mul; break;
 					case Op_DivAssign: op_type = Il_Div; break;
 					default:
-						GS_ASSERT_UNIMPL();
+						ASSERT_UNIMPL();
 						break;
 					}
 
@@ -3235,7 +3443,7 @@ namespace Glass
 						case Op_BitOr: op_type = Il_Bit_Or; break;
 						case Op_Mod: op_type = Il_Mod; break;
 						default:
-							GS_ASSERT_UNIMPL();
+							ASSERT_UNIMPL();
 							break;
 						}
 
@@ -3254,7 +3462,7 @@ namespace Glass
 						case Op_And: comp_type = Il_Cmp_And; break;
 						case Op_Or: comp_type = Il_Cmp_Or; break;
 						default:
-							GS_ASSERT_UNIMPL();
+							ASSERT_UNIMPL();
 							break;
 						}
 
@@ -3340,7 +3548,7 @@ namespace Glass
 			}
 			else
 			{
-				GS_ASSERT_UNIMPL();
+				ASSERT_UNIMPL();
 			}
 		}
 		break;
@@ -3650,11 +3858,11 @@ namespace Glass
 		case Ast_True:
 		case Ast_False:
 		{
-			my_value.code_id = il_insert_constant(proc, nullptr, my_value.type);
+			my_value.code_id = il_insert_constant(proc, my_value.value, my_value.type);
 		}
 		break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -3746,7 +3954,7 @@ namespace Glass
 
 			if (entity.progress)
 			{
-				GS_CORE_TRACE("constant '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+				DBG(GS_CORE_TRACE("constant '{}' resume eval: progress: {}", entity.name->str, entity.progress));
 			}
 
 			bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
@@ -3803,7 +4011,7 @@ namespace Glass
 
 				if (entity.progress)
 				{
-					GS_CORE_TRACE("global variable '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+					DBG(GS_CORE_TRACE("global variable '{}' resume eval: progress: {}", entity.name->str, entity.progress));
 				}
 
 				bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
@@ -3873,7 +4081,7 @@ namespace Glass
 
 				if (entity.progress)
 				{
-					GS_CORE_TRACE("variable '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+					DBG(GS_CORE_TRACE("variable '{}' resume eval: progress: {}", entity.name->str, entity.progress));
 				}
 
 				bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
@@ -3918,7 +4126,7 @@ namespace Glass
 
 			if (entity.progress)
 			{
-				GS_CORE_TRACE("struct data member '{}' resume eval: progress: {}", entity.name->str, entity.progress);
+				DBG(GS_CORE_TRACE("struct data member '{}' resume eval: progress: {}", entity.name->str, entity.progress));
 			}
 
 			bool success = type_check_pass(f, flat_ast, scope_id, expr_values, entity.progress, entity.deps, true);
@@ -4076,7 +4284,7 @@ namespace Glass
 
 			if (entity.progress)
 			{
-				GS_CORE_TRACE("function '{}' resume: progress: {}", entity.name->str, entity.progress);
+				DBG(GS_CORE_TRACE("function '{}' resume: progress: {}", entity.name->str, entity.progress));
 			}
 
 			if (!entity.fn.header_complete)
@@ -4258,7 +4466,7 @@ namespace Glass
 			entity.flags = Flag_Complete;
 			break;
 		default:
-			GS_ASSERT_UNIMPL();
+			ASSERT_UNIMPL();
 			break;
 		}
 
@@ -4659,10 +4867,18 @@ namespace Glass
 
 		std::string program_libraries;
 
-		for (auto& path : f.added_library_paths)
+		for (auto path : f.added_library_paths)
 		{
 			program_libraries.append(path->str.data);
-			program_libraries.append(".lib");
+
+			if (fs_path(path->str.data).extension() == ".dll")
+			{
+			}
+			else
+			{
+				program_libraries.append(".lib");
+			}
+
 			program_libraries.append(" ");
 		}
 
@@ -4680,10 +4896,14 @@ namespace Glass
 
 		//GS_CORE_INFO("running linker: {}", linker_command);
 
+		Timer timer;
+
 		{
 			GS_PROFILE_SCOPE("run msvc-linker");
 			system(linker_command.c_str());
 		}
+
+		GS_CORE_WARN("link.exe took: {}", timer.Elapsed());
 
 		//free_resources(&find_result);
 	}
@@ -4825,6 +5045,8 @@ namespace Glass
 						int member_entity_id = struct_scope.entities[j];
 						Entity& member_entity = get_entity(f, member_entity_id);
 
+						int member_index = member_entity.struct_mem.index;
+
 						if (member_entity.kind == Entity_Struct_Member) {
 
 							Array<Il_IDX> member_te_member_values;
@@ -4847,7 +5069,7 @@ namespace Glass
 
 							//int	Offset
 							Array_Add(member_te_member_values, (Il_IDX)members_array_initializer.count);
-							Array_Add(members_array_initializer, il_make_const((void*)struct_type.offsets[j], get_type_index(f.i64_Ty)));
+							Array_Add(members_array_initializer, il_make_const((void*)struct_type.offsets[member_index], get_type_index(f.i64_Ty)));
 
 							Array_Add(members_array_values, (Il_IDX)members_array_initializer.count);
 							Array_Add(members_array_initializer, Il_Make_Struct_Init(get_type_index(te), member_te_member_values));
@@ -4887,7 +5109,11 @@ namespace Glass
 
 	void frontend_compile(Front_End& f)
 	{
+
 		frontend_init(f);
+
+		Timer timer;
+		Timer timer_total;
 
 		if (f.opts.Files.size() != 1) {
 			frontend_push_error(f, String_Make("expected 1 file as argument"));
@@ -4905,20 +5131,28 @@ namespace Glass
 
 		fs_path first_file_path = f.opts.Files[0];
 
+		timer.Reset();
 		result = frontend_do_load(f, first_file_path, std::filesystem::current_path());
+		GS_CORE_WARN("	parsing and lexing took: {}", timer.Elapsed());
 
 		if (!result)
 			return;
 
+		timer.Reset();
 		result = type_check_pass(f);
+		GS_CORE_WARN("	type checking + ir generation took: {}", timer.Elapsed());
 
 		if (!result)
 			return;
+
+		GS_CORE_WARN("Front End Total: {}", timer_total.Elapsed());
 
 		{
+			timer.Reset();
 			std::string printed_program = il_print_program(f.program);
 			std::ofstream print_out(".bin/program.il");
 			print_out << printed_program;
+			GS_CORE_WARN("	print ir took: {}", timer.Elapsed());
 		}
 
 		get_ts().Array_Ty = f.Array_Ty;
@@ -4926,9 +5160,15 @@ namespace Glass
 		if (!result)
 			return;
 
+		timer.Reset();
 		generate_typeinfo_table(f);
+		GS_CORE_WARN("	generate type info took: {}", timer.Elapsed());
 
+		timer.Reset();
 		frontend_generate_output(f);
+		GS_CORE_WARN("	generate object & link took: {}", timer.Elapsed());
+
+		GS_CORE_WARN("num lines processed: {}", num_lines_processed);
 
 		if (!result)
 			return;
